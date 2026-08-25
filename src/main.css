@@ -1,0 +1,103 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Design system Celnet FPD */
+    --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+    --background: 216 28% 96.5%; /* #F3F6FA */
+    --foreground: 215 53% 15%; /* #12233A */
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 53% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 53% 15%;
+
+    --primary: 210 66% 21%; /* Navy #12365A */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 214 32% 91%; /* #E3E9F2 */
+    --secondary-foreground: 215 53% 15%;
+
+    --muted: 216 20% 92%;
+    --muted-foreground: 216 18% 43%; /* #5B6B82 */
+
+    --accent: 172 84% 34%; /* Teal #0E9F8A */
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%; /* Red #DC2626 */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 25% 91%; /* #E3E9F2 */
+    --input: 215 25% 91%;
+    --ring: 172 84% 34%; /* Focus ring teal */
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 210 66% 21%; /* #12365A */
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 172 84% 34%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 212 55% 17%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 210 50% 28%;
+    --sidebar-ring: 172 84% 34%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family:
+      'IBM Plex Sans',
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI',
+      Roboto,
+      sans-serif;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Custom subtle scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #eef2f6;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+}
+
+@layer utilities {
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in-up {
+    animation: fadeInUp 240ms ease-out forwards;
+  }
+}

@@ -1,0 +1,209 @@
+{
+  "generatedAt": "2026-08-25T20:22:11.439Z",
+  "collections": [
+    {
+      "name": "users",
+      "type": "auth",
+      "apiRules": {
+        "list": "id = @request.auth.id",
+        "view": "id = @request.auth.id",
+        "create": "",
+        "update": "id = @request.auth.id",
+        "delete": "id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "avatar",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX `idx_tokenKey__pb_users_auth_` ON `users` (`tokenKey`)",
+        "CREATE UNIQUE INDEX `idx_email__pb_users_auth_` ON `users` (`email`) WHERE `email` != ''"
+      ]
+    },
+    {
+      "name": "stores",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "coordenacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "supervisao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_stores_name ON stores (name)",
+        "CREATE INDEX idx_stores_coordenacao ON stores (coordenacao)",
+        "CREATE INDEX idx_stores_supervisao ON stores (supervisao)"
+      ]
+    },
+    {
+      "name": "fpd_records",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "store",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "stores"
+        },
+        {
+          "name": "referente",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_linhas",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fatura_paga",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "envio_fatura",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "contato_realizado",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "promessa_pagto",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "sem_contato",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cancelados",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nao_tratados",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "outros",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "importado_em",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_fpd_records_store ON fpd_records (store)",
+        "CREATE INDEX idx_fpd_records_importado ON fpd_records (importado_em DESC)"
+      ]
+    }
+  ]
+}
