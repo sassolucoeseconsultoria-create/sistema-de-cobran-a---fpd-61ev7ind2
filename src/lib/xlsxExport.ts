@@ -16,20 +16,20 @@ export function exportConsolidatedToXlsx(
   },
   referenteLabel?: string,
 ) {
-  // Headers matching the reference template exactly
+  // Headers matching the reference template with new status names
   const headers = [
     'LOJAS',
     'COORDENAÇÃO',
     'SUPERVISÃO',
     'TOTAL LINHAS',
-    'FATURA PAGA',
-    'ENVIO FATURA',
-    'CONTATO REALIZADO',
-    'PROMESSA PAGTO.',
-    'SEM CONTATO',
-    'CANCELADOS',
-    'NÃO TRATADOS',
-    'OUTROS',
+    'Enviado Fatura(s)',
+    'Pendente',
+    'Fatura(s) Paga(s)',
+    'Envia Fatura(s)',
+    'Sem Contato',
+    'Promessa de Pagto.',
+    'Cancelados',
+    'Não Tratados',
     'OBSERVAÇÃO',
   ]
 
@@ -76,14 +76,14 @@ export function exportConsolidatedToXlsx(
     { wch: 18 }, // COORDENACAO
     { wch: 18 }, // SUPERVISAO
     { wch: 15 }, // TOTAL LINHAS
-    { wch: 15 }, // FATURA PAGA
-    { wch: 15 }, // ENVIO FATURA
-    { wch: 20 }, // CONTATO REALIZADO
-    { wch: 18 }, // PROMESSA PAGTO.
-    { wch: 15 }, // SEM CONTATO
-    { wch: 15 }, // CANCELADOS
-    { wch: 16 }, // NAO TRATADOS
-    { wch: 12 }, // OUTROS
+    { wch: 20 }, // Enviado Fatura(s)
+    { wch: 15 }, // Pendente
+    { wch: 18 }, // Fatura(s) Paga(s)
+    { wch: 18 }, // Envia Fatura(s)
+    { wch: 16 }, // Sem Contato
+    { wch: 20 }, // Promessa de Pagto.
+    { wch: 15 }, // Cancelados
+    { wch: 16 }, // Não Tratados
     { wch: 30 }, // OBSERVACAO
   ]
 

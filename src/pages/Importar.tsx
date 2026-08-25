@@ -275,8 +275,9 @@ export const Importar: React.FC = () => {
           <div className="p-3 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] space-y-1">
             <span className="font-bold text-[#12365A] block">2. Classificação Automática</span>
             <p>
-              As ocorrências são agrupadas nos 8 status oficiais: Fatura Paga, Envio Fatura, Contato
-              Realizado, Promessa Pagto., Sem Contato, Cancelados, Não Tratados e Outros.
+              As ocorrências são agrupadas nos 8 status do consolidado: Enviado Fatura(s), Pendente,
+              Fatura(s) Paga(s), Envia Fatura(s), Sem Contato, Promessa de Pagto., Cancelados e Não
+              Tratados.
             </p>
           </div>
           <div className="p-3 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] space-y-1">

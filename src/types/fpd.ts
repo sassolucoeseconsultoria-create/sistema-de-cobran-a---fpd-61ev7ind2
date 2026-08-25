@@ -69,7 +69,7 @@ export interface FpdStatusConfig {
 export const FPD_STATUSES: FpdStatusConfig[] = [
   {
     key: 'fatura_paga',
-    label: 'FATURA PAGA',
+    label: 'Enviado Fatura(s)',
     color: '#16A34A',
     textColor: '#15803D',
     bgTint: 'rgba(22, 163, 74, 0.08)',
@@ -77,7 +77,7 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
   },
   {
     key: 'envio_fatura',
-    label: 'ENVIO FATURA',
+    label: 'Pendente',
     color: '#2563EB',
     textColor: '#1D4ED8',
     bgTint: 'rgba(37, 99, 235, 0.08)',
@@ -85,7 +85,7 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
   },
   {
     key: 'contato_realizado',
-    label: 'CONTATO REALIZADO',
+    label: 'Fatura(s) Paga(s)',
     color: '#0891B2',
     textColor: '#0E7490',
     bgTint: 'rgba(8, 145, 178, 0.08)',
@@ -93,7 +93,7 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
   },
   {
     key: 'promessa_pagto',
-    label: 'PROMESSA PAGTO.',
+    label: 'Envia Fatura(s)',
     color: '#D97706',
     textColor: '#B45309',
     bgTint: 'rgba(217, 119, 6, 0.08)',
@@ -101,7 +101,7 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
   },
   {
     key: 'sem_contato',
-    label: 'SEM CONTATO',
+    label: 'Sem Contato',
     color: '#64748B',
     textColor: '#475569',
     bgTint: 'rgba(100, 116, 139, 0.08)',
@@ -109,7 +109,7 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
   },
   {
     key: 'cancelados',
-    label: 'CANCELADOS',
+    label: 'Promessa de Pagto.',
     color: '#DC2626',
     textColor: '#B91C1C',
     bgTint: 'rgba(220, 38, 38, 0.08)',
@@ -117,7 +117,7 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
   },
   {
     key: 'nao_tratados',
-    label: 'NÃO TRATADOS',
+    label: 'Cancelados',
     color: '#EA580C',
     textColor: '#C2410C',
     bgTint: 'rgba(234, 88, 12, 0.08)',
@@ -125,7 +125,7 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
   },
   {
     key: 'outros',
-    label: 'OUTROS',
+    label: 'Não Tratados',
     color: '#7C3AED',
     textColor: '#6D28D9',
     bgTint: 'rgba(124, 58, 237, 0.08)',

@@ -899,35 +899,35 @@ export const Index: React.FC = () => {
                 <td className="px-3 py-3 text-right text-white tabular-nums border-r border-[#1e456f] bg-[#0E2A47]">
                   {animatedTotalLinhas.toLocaleString('pt-BR')}
                 </td>
-                {/* E: FATURA PAGA */}
+                {/* E: Enviado Fatura(s) */}
                 <td className="px-2.5 py-3 text-right text-[#4ade80] tabular-nums border-r border-[#1e456f]">
                   {animatedFaturaPaga.toLocaleString('pt-BR')}
                 </td>
-                {/* F: ENVIO FATURA */}
+                {/* F: Pendente */}
                 <td className="px-2.5 py-3 text-right text-[#93c5fd] tabular-nums border-r border-[#1e456f]">
                   {animatedEnvioFatura.toLocaleString('pt-BR')}
                 </td>
-                {/* G: CONTATO REALIZADO */}
+                {/* G: Fatura(s) Paga(s) */}
                 <td className="px-2.5 py-3 text-right text-[#67e8f9] tabular-nums border-r border-[#1e456f]">
                   {animatedContatoRealizado.toLocaleString('pt-BR')}
                 </td>
-                {/* H: PROMESSA PAGTO */}
+                {/* H: Envia Fatura(s) */}
                 <td className="px-2.5 py-3 text-right text-[#fcd34d] tabular-nums border-r border-[#1e456f]">
                   {animatedPromessaPagto.toLocaleString('pt-BR')}
                 </td>
-                {/* I: SEM CONTATO */}
+                {/* I: Sem Contato */}
                 <td className="px-2.5 py-3 text-right text-[#cbd5e1] tabular-nums border-r border-[#1e456f]">
                   {animatedSemContato.toLocaleString('pt-BR')}
                 </td>
-                {/* J: CANCELADOS */}
+                {/* J: Promessa de Pagto. */}
                 <td className="px-2.5 py-3 text-right text-[#fca5a5] tabular-nums border-r border-[#1e456f]">
                   {animatedCancelados.toLocaleString('pt-BR')}
                 </td>
-                {/* K: NAO TRATADOS */}
+                {/* K: Cancelados */}
                 <td className="px-2.5 py-3 text-right text-[#fdba74] tabular-nums border-r border-[#1e456f]">
                   {animatedNaoTratados.toLocaleString('pt-BR')}
                 </td>
-                {/* L: OUTROS */}
+                {/* L: Não Tratados */}
                 <td className="px-2.5 py-3 text-right text-[#d8b4fe] tabular-nums border-r border-[#1e456f]">
                   {animatedOutros.toLocaleString('pt-BR')}
                 </td>
