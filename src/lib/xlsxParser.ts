@@ -39,7 +39,7 @@ export interface ParsedFileData {
 }
 
 /**
- * Strips accents, lowers case, trims
+ * Strips accents, lowers case, trims and normalizes multiple spaces/separators
  */
 export function normalizeText(str: unknown): string {
   if (str === null || str === undefined) return ''
@@ -47,6 +47,8 @@ export function normalizeText(str: unknown): string {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
+    .replace(/[\r\n\t_]+/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim()
 }
 
@@ -104,35 +106,107 @@ export function guessReferenteDate(filename: string): string {
  * 8. OUTROS: contains "outros"/"outro" OR catch-all for any other unclassified row
  */
 export function classifyRow(rowNormalizedText: string): FpdStatusKey {
-  if (rowNormalizedText.includes('pago') || rowNormalizedText.includes('paga')) {
+  // 1. FATURA PAGA: "fatura paga", "boleto pago", "liquidado", "pago", "paga", "pg", "quitado", "quitada", "pagamento realizado", etc.
+  if (
+    rowNormalizedText.includes('fatura paga') ||
+    rowNormalizedText.includes('fatura pg') ||
+    rowNormalizedText.includes('paga') ||
+    rowNormalizedText.includes('pago') ||
+    rowNormalizedText.includes('pagto') ||
+    rowNormalizedText.includes('pagamento') ||
+    rowNormalizedText.includes('boleto pago') ||
+    rowNormalizedText.includes('quitad') ||
+    rowNormalizedText.includes('liquid') ||
+    /\b(pg|pga|pgo)\b/.test(rowNormalizedText)
+  ) {
+    // If it's a promise of payment, prioritize promise unless explicit payment made
+    if (
+      (rowNormalizedText.includes('promess') || rowNormalizedText.includes('promessa')) &&
+      !rowNormalizedText.includes('fatura paga') &&
+      !rowNormalizedText.includes('comprovante') &&
+      !rowNormalizedText.includes('ja pago') &&
+      !rowNormalizedText.includes('ja paga')
+    ) {
+      return 'promessa_pagto'
+    }
     return 'fatura_paga'
   }
-  if (rowNormalizedText.includes('envio') || rowNormalizedText.includes('enviad')) {
+
+  // 2. PROMESSA PAGTO.: contains "promess", "pp", "acordo", etc.
+  if (
+    rowNormalizedText.includes('promess') ||
+    rowNormalizedText.includes('acordo') ||
+    /\b(pp)\b/.test(rowNormalizedText)
+  ) {
+    return 'promessa_pagto'
+  }
+
+  // 3. ENVIO FATURA: contains "envio", "enviad", "reencaminh", "2 via", "segunda via", etc.
+  if (
+    rowNormalizedText.includes('envio') ||
+    rowNormalizedText.includes('enviad') ||
+    rowNormalizedText.includes('reencaminh') ||
+    rowNormalizedText.includes('2a via') ||
+    rowNormalizedText.includes('2 via') ||
+    rowNormalizedText.includes('segunda via')
+  ) {
     return 'envio_fatura'
   }
+
+  // 4. CONTATO REALIZADO: "contato realizad", "atendid", "recado", etc. (when "sem contato" not present)
   if (
-    (rowNormalizedText.includes('contato realizad') || rowNormalizedText.includes('realizad')) &&
-    !rowNormalizedText.includes('sem contato')
+    !rowNormalizedText.includes('sem contato') &&
+    !rowNormalizedText.includes('nao atendid') &&
+    (rowNormalizedText.includes('contato realizad') ||
+      rowNormalizedText.includes('realizad') ||
+      rowNormalizedText.includes('atendid') ||
+      rowNormalizedText.includes('falou com') ||
+      rowNormalizedText.includes('recado'))
   ) {
     return 'contato_realizado'
   }
-  if (rowNormalizedText.includes('promess')) {
-    return 'promessa_pagto'
-  }
-  if (rowNormalizedText.includes('sem contato')) {
+
+  // 5. SEM CONTATO: "sem contato", "caixa postal", "nao atende", "ocupado", "desligado", "invalido", etc.
+  if (
+    rowNormalizedText.includes('sem contato') ||
+    rowNormalizedText.includes('nao atende') ||
+    rowNormalizedText.includes('nao atendeu') ||
+    rowNormalizedText.includes('caixa postal') ||
+    rowNormalizedText.includes('chamou') ||
+    rowNormalizedText.includes('ocupado') ||
+    rowNormalizedText.includes('desligado') ||
+    rowNormalizedText.includes('telefone incorreto') ||
+    rowNormalizedText.includes('invalido') ||
+    rowNormalizedText.includes('incorreto') ||
+    rowNormalizedText.includes('mudo')
+  ) {
     return 'sem_contato'
   }
-  if (rowNormalizedText.includes('cancel')) {
+
+  // 6. CANCELADOS: "cancel", "devol", "fraude", "inversao", "desistencia", etc.
+  if (
+    rowNormalizedText.includes('cancel') ||
+    rowNormalizedText.includes('devol') ||
+    rowNormalizedText.includes('fraude') ||
+    rowNormalizedText.includes('inversao') ||
+    rowNormalizedText.includes('desist')
+  ) {
     return 'cancelados'
   }
+
+  // 7. NÃO TRATADOS: "nao tratad", "nao trabalhad", "pendente", "em branco", "sem status", "naotratado", etc.
   if (
     rowNormalizedText.includes('nao tratad') ||
-    rowNormalizedText.includes('nao atendid') ||
-    rowNormalizedText.includes('nao tratado') ||
-    rowNormalizedText.includes('naotratado')
+    rowNormalizedText.includes('naotratad') ||
+    rowNormalizedText.includes('nao trabalhad') ||
+    rowNormalizedText.includes('a tratar') ||
+    rowNormalizedText.includes('pendente') ||
+    rowNormalizedText.includes('aguardando') ||
+    rowNormalizedText.includes('sem status')
   ) {
     return 'nao_tratados'
   }
+
   return 'outros'
 }
 
@@ -140,42 +214,79 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
  * Checks if a row is a header row or a totals summary row
  */
 export function isHeaderOrTotalRow(rowValues: unknown[]): boolean {
-  const combined = rowValues.map(normalizeText).join(' ')
-  if (!combined.trim()) return true // empty row
+  const normalizedCells = rowValues.map(normalizeText).filter(Boolean)
+  if (normalizedCells.length === 0) return true // empty row
 
-  // Header detection
-  if (
-    combined.includes('status') ||
-    combined.includes('motivo') ||
-    combined.includes('cliente') ||
-    combined.includes('loja') ||
-    combined.includes('coordenacao') ||
-    combined.includes('supervisao') ||
-    combined.includes('fatura paga') ||
-    combined.includes('envio fatura') ||
-    combined.includes('total linhas')
-  ) {
-    // If it looks like a table header line with multiple column names, skip
-    const matchesCount = [
-      'status',
-      'motivo',
-      'cliente',
-      'loja',
-      'coordenacao',
-      'supervisao',
-      'total',
-    ].filter((k) => combined.includes(k)).length
-    if (matchesCount >= 2) return true
+  const combined = normalizedCells.join(' ')
+
+  // 1. NEVER discard a row if it contains payment or status indicators unless it's strictly a header definition row
+  const hasPaymentKeyword =
+    combined.includes('pago') ||
+    combined.includes('paga') ||
+    combined.includes('quitad') ||
+    combined.includes('liquid') ||
+    /\b(pg|pga|pgo)\b/.test(combined)
+
+  // 2. Total / Summary rows detection
+  // A summary row that starts with 'total' or 'totais' (e.g. "Total Geral: 50" or "Total")
+  const firstCell = normalizedCells[0] || ''
+  const isPureTotalRow =
+    firstCell === 'total' ||
+    firstCell === 'totais' ||
+    firstCell === 'total geral' ||
+    firstCell === 'resumo' ||
+    firstCell.startsWith('total ') ||
+    firstCell.startsWith('totais ') ||
+    combined === 'total' ||
+    combined === 'totais' ||
+    combined === 'total geral'
+
+  if (isPureTotalRow && !hasPaymentKeyword) {
+    return true
   }
 
-  // Totals detection
-  if (
-    combined.startsWith('total') ||
-    combined.startsWith('totais') ||
-    combined.includes('total geral') ||
-    combined === 'total' ||
-    combined === 'totais'
-  ) {
+  // 3. Header detection:
+  // Typical column names in telecom / FPD spreadsheets
+  const headerKeywords = [
+    'status',
+    'motivo',
+    'cliente',
+    'loja',
+    'coordenacao',
+    'supervisao',
+    'telefone',
+    'cpf',
+    'cnpj',
+    'contrato',
+    'plano',
+    'vencimento',
+    'atraso',
+    'historico',
+    'observacao',
+    'protocolo',
+    'operador',
+    'consultor',
+    'regional',
+    'ddd',
+    'numero',
+    'segmento',
+    'data acao',
+    'substatus',
+  ]
+
+  let exactMatchesCount = 0
+  for (const kw of headerKeywords) {
+    if (
+      normalizedCells.some(
+        (c) => c === kw || c.startsWith(`${kw} `) || c.endsWith(` ${kw}`) || c.includes(` ${kw} `),
+      )
+    ) {
+      exactMatchesCount++
+    }
+  }
+
+  // If at least 2 distinct standard header column names match as cell titles and NO individual customer data is present
+  if (exactMatchesCount >= 2 && !hasPaymentKeyword) {
     return true
   }
 
@@ -248,18 +359,39 @@ export async function parseXlsxFile(file: File): Promise<ParsedFileData> {
 
   for (const name of sheetNames) {
     const norm = normalizeText(name)
-    if (!movelSheetName && norm.includes('movel')) {
+    if (
+      !movelSheetName &&
+      (norm.includes('movel') || norm.includes('celular') || norm.includes('mov') || norm === 'm')
+    ) {
       movelSheetName = name
     }
-    if (!residencialSheetName && (norm.includes('residencial') || norm.includes('residen'))) {
+    if (
+      !residencialSheetName &&
+      (norm.includes('residencial') ||
+        norm.includes('residen') ||
+        norm.includes('fixo') ||
+        norm.includes('banda larga') ||
+        norm.includes('fibra') ||
+        norm.includes('res') ||
+        norm === 'r')
+    ) {
       residencialSheetName = name
     }
   }
 
+  // Fallback: If only 1 or 2 sheets exist and neither matched named pattern,
+  // take first sheet as movel and second sheet as residencial (or first as movel if 1 sheet)
   if (!movelSheetName && !residencialSheetName) {
-    throw new Error(
-      `O arquivo "${file.name}" não contém as abas "Móvel" e/ou "Residencial". Abas encontradas: ${sheetNames.join(', ')}`,
-    )
+    if (sheetNames.length === 1) {
+      movelSheetName = sheetNames[0]
+    } else if (sheetNames.length >= 2) {
+      movelSheetName = sheetNames[0]
+      residencialSheetName = sheetNames[1]
+    } else {
+      throw new Error(
+        `O arquivo "${file.name}" não contém as abas "Móvel" e/ou "Residencial". Abas encontradas: ${sheetNames.join(', ')}`,
+      )
+    }
   }
 
   let movelCounts: ParsedSheetCounts | undefined
