@@ -47,6 +47,7 @@ import {
   fetchFpdRecords,
   updateStore,
   deleteFpdRecord,
+  clearAllFpdRecords,
   fetchFpdRecordsByStore,
 } from '@/services/fpdService'
 import { exportConsolidatedToXlsx } from '@/lib/xlsxExport'
@@ -79,6 +80,10 @@ export const Index: React.FC = () => {
 
   // Delete record confirmation
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null)
+
+  // Clear all data confirmation & loading
+  const [clearDialogOpen, setClearDialogOpen] = useState(false)
+  const [isClearing, setIsClearing] = useState(false)
 
   // Debounce search
   useEffect(() => {
@@ -359,6 +364,30 @@ export const Index: React.FC = () => {
         description: 'Não foi possível excluir o registro.',
         variant: 'destructive',
       })
+    }
+  }
+
+  // Clear all FPD data action
+  const handleClearAllData = async () => {
+    try {
+      setIsClearing(true)
+      await clearAllFpdRecords()
+      setRecords([])
+      setClearDialogOpen(false)
+      toast({
+        title: 'Dados limpos com sucesso!',
+        description: 'Todos os registros do consolidado foram removidos. As lojas foram mantidas.',
+      })
+    } catch (err: unknown) {
+      console.error(err)
+      toast({
+        title: 'Erro ao limpar dados',
+        description:
+          err instanceof Error ? err.message : 'Não foi possível remover os dados do consolidado.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsClearing(false)
     }
   }
 
@@ -668,8 +697,17 @@ export const Index: React.FC = () => {
             )}
           </div>
 
-          {/* Right Export Button */}
+          {/* Right Action Buttons */}
           <div className="flex items-center gap-2 shrink-0">
+            <Button
+              onClick={() => setClearDialogOpen(true)}
+              variant="outline"
+              className="h-9 border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50 font-medium text-xs sm:text-sm gap-1.5 transition-colors"
+            >
+              <Trash2 className="w-4 h-4 text-red-500" />
+              <span>Limpar Dados</span>
+            </Button>
+
             <Button
               onClick={handleExportXlsx}
               variant="outline"
@@ -1131,6 +1169,48 @@ export const Index: React.FC = () => {
               className="text-xs bg-red-600 hover:bg-red-700"
             >
               Sim, excluir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Clear All Data Confirmation Dialog */}
+      <Dialog
+        open={clearDialogOpen}
+        onOpenChange={(open) => !isClearing && setClearDialogOpen(open)}
+      >
+        <DialogContent className="sm:max-w-md bg-white">
+          <DialogHeader>
+            <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-2">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <DialogTitle className="text-lg font-bold text-[#12365A]">
+              Limpar todos os dados?
+            </DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm text-[#5B6B82] leading-relaxed">
+              Tem certeza que deseja limpar todos os dados do consolidado? Esta ação não pode ser
+              desfeita. As lojas cadastradas serão mantidas.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setClearDialogOpen(false)}
+              disabled={isClearing}
+              className="text-xs"
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleClearAllData}
+              disabled={isClearing}
+              className="text-xs bg-red-600 hover:bg-red-700 gap-2"
+            >
+              {isClearing && (
+                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              )}
+              <span>{isClearing ? 'Limpando dados...' : 'Limpar Dados'}</span>
             </Button>
           </DialogFooter>
         </DialogContent>

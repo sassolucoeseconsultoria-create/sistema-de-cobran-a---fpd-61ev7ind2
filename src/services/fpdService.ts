@@ -114,3 +114,18 @@ export async function saveFpdRecord(data: {
 export async function deleteFpdRecord(id: string): Promise<boolean> {
   return await pb.collection('fpd_records').delete(id)
 }
+
+export async function clearAllFpdRecords(): Promise<number> {
+  const records = await pb.collection('fpd_records').getFullList<FpdRecord>({
+    fields: 'id',
+  })
+
+  // Delete in batches of 10 to avoid excessive parallel requests
+  const batchSize = 10
+  for (let i = 0; i < records.length; i += batchSize) {
+    const batch = records.slice(i, i + batchSize)
+    await Promise.all(batch.map((r) => pb.collection('fpd_records').delete(r.id)))
+  }
+
+  return records.length
+}
