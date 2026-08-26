@@ -65,6 +65,24 @@ describe('classifyRow', () => {
     expect(classifyRow('codigo pg 123')).toBe('outros')
     expect(classifyRow('pga')).toBe('outros')
     expect(classifyRow('pgo')).toBe('outros')
+
+    // Regression tests: "comprovante" alone should NOT classify as fatura_paga
+    expect(classifyRow('solicitou comprovante de residencia')).not.toBe('fatura_paga')
+    expect(classifyRow('aguardando comprovante')).not.toBe('fatura_paga')
+    expect(classifyRow('enviar comprovante de endereco')).not.toBe('fatura_paga')
+    expect(classifyRow('comprovante de renda')).not.toBe('fatura_paga')
+
+    // Regression tests: Negated payment words should NOT classify as fatura_paga
+    expect(classifyRow('nao liquidado')).not.toBe('fatura_paga')
+    expect(classifyRow('nao liquidada')).not.toBe('fatura_paga')
+    expect(classifyRow('nao quitado')).not.toBe('fatura_paga')
+    expect(classifyRow('nao quitada')).not.toBe('fatura_paga')
+    expect(classifyRow('nao pago')).not.toBe('fatura_paga')
+    expect(classifyRow('nao paga')).not.toBe('fatura_paga')
+    expect(classifyRow('nunca pago')).not.toBe('fatura_paga')
+    expect(classifyRow('jamais quitou')).not.toBe('fatura_paga')
+    expect(classifyRow('sem pago')).not.toBe('fatura_paga')
+    expect(classifyRow('nao foi liquidado')).not.toBe('fatura_paga')
   })
 
   it('should classify "Enviado Fatura(s)" (envio_fatura) and treat unmatched sending requests as "Outros Motivos" (outros)', () => {

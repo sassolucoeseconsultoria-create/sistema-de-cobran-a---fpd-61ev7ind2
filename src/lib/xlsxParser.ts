@@ -172,6 +172,23 @@ export function classifyRow(rowNormalizedText: string, normalizedCells?: string[
   }
 
   // --- 3. FATURA(S) PAGA(S) (key: fatura_paga) ---
+  const hasPositivePaymentWord = () => {
+    const paymentRegex =
+      /\b(pago|paga|pagos|pagas|quitou|liquidou|liquidado|liquidada|quitado|quitada)\b/g
+    let match: RegExpExecArray | null
+    while ((match = paymentRegex.exec(rowNormalizedText)) !== null) {
+      const preceding = rowNormalizedText.slice(Math.max(0, match.index - 30), match.index)
+      const isNegated =
+        /\b(nao|não|nunca|jamais|sem)\s+(foi\s+|ser\s+|sendo\s+|estar\s+|esta\s+|estava\s+|ter\s+|tinha\s+|vai\s+|ira\s+|iria\s+|quer\s+)?$/i.test(
+          preceding.trim(),
+        ) || /(nao|não|nunca|jamais|sem)\s.{0,15}$/i.test(preceding.trim())
+      if (!isNegated) {
+        return true
+      }
+    }
+    return false
+  }
+
   if (
     rowNormalizedText.includes('fatura paga') ||
     rowNormalizedText.includes('faturas pagas') ||
@@ -183,11 +200,6 @@ export function classifyRow(rowNormalizedText: string, normalizedCells?: string[
     rowNormalizedText.includes('ja paga') ||
     rowNormalizedText.includes('ja quitad') ||
     rowNormalizedText.includes('ja liquidad') ||
-    rowNormalizedText.includes('comprovante') ||
-    rowNormalizedText.includes('liquidado') ||
-    rowNormalizedText.includes('liquidada') ||
-    rowNormalizedText.includes('quitado') ||
-    rowNormalizedText.includes('quitada') ||
     rowNormalizedText.includes('pagamento efetuado') ||
     rowNormalizedText.includes('pagamento realizado') ||
     rowNormalizedText.includes('pagamento confirmado') ||
@@ -201,7 +213,7 @@ export function classifyRow(rowNormalizedText: string, normalizedCells?: string[
     rowNormalizedText.includes('pago internet') ||
     rowNormalizedText.includes('pagamento ok') ||
     rowNormalizedText.includes('pagamento identificado') ||
-    /\b(pago|paga|pagos|pagas|quitou|liquidou)\b/.test(rowNormalizedText)
+    hasPositivePaymentWord()
   ) {
     return 'fatura_paga'
   }
