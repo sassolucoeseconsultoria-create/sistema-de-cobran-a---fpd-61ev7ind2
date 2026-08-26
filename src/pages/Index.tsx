@@ -46,6 +46,7 @@ import {
   updateStore,
   deleteFpdRecord,
   clearAllFpdRecords,
+  clearAllStores,
   fetchFpdRecordsByStore,
 } from '@/services/fpdService'
 import { exportConsolidatedToXlsx } from '@/lib/xlsxExport'
@@ -80,6 +81,7 @@ export const Index: React.FC = () => {
 
   // Clear all data confirmation & loading
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
+  const [alsoClearStores, setAlsoClearStores] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
 
   // Debounce search
@@ -369,17 +371,30 @@ export const Index: React.FC = () => {
     }
   }
 
-  // Clear all FPD data action
+  // Clear all data action (with option to also clear stores)
   const handleClearAllData = async () => {
     try {
       setIsClearing(true)
-      await clearAllFpdRecords()
-      setRecords([])
-      setClearDialogOpen(false)
-      toast({
-        title: 'Dados limpos com sucesso!',
-        description: 'Todos os registros do consolidado foram removidos. As lojas foram mantidas.',
-      })
+      if (alsoClearStores) {
+        await clearAllStores()
+        setStores([])
+        setRecords([])
+        setClearDialogOpen(false)
+        setAlsoClearStores(false)
+        toast({
+          title: 'Dados e lojas limpos!',
+          description: 'Todos os registros consolidados e lojas cadastradas foram removidos.',
+        })
+      } else {
+        await clearAllFpdRecords()
+        setRecords([])
+        setClearDialogOpen(false)
+        toast({
+          title: 'Dados limpos com sucesso!',
+          description:
+            'Todos os registros do consolidado foram removidos. As lojas foram mantidas.',
+        })
+      }
     } catch (err: unknown) {
       console.error(err)
       toast({
@@ -1183,7 +1198,12 @@ export const Index: React.FC = () => {
       {/* Clear All Data Confirmation Dialog */}
       <Dialog
         open={clearDialogOpen}
-        onOpenChange={(open) => !isClearing && setClearDialogOpen(open)}
+        onOpenChange={(open) => {
+          if (!isClearing) {
+            setClearDialogOpen(open)
+            if (!open) setAlsoClearStores(false)
+          }
+        }}
       >
         <DialogContent className="sm:max-w-md bg-white">
           <DialogHeader>
@@ -1194,14 +1214,42 @@ export const Index: React.FC = () => {
               Limpar todos os dados?
             </DialogTitle>
             <DialogDescription className="text-xs sm:text-sm text-[#5B6B82] leading-relaxed">
-              Tem certeza que deseja limpar todos os dados do consolidado? Esta ação não pode ser
-              desfeita. As lojas cadastradas serão mantidas.
+              Tem certeza que deseja limpar os dados do consolidado? Esta ação não pode ser
+              desfeita.
             </DialogDescription>
           </DialogHeader>
+
+          {stores.length > 0 && (
+            <div className="py-2">
+              <label className="flex items-start gap-2.5 p-3 rounded-lg border border-red-100 bg-red-50/50 cursor-pointer select-none hover:bg-red-50 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={alsoClearStores}
+                  onChange={(e) => setAlsoClearStores(e.target.checked)}
+                  disabled={isClearing}
+                  className="mt-0.5 rounded border-red-300 text-red-600 focus:ring-red-500"
+                />
+                <div className="text-xs">
+                  <span className="font-semibold text-red-900 block">
+                    Também limpar todas as {stores.length} lojas cadastradas
+                  </span>
+                  <span className="text-[#5B6B82] text-[11px] block mt-0.5">
+                    {alsoClearStores
+                      ? 'Todas as lojas e históricos serão excluídos permanentemente.'
+                      : 'Se desmarcado, apenas os registros consolidados serão zerados e as lojas serão mantidas.'}
+                  </span>
+                </div>
+              </label>
+            </div>
+          )}
+
           <DialogFooter className="gap-2 sm:gap-0 mt-4">
             <Button
               variant="outline"
-              onClick={() => setClearDialogOpen(false)}
+              onClick={() => {
+                setClearDialogOpen(false)
+                setAlsoClearStores(false)
+              }}
               disabled={isClearing}
               className="text-xs"
             >
@@ -1216,7 +1264,13 @@ export const Index: React.FC = () => {
               {isClearing && (
                 <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               )}
-              <span>{isClearing ? 'Limpando dados...' : 'Limpar Dados'}</span>
+              <span>
+                {isClearing
+                  ? 'Limpando...'
+                  : alsoClearStores
+                    ? 'Limpar Dados e Lojas'
+                    : 'Limpar Apenas Dados'}
+              </span>
             </Button>
           </DialogFooter>
         </DialogContent>

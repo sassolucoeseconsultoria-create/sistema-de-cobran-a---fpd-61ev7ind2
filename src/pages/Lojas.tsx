@@ -33,6 +33,7 @@ import {
   createStore,
   updateStore,
   deleteStore,
+  clearAllStores,
 } from '@/services/fpdService'
 import type { StoreRecord, FpdRecord } from '@/types/fpd'
 import { cn } from '@/lib/utils'
@@ -65,6 +66,10 @@ export const Lojas: React.FC = () => {
 
   // Delete modal
   const [storeToDelete, setStoreToDelete] = useState<StoreRecord | null>(null)
+
+  // Clear all stores modal
+  const [clearStoresDialogOpen, setClearStoresDialogOpen] = useState(false)
+  const [isClearingStores, setIsClearingStores] = useState(false)
 
   // Load data
   const loadData = async () => {
@@ -208,6 +213,31 @@ export const Lojas: React.FC = () => {
     }
   }
 
+  // Clear all stores
+  const handleClearAllStores = async () => {
+    try {
+      setIsClearingStores(true)
+      const count = await clearAllStores()
+      setStores([])
+      setRecords([])
+      setClearStoresDialogOpen(false)
+      toast({
+        title: 'Lojas limpas com sucesso!',
+        description: `${count} loja(s) e todos os registros e históricos vinculados foram removidos.`,
+      })
+    } catch (err: unknown) {
+      console.error(err)
+      toast({
+        title: 'Erro ao limpar lojas',
+        description:
+          err instanceof Error ? err.message : 'Não foi possível remover as lojas cadastradas.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsClearingStores(false)
+    }
+  }
+
   // Filtered stores
   const filteredStores = useMemo(() => {
     return stores.filter((store) => {
@@ -242,13 +272,26 @@ export const Lojas: React.FC = () => {
           </p>
         </div>
 
-        <Button
-          onClick={() => setCreateModalOpen(true)}
-          className="bg-[#12365A] hover:bg-[#0E2A47] text-white font-semibold text-xs sm:text-sm h-9 px-4 gap-2 shadow-sm shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Nova Loja</span>
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          {stores.length > 0 && (
+            <Button
+              onClick={() => setClearStoresDialogOpen(true)}
+              variant="outline"
+              className="h-9 border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50 font-medium text-xs sm:text-sm gap-1.5 transition-colors"
+            >
+              <Trash2 className="w-4 h-4 text-red-500" />
+              <span>Limpar Lojas</span>
+            </Button>
+          )}
+
+          <Button
+            onClick={() => setCreateModalOpen(true)}
+            className="bg-[#12365A] hover:bg-[#0E2A47] text-white font-semibold text-xs sm:text-sm h-9 px-4 gap-2 shadow-sm shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Nova Loja</span>
+          </Button>
+        </div>
       </div>
 
       {/* Filters and Search */}
@@ -642,6 +685,49 @@ export const Lojas: React.FC = () => {
               className="text-xs bg-red-600 hover:bg-red-700"
             >
               Sim, excluir loja
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Confirmar Limpar Todas as Lojas */}
+      <Dialog
+        open={clearStoresDialogOpen}
+        onOpenChange={(open) => !isClearingStores && setClearStoresDialogOpen(open)}
+      >
+        <DialogContent className="sm:max-w-md bg-white">
+          <DialogHeader>
+            <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-2">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <DialogTitle className="text-lg font-bold text-[#12365A]">
+              Limpar todas as lojas?
+            </DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm text-[#5B6B82] leading-relaxed">
+              Tem certeza de que deseja excluir todas as{' '}
+              <strong className="text-red-700">{stores.length} lojas cadastradas</strong> e todos os
+              seus históricos de consolidação FPD? Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setClearStoresDialogOpen(false)}
+              disabled={isClearingStores}
+              className="text-xs"
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleClearAllStores}
+              disabled={isClearingStores}
+              className="text-xs bg-red-600 hover:bg-red-700 gap-2"
+            >
+              {isClearingStores && (
+                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              )}
+              <span>{isClearingStores ? 'Limpando lojas...' : 'Limpar Todas as Lojas'}</span>
             </Button>
           </DialogFooter>
         </DialogContent>

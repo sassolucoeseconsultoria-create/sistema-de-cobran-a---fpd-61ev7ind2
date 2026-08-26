@@ -139,3 +139,20 @@ export async function clearAllFpdRecords(): Promise<number> {
 
   return records.length
 }
+
+export async function clearAllStores(): Promise<number> {
+  // First, remove all FPD records associated with stores
+  await clearAllFpdRecords()
+
+  const stores = await pb.collection('stores').getFullList<StoreRecord>({
+    fields: 'id',
+  })
+
+  const batchSize = 10
+  for (let i = 0; i < stores.length; i += batchSize) {
+    const batch = stores.slice(i, i + batchSize)
+    await Promise.all(batch.map((s) => pb.collection('stores').delete(s.id)))
+  }
+
+  return stores.length
+}
