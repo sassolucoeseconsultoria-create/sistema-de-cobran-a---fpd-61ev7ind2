@@ -13,9 +13,8 @@ import {
   TrendingUp,
   BarChart3,
   Calendar,
-  Edit2,
-  Check,
   Trash2,
+  Eye,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,13 +27,6 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useToast } from '@/hooks/use-toast'
@@ -43,7 +35,6 @@ import { useCountUp } from '@/hooks/useCountUp'
 import {
   fetchStores,
   fetchFpdRecords,
-  updateStore,
   deleteFpdRecord,
   clearAllFpdRecords,
   clearAllStores,
@@ -52,6 +43,7 @@ import {
 import { exportConsolidatedToXlsx } from '@/lib/xlsxExport'
 import { FPD_STATUSES, type StoreRecord, type FpdRecord, type ConsolidatedRow } from '@/types/fpd'
 import { cn } from '@/lib/utils'
+import { StoreAnalyticsDrawer } from '@/components/StoreAnalyticsDrawer'
 
 export const Index: React.FC = () => {
   const { toast } = useToast()
@@ -65,16 +57,11 @@ export const Index: React.FC = () => {
   const [selectedCoordenacoes, setSelectedCoordenacoes] = useState<string[]>([])
   const [selectedSupervisoes, setSelectedSupervisoes] = useState<string[]>([])
 
-  // Drawer / details
+  // Analytics Drawer / details
   const [selectedRow, setSelectedRow] = useState<ConsolidatedRow | null>(null)
   const [storeHistory, setStoreHistory] = useState<FpdRecord[]>([])
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
-
-  // Inline editing in Drawer or Table
-  const [editCoordenacao, setEditCoordenacao] = useState('')
-  const [editSupervisao, setEditSupervisao] = useState('')
-  const [editObservacao, setEditObservacao] = useState('')
 
   // Delete record confirmation
   const [recordToDelete, setRecordToDelete] = useState<string | null>(null)
@@ -306,9 +293,6 @@ export const Index: React.FC = () => {
   const handleOpenRowDetail = async (row: ConsolidatedRow) => {
     setSelectedRow(row)
     setDrawerOpen(true)
-    setEditCoordenacao(row.coordenacao)
-    setEditSupervisao(row.supervisao)
-    setEditObservacao(row.observacao)
 
     // Load store import history
     try {
@@ -319,38 +303,6 @@ export const Index: React.FC = () => {
       // ignore
     } finally {
       setLoadingHistory(false)
-    }
-  }
-
-  // Save inline edit from drawer
-  const handleSaveStoreMeta = async () => {
-    if (!selectedRow) return
-    try {
-      const updated = await updateStore(selectedRow.storeId, {
-        coordenacao: editCoordenacao.trim(),
-        supervisao: editSupervisao.trim(),
-        observacao: editObservacao.trim(),
-      })
-      setSelectedRow((prev) =>
-        prev
-          ? {
-              ...prev,
-              coordenacao: updated.coordenacao || '',
-              supervisao: updated.supervisao || '',
-              observacao: updated.observacao || '',
-            }
-          : null,
-      )
-      toast({
-        title: 'Loja atualizada',
-        description: 'Informações salvas com sucesso.',
-      })
-    } catch {
-      toast({
-        title: 'Erro ao salvar',
-        description: 'Não foi possível atualizar os dados da loja.',
-        variant: 'destructive',
-      })
     }
   }
 
@@ -818,18 +770,33 @@ export const Index: React.FC = () => {
                       {/* A: LOJAS (Sticky left) */}
                       <td
                         className={cn(
-                          'sticky left-0 z-10 px-3.5 py-2.5 font-semibold text-[#12365A] border-r border-[#E3E9F2] truncate max-w-[240px]',
+                          'sticky left-0 z-10 px-3.5 py-2.5 font-semibold text-[#12365A] border-r border-[#E3E9F2] max-w-[250px]',
                           idx % 2 === 1 ? 'bg-[#FAFCFF]' : 'bg-white',
                           'group-hover:bg-[#F0F5FC]',
                         )}
                       >
-                        <div className="flex items-center gap-2">
-                          <span className="truncate">{row.storeName}</span>
-                          {!row.hasData && (
-                            <span className="text-[10px] font-normal px-1.5 py-0.2 rounded bg-slate-100 text-slate-500">
-                              Sem dados
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="truncate group-hover:text-[#0E9F8A] transition-colors">
+                              {row.storeName}
                             </span>
-                          )}
+                            {!row.hasData && (
+                              <span className="text-[10px] font-normal px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 shrink-0">
+                                Sem dados
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleOpenRowDetail(row)
+                            }}
+                            className="p-1 rounded-md text-[#8A97AC] group-hover:text-[#0E9F8A] hover:bg-[#0E9F8A]/10 transition-colors shrink-0"
+                            title="Ver visão analítica da loja"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
 
@@ -968,214 +935,15 @@ export const Index: React.FC = () => {
         </div>{' '}
       </div>
 
-      {/* Detail Drawer (Sheet) */}
-      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
-        <SheetContent className="w-full sm:max-w-xl overflow-y-auto bg-white p-6">
-          {selectedRow && (
-            <div className="space-y-6">
-              <SheetHeader className="border-b pb-4">
-                <div className="flex items-center justify-between">
-                  <Badge
-                    variant="outline"
-                    className="border-[#0E9F8A] text-[#0E9F8A] bg-[#0E9F8A]/10 text-xs font-semibold uppercase"
-                  >
-                    Detalhes da Loja
-                  </Badge>
-                  {selectedRow.referente && (
-                    <span className="text-xs text-[#5B6B82] font-medium">
-                      Ref: {selectedRow.referente}
-                    </span>
-                  )}
-                </div>
-                <SheetTitle className="text-xl font-bold text-[#12365A] mt-2">
-                  {selectedRow.storeName}
-                </SheetTitle>
-                <SheetDescription className="text-xs text-[#5B6B82]">
-                  Informações operacionais e histórico de consolidação FPD.
-                </SheetDescription>
-              </SheetHeader>
-
-              {/* Editable metadata */}
-              <div className="space-y-3 p-4 rounded-xl bg-[#F8FAFC] border border-[#E3E9F2]">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[#12365A] flex items-center justify-between">
-                  <span>Estrutura Organizacional</span>
-                  <Edit2 className="w-3.5 h-3.5 text-[#8A97AC]" />
-                </h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] font-semibold text-[#5B6B82] uppercase">
-                      Coordenação
-                    </label>
-                    <Input
-                      value={editCoordenacao}
-                      onChange={(e) => setEditCoordenacao(e.target.value)}
-                      placeholder="Ex: VALÉRIA"
-                      className="h-8 text-xs mt-1 bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-semibold text-[#5B6B82] uppercase">
-                      Supervisão
-                    </label>
-                    <Input
-                      value={editSupervisao}
-                      onChange={(e) => setEditSupervisao(e.target.value)}
-                      placeholder="Ex: LUANA"
-                      className="h-8 text-xs mt-1 bg-white"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[11px] font-semibold text-[#5B6B82] uppercase">
-                    Observação
-                  </label>
-                  <textarea
-                    value={editObservacao}
-                    onChange={(e) => setEditObservacao(e.target.value)}
-                    placeholder="Notas sobre a loja, motivos de desvios, etc."
-                    rows={2}
-                    className="w-full mt-1 p-2 text-xs rounded-md border border-[#E3E9F2] bg-white focus:outline-none focus:border-[#0E9F8A]"
-                  />
-                </div>
-                <div className="flex justify-end pt-1">
-                  <Button
-                    onClick={handleSaveStoreMeta}
-                    size="sm"
-                    className="bg-[#12365A] hover:bg-[#0E2A47] text-white text-xs h-8 gap-1.5"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Salvar Alterações</span>
-                  </Button>
-                </div>
-              </div>
-
-              {/* Status Breakdown (Stacked bar and list) */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#12365A]">
-                    Distribuição dos Status ({selectedRow.totalLinhas} linhas)
-                  </h4>
-                </div>
-
-                {selectedRow.hasData ? (
-                  <>
-                    {/* Visual Stacked Bar */}
-                    {selectedRow.totalLinhas > 0 && (
-                      <div className="h-4 rounded-full overflow-hidden flex bg-slate-100 shadow-inner">
-                        {FPD_STATUSES.map((status) => {
-                          const val = selectedRow[
-                            status.key.replace(/_([a-z])/g, (_, c) =>
-                              c.toUpperCase(),
-                            ) as keyof ConsolidatedRow
-                          ] as number
-                          if (!val || val === 0) return null
-                          const pct = (val / selectedRow.totalLinhas) * 100
-                          return (
-                            <div
-                              key={status.key}
-                              style={{ width: `${pct}%`, backgroundColor: status.color }}
-                              title={`${status.label}: ${val} (${pct.toFixed(1)}%)`}
-                            />
-                          )
-                        })}
-                      </div>
-                    )}
-
-                    {/* Status grid */}
-                    <div className="grid grid-cols-2 gap-2">
-                      {FPD_STATUSES.map((status) => {
-                        const val = selectedRow[
-                          status.key.replace(/_([a-z])/g, (_, c) =>
-                            c.toUpperCase(),
-                          ) as keyof ConsolidatedRow
-                        ] as number
-                        const pct =
-                          selectedRow.totalLinhas > 0
-                            ? ((val / selectedRow.totalLinhas) * 100).toFixed(1)
-                            : '0'
-
-                        return (
-                          <div
-                            key={status.key}
-                            className="p-2.5 rounded-lg border border-[#E3E9F2] flex items-center justify-between"
-                            style={{ backgroundColor: val > 0 ? status.bgTint : '#FAFCFF' }}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span
-                                className="w-2.5 h-2.5 rounded-full shrink-0"
-                                style={{ backgroundColor: status.color }}
-                              />
-                              <span className="text-xs font-semibold text-[#12233A] truncate">
-                                {status.label}
-                              </span>
-                            </div>
-                            <div className="text-right">
-                              <span
-                                className="text-sm font-bold tabular-nums"
-                                style={{ color: status.textColor }}
-                              >
-                                {val.toLocaleString('pt-BR')}
-                              </span>
-                              <span className="text-[10px] text-[#5B6B82] block">{pct}%</span>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </>
-                ) : (
-                  <div className="p-4 rounded-lg bg-slate-50 text-center text-xs text-[#5B6B82]">
-                    Nenhum dado importado para esta loja ainda.
-                  </div>
-                )}
-              </div>
-
-              {/* Import History */}
-              <div className="space-y-3 pt-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[#12365A]">
-                  Histórico de Importações
-                </h4>
-                {loadingHistory ? (
-                  <div className="py-4 text-center text-xs text-[#5B6B82]">
-                    Carregando histórico...
-                  </div>
-                ) : storeHistory.length === 0 ? (
-                  <p className="text-xs text-[#5B6B82]">Nenhuma importação registrada.</p>
-                ) : (
-                  <div className="space-y-2 max-h-56 overflow-y-auto">
-                    {storeHistory.map((hist) => (
-                      <div
-                        key={hist.id}
-                        className="p-3 rounded-lg border border-[#E3E9F2] bg-white flex items-center justify-between text-xs"
-                      >
-                        <div>
-                          <p className="font-semibold text-[#12233A]">
-                            Referente: {hist.referente || 'Não informado'}
-                          </p>
-                          <p className="text-[11px] text-[#5B6B82]">
-                            {hist.total_linhas} linhas • Importado em:{' '}
-                            {new Date(hist.importado_em || hist.created).toLocaleString('pt-BR')}
-                          </p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setRecordToDelete(hist.id)}
-                          className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                          title="Excluir importação"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
-
+      {/* Analytical Drawer for Store */}
+      <StoreAnalyticsDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        store={selectedRow}
+        history={storeHistory}
+        loadingHistory={loadingHistory}
+        onDeleteRecord={(id) => setRecordToDelete(id)}
+      />
       {/* Delete Record Confirmation Dialog */}
       <Dialog open={!!recordToDelete} onOpenChange={(open) => !open && setRecordToDelete(null)}>
         <DialogContent className="sm:max-w-md bg-white">
