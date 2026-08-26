@@ -903,11 +903,11 @@ export const Index: React.FC = () => {
                   {animatedSemContato.toLocaleString('pt-BR')}
                 </td>
                 {/* I: 5. Cancelados */}
-                <td className="px-2.5 py-3 text-right text-[#fca5a5] tabular-nums border-r border-[#1e456f]">
+                <td className="px-2.5 py-3 text-right text-slate-300 tabular-nums border-r border-[#1e456f]">
                   {animatedCancelados.toLocaleString('pt-BR')}
                 </td>
                 {/* J: 6. Pendente */}
-                <td className="px-2.5 py-3 text-right text-[#93c5fd] tabular-nums border-r border-[#1e456f]">
+                <td className="px-2.5 py-3 text-right text-[#fca5a5] tabular-nums border-r border-[#1e456f]">
                   {animatedPendente.toLocaleString('pt-BR')}
                 </td>
                 {/* K: 7. Contato Realizado */}

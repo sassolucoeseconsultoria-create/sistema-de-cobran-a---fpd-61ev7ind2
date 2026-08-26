@@ -637,11 +637,11 @@ export const Arquivos: React.FC = () => {
                   {totals.semContato.toLocaleString('pt-BR')}
                 </td>
                 {/* 5. Cancelados */}
-                <td className="px-2.5 py-3 text-right text-[#fca5a5] tabular-nums border-r border-[#1e456f]">
+                <td className="px-2.5 py-3 text-right text-slate-300 tabular-nums border-r border-[#1e456f]">
                   {totals.cancelados.toLocaleString('pt-BR')}
                 </td>
                 {/* 6. Pendente */}
-                <td className="px-2.5 py-3 text-right text-[#93c5fd] tabular-nums border-r border-[#1e456f]">
+                <td className="px-2.5 py-3 text-right text-[#fca5a5] tabular-nums border-r border-[#1e456f]">
                   {totals.pendente.toLocaleString('pt-BR')}
                 </td>
                 {/* 7. Contato Realizado */}

@@ -512,11 +512,11 @@ export const Importar: React.FC = () => {
                               Sem Contato: {item.parsedData.aggregated.sem_contato}
                             </span>
                             <span>•</span>
-                            <span className="text-[#DC2626] font-medium">
+                            <span className="text-[#0F172A] font-medium">
                               Cancelados: {item.parsedData.aggregated.cancelados}
                             </span>
                             <span>•</span>
-                            <span className="text-[#2563EB] font-medium">
+                            <span className="text-[#DC2626] font-medium">
                               Pendente: {item.parsedData.aggregated.pendente}
                             </span>
                             <span>•</span>
