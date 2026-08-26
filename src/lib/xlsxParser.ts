@@ -220,14 +220,6 @@ export function classifyRow(rowNormalizedText: string, normalizedCells?: string[
     return 'promessa_pagto'
   }
 
-  // Fallback: check joined text with includes (looser, for rows where promessa text is split across cells)
-  if (
-    rowNormalizedText.includes('promessa de pagto') ||
-    rowNormalizedText.includes('promessa de pagamento')
-  ) {
-    return 'promessa_pagto'
-  }
-
   // --- 3. FATURA(S) PAGA(S) (key: fatura_paga) ---
   if (
     rowNormalizedText.includes('fatura paga') ||

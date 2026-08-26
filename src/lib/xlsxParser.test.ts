@@ -106,33 +106,41 @@ describe('classifyRow', () => {
   })
 
   it('should classify "Promessa de Pagto." (promessa_pagto) strictly and avoid over-matching', () => {
-    // Exact matches allowed
-    expect(classifyRow('promessa de pagamento')).toBe('promessa_pagto')
-    expect(classifyRow('promessa de pagto')).toBe('promessa_pagto')
-    expect(classifyRow('promessa de pagto.')).toBe('promessa_pagto')
-    expect(classifyRow('promessa pagto')).toBe('promessa_pagto')
-    expect(classifyRow('promessa pagto.')).toBe('promessa_pagto')
-    expect(classifyRow('promessa pagamento')).toBe('promessa_pagto')
-    expect(classifyRow(normalizeText('Promessa de Pagto.'))).toBe('promessa_pagto')
-    expect(classifyRow(normalizeText('PROMESSA DE PAGAMENTO'))).toBe('promessa_pagto')
-    expect(classifyRow(normalizeText('Promessa de Pagto'))).toBe('promessa_pagto')
+    // Exact matches allowed via normalizedCells
+    expect(classifyRow('promessa de pagamento', ['promessa de pagamento'])).toBe('promessa_pagto')
+    expect(classifyRow('promessa de pagto', ['promessa de pagto'])).toBe('promessa_pagto')
+    expect(classifyRow('promessa de pagto.', ['promessa de pagto.'])).toBe('promessa_pagto')
+    expect(classifyRow('promessa pagto', ['promessa pagto'])).toBe('promessa_pagto')
+    expect(classifyRow('promessa pagto.', ['promessa pagto.'])).toBe('promessa_pagto')
+    expect(classifyRow('promessa pagamento', ['promessa pagamento'])).toBe('promessa_pagto')
+    expect(
+      classifyRow(normalizeText('Promessa de Pagto.'), [normalizeText('Promessa de Pagto.')]),
+    ).toBe('promessa_pagto')
+    expect(
+      classifyRow(normalizeText('PROMESSA DE PAGAMENTO'), [normalizeText('PROMESSA DE PAGAMENTO')]),
+    ).toBe('promessa_pagto')
+    expect(
+      classifyRow(normalizeText('Promessa de Pagto'), [normalizeText('Promessa de Pagto')]),
+    ).toBe('promessa_pagto')
 
     // Partial sentences, loose phrases or observations must NOT be classified as promessa_pagto (fall into outros)
-    expect(classifyRow('prometeu pagar amanha')).toBe('outros')
-    expect(classifyRow('promete pagar')).toBe('outros')
-    expect(classifyRow('vai pagar')).toBe('outros')
-    expect(classifyRow('vai pagar amanha')).toBe('outros')
-    expect(classifyRow('ira pagar na sexta')).toBe('outros')
-    expect(classifyRow('combinou pagamento')).toBe('outros')
-    expect(classifyRow('combinou pagto')).toBe('outros')
-    expect(classifyRow('nao vai pagar')).toBe('outros')
-    expect(classifyRow('nao ira pagar')).toBe('outros')
-    expect(classifyRow('nunca vai pagar')).toBe('outros')
-    expect(classifyRow('disse que nao vai pagar')).toBe('outros')
-    expect(classifyRow(normalizeText('não vai pagar'))).toBe('outros')
+    expect(classifyRow('prometeu pagar amanha', ['prometeu pagar amanha'])).toBe('outros')
+    expect(classifyRow('promete pagar', ['promete pagar'])).toBe('outros')
+    expect(classifyRow('vai pagar', ['vai pagar'])).toBe('outros')
+    expect(classifyRow('vai pagar amanha', ['vai pagar amanha'])).toBe('outros')
+    expect(classifyRow('ira pagar na sexta', ['ira pagar na sexta'])).toBe('outros')
+    expect(classifyRow('combinou pagamento', ['combinou pagamento'])).toBe('outros')
+    expect(classifyRow('combinou pagto', ['combinou pagto'])).toBe('outros')
+    expect(classifyRow('nao vai pagar', ['nao vai pagar'])).toBe('outros')
+    expect(classifyRow('nao ira pagar', ['nao ira pagar'])).toBe('outros')
+    expect(classifyRow('nunca vai pagar', ['nunca vai pagar'])).toBe('outros')
+    expect(classifyRow('disse que nao vai pagar', ['disse que nao vai pagar'])).toBe('outros')
+    expect(classifyRow(normalizeText('não vai pagar'), [normalizeText('não vai pagar')])).toBe(
+      'outros',
+    )
 
     // 'pp' isolated should NOT be classified as promessa_pagto (falls into outros)
-    expect(classifyRow('pp')).toBe('outros')
+    expect(classifyRow('pp', ['pp'])).toBe('outros')
 
     // Words that should NOT trigger promessa_pagto:
     expect(classifyRow('pagamento efetuado')).toBe('fatura_paga')
@@ -141,7 +149,7 @@ describe('classifyRow', () => {
     expect(classifyRow('aguardando analise de pagamento')).toBe('pendente')
   })
 
-  it('should accurately classify rows with normalizedCells array for Promessa de Pagto.', () => {
+  it('should accurately classify rows with normalizedCells array for Promessa de Pagto. and prevent false positives on observation cells', () => {
     // Real-world row format: customer data + status in an individual cell
     const cells1 = ['joao silva', '11999999999', 'promessa de pagto.', 'obs do cliente']
     const rowText1 = cells1.join(' ')
@@ -163,6 +171,16 @@ describe('classifyRow', () => {
     const cells5 = ['cliente y', '999999999', 'status promessa de pagto cliente', '']
     const rowText5 = cells5.join(' ')
     expect(classifyRow(rowText5, cells5)).toBe('promessa_pagto')
+
+    // False positive prevention: "promessa de pagto" inside observation cell when status is "fatura paga"
+    const cellsFaturaPaga = [
+      'loja centro',
+      'cliente z',
+      'fatura paga',
+      'cliente tinha promessa de pagto anterior mas ja pagou via pix',
+    ]
+    const rowTextFaturaPaga = cellsFaturaPaga.join(' ')
+    expect(classifyRow(rowTextFaturaPaga, cellsFaturaPaga)).toBe('fatura_paga')
   })
   it('should classify "Cancelados" (cancelados)', () => {
     expect(classifyRow('pedido cancelado')).toBe('cancelados')
