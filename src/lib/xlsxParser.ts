@@ -213,46 +213,22 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
   }
 
   // --- 2. PROMESSA DE PAGTO. (key: promessa_pagto) ---
-  // Specific promise-to-pay phrases only (avoid matching loose words like "acordo", "negociacao", "parcelamento", "prom", or isolated payment terms)
-  // Ensure "vai pagar" / "ira pagar" are not preceded by negation ("nao", "nunca", "jamais", etc.)
-  const hasAffirmativeVaiOuIraPagar =
-    /\b(vai|ira) pagar\b/.test(rowNormalizedText) &&
-    !/\b(nao|nunca|jamais|recusou|recusa|sem)\s+(vai|ira)\s+pagar\b/.test(rowNormalizedText) &&
-    !/\b(nao|nunca|jamais)\s+\w+\s+(vai|ira)\s+pagar\b/.test(rowNormalizedText)
+  // A classificação como "promessa_pagto" é extremamente restrita (correspondência exata ou quase idêntica do status).
+  // Não usa regex frouxas, frases genéricas ou substrings abrangentes.
+  // Variações estritas aceitas: "promessa de pagto.", "promessa de pagto", "promessa de pagamento", "promessa pagto", "promessa pagamento".
+  const exactPromessaOptions = new Set([
+    'promessa de pagto.',
+    'promessa de pagto',
+    'promessa de pagamento',
+    'promessa pagto.',
+    'promessa pagto',
+    'promessa pagamento',
+  ])
 
-  const isPromessaPagto =
-    rowNormalizedText.includes('promessa de pagamento') ||
-    rowNormalizedText.includes('promessa de pagto') ||
-    rowNormalizedText.includes('promessa de pgto') ||
-    rowNormalizedText.includes('promessa pagto') ||
-    rowNormalizedText.includes('promessa pgto') ||
-    rowNormalizedText.includes('promessa pagamento') ||
-    rowNormalizedText.includes('promessa pagar') ||
-    rowNormalizedText.includes('prometeu pagar') ||
-    rowNormalizedText.includes('promete pagar') ||
-    rowNormalizedText.includes('prometeu pagto') ||
-    hasAffirmativeVaiOuIraPagar ||
-    rowNormalizedText.includes('combinou pagamento') ||
-    rowNormalizedText.includes('combinou pagto') ||
-    rowNormalizedText.includes('combinado pagamento') ||
-    rowNormalizedText.includes('combinado pagto')
+  const isStrictPromessaPagto = exactPromessaOptions.has(rowNormalizedText)
 
-  if (isPromessaPagto) {
-    // Check if it's explicitly already paid with receipt/confirmation despite mentioning promise
-    const isAlreadyPaid =
-      (rowNormalizedText.includes('ja pago') ||
-        rowNormalizedText.includes('ja paga') ||
-        rowNormalizedText.includes('comprovante') ||
-        rowNormalizedText.includes('fatura paga') ||
-        rowNormalizedText.includes('pagamento efetuado') ||
-        rowNormalizedText.includes('pagamento realizado') ||
-        rowNormalizedText.includes('pagamento confirmado')) &&
-      !rowNormalizedText.includes('promete') &&
-      !hasAffirmativeVaiOuIraPagar
-
-    if (!isAlreadyPaid) {
-      return 'promessa_pagto'
-    }
+  if (isStrictPromessaPagto) {
+    return 'promessa_pagto'
   }
 
   // --- 3. FATURA(S) PAGA(S) (key: fatura_paga) ---
@@ -428,12 +404,12 @@ export function isHeaderOrTotalRow(rowValues: unknown[]): boolean {
     combined.includes('paga') ||
     combined.includes('quitad') ||
     combined.includes('liquid') ||
-    combined.includes('promess') ||
+    combined.includes('promessa') ||
     combined.includes('sem contato') ||
     combined.includes('caixa postal') ||
     combined.includes('cancel') ||
     combined.includes('pendente') ||
-    /\b(pg|pga|pgo|pp)\b/.test(combined)
+    /\b(pg|pga|pgo)\b/.test(combined)
 
   // 2. Total / Summary rows detection
   const firstCell = normalizedCells[0] || ''
