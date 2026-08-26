@@ -172,49 +172,41 @@ export function classifyRow(rowNormalizedText: string, normalizedCells?: string[
   }
 
   // --- 3. FATURA(S) PAGA(S) (key: fatura_paga) ---
-  const hasPositivePaymentWord = () => {
-    const paymentRegex =
-      /\b(pago|paga|pagos|pagas|quitou|liquidou|liquidado|liquidada|quitado|quitada)\b/g
-    let match: RegExpExecArray | null
-    while ((match = paymentRegex.exec(rowNormalizedText)) !== null) {
-      const preceding = rowNormalizedText.slice(Math.max(0, match.index - 30), match.index)
-      const isNegated =
-        /\b(nao|não|nunca|jamais|sem)\s+(foi\s+|ser\s+|sendo\s+|estar\s+|esta\s+|estava\s+|ter\s+|tinha\s+|vai\s+|ira\s+|iria\s+|quer\s+)?$/i.test(
-          preceding.trim(),
-        ) || /(nao|não|nunca|jamais|sem)\s.{0,15}$/i.test(preceding.trim())
-      if (!isNegated) {
-        return true
-      }
-    }
-    return false
-  }
+  // Check individual cells for exact match (NOT the joined row text)
+  const exactFaturaPagaOptions = new Set([
+    'fatura paga',
+    'faturas pagas',
+    'fatura(s) paga(s)',
+    'boleto pago',
+    'boleta paga',
+    'boleto quitado',
+    'boleto liquidado',
+    'fatura quitada',
+    'fatura liquidada',
+    'faturas quitadas',
+    'faturas liquidadas',
+    'fatura pg',
+    'faturas pg',
+    'pagamento efetuado',
+    'pagamento realizado',
+    'pagamento confirmado',
+    'debito pago',
+    'debito quitado',
+    'pix pago',
+    'pago pelo cliente',
+    'pagamento ok',
+    'pagamento identificado',
+    'quitado',
+    'liquidado',
+    'pago',
+    'paga',
+    'ja pago',
+    'ja paga',
+    'ja quitado',
+    'ja liquidado',
+  ])
 
-  if (
-    rowNormalizedText.includes('fatura paga') ||
-    rowNormalizedText.includes('faturas pagas') ||
-    rowNormalizedText.includes('fatura pg') ||
-    rowNormalizedText.includes('fatura quitada') ||
-    rowNormalizedText.includes('fatura liquidada') ||
-    rowNormalizedText.includes('boleto pago') ||
-    rowNormalizedText.includes('ja pago') ||
-    rowNormalizedText.includes('ja paga') ||
-    rowNormalizedText.includes('ja quitad') ||
-    rowNormalizedText.includes('ja liquidad') ||
-    rowNormalizedText.includes('pagamento efetuado') ||
-    rowNormalizedText.includes('pagamento realizado') ||
-    rowNormalizedText.includes('pagamento confirmado') ||
-    rowNormalizedText.includes('debito pago') ||
-    rowNormalizedText.includes('pix pago') ||
-    rowNormalizedText.includes('pago pelo cliente') ||
-    rowNormalizedText.includes('pago via') ||
-    rowNormalizedText.includes('pago no banco') ||
-    rowNormalizedText.includes('pago na loterica') ||
-    rowNormalizedText.includes('pago app') ||
-    rowNormalizedText.includes('pago internet') ||
-    rowNormalizedText.includes('pagamento ok') ||
-    rowNormalizedText.includes('pagamento identificado') ||
-    hasPositivePaymentWord()
-  ) {
+  if (normalizedCells && normalizedCells.some((cell) => exactFaturaPagaOptions.has(cell))) {
     return 'fatura_paga'
   }
 

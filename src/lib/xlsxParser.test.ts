@@ -46,43 +46,94 @@ describe('classifyRow', () => {
     expect(classifyRow('aguardando retorno')).toBe('pendente')
   })
 
-  it('should accurately classify variations of "Fatura(s) Paga(s)" (fatura_paga)', () => {
-    expect(classifyRow('fatura paga')).toBe('fatura_paga')
-    expect(classifyRow('faturas pagas')).toBe('fatura_paga')
-    expect(classifyRow('pago')).toBe('fatura_paga')
-    expect(classifyRow('paga')).toBe('fatura_paga')
-    expect(classifyRow('fatura paga pelo cliente')).toBe('fatura_paga')
-    expect(classifyRow('boleto pago')).toBe('fatura_paga')
-    expect(classifyRow('fatura pg')).toBe('fatura_paga')
-    expect(classifyRow('pagamento efetuado')).toBe('fatura_paga')
-    expect(classifyRow('cliente já quitou / quitado')).toBe('fatura_paga')
-    expect(classifyRow('liquidado')).toBe('fatura_paga')
-    expect(classifyRow('debito pago')).toBe('fatura_paga')
-    expect(classifyRow('ja pago')).toBe('fatura_paga')
+  it('should accurately classify variations of "Fatura(s) Paga(s)" (fatura_paga) via exact cell match', () => {
+    // Exact cell match variations
+    const exactVariations = [
+      'fatura paga',
+      'faturas pagas',
+      'fatura(s) paga(s)',
+      'boleto pago',
+      'boleta paga',
+      'boleto quitado',
+      'boleto liquidado',
+      'fatura quitada',
+      'fatura liquidada',
+      'faturas quitadas',
+      'faturas liquidadas',
+      'fatura pg',
+      'faturas pg',
+      'pagamento efetuado',
+      'pagamento realizado',
+      'pagamento confirmado',
+      'debito pago',
+      'debito quitado',
+      'pix pago',
+      'pago pelo cliente',
+      'pagamento ok',
+      'pagamento identificado',
+      'quitado',
+      'liquidado',
+      'pago',
+      'paga',
+      'ja pago',
+      'ja paga',
+      'ja quitado',
+      'ja liquidado',
+    ]
+
+    for (const variation of exactVariations) {
+      expect(classifyRow(variation, [variation])).toBe('fatura_paga')
+      expect(classifyRow(`loja x ${variation} obs`, ['loja x', variation, 'obs'])).toBe(
+        'fatura_paga',
+      )
+    }
+
+    // Uppercase and unnormalized inputs through normalizeText
+    expect(
+      classifyRow(normalizeText('FATURA(S) PAGA(S)'), [normalizeText('FATURA(S) PAGA(S)')]),
+    ).toBe('fatura_paga')
+    expect(classifyRow(normalizeText('BOLETO PAGO'), [normalizeText('BOLETO PAGO')])).toBe(
+      'fatura_paga',
+    )
+    expect(classifyRow(normalizeText('Fatura Quitada'), [normalizeText('Fatura Quitada')])).toBe(
+      'fatura_paga',
+    )
 
     // Standalone 'pg', 'pga', 'pgo' should NOT match fatura_paga (falls into outros)
-    expect(classifyRow('pg')).toBe('outros')
-    expect(classifyRow('codigo pg 123')).toBe('outros')
-    expect(classifyRow('pga')).toBe('outros')
-    expect(classifyRow('pgo')).toBe('outros')
+    expect(classifyRow('pg', ['pg'])).toBe('outros')
+    expect(classifyRow('codigo pg 123', ['codigo pg 123'])).toBe('outros')
+    expect(classifyRow('pga', ['pga'])).toBe('outros')
+    expect(classifyRow('pgo', ['pgo'])).toBe('outros')
 
-    // Regression tests: "comprovante" alone should NOT classify as fatura_paga
-    expect(classifyRow('solicitou comprovante de residencia')).not.toBe('fatura_paga')
-    expect(classifyRow('aguardando comprovante')).not.toBe('fatura_paga')
-    expect(classifyRow('enviar comprovante de endereco')).not.toBe('fatura_paga')
-    expect(classifyRow('comprovante de renda')).not.toBe('fatura_paga')
+    // Observation phrases or partial matches should NOT classify as fatura_paga
+    expect(
+      classifyRow('solicitou comprovante de residencia', ['solicitou comprovante de residencia']),
+    ).not.toBe('fatura_paga')
+    expect(classifyRow('aguardando comprovante', ['aguardando comprovante'])).not.toBe(
+      'fatura_paga',
+    )
+    expect(
+      classifyRow('enviar comprovante de endereco', ['enviar comprovante de endereco']),
+    ).not.toBe('fatura_paga')
+    expect(classifyRow('comprovante de renda', ['comprovante de renda'])).not.toBe('fatura_paga')
 
-    // Regression tests: Negated payment words should NOT classify as fatura_paga
-    expect(classifyRow('nao liquidado')).not.toBe('fatura_paga')
-    expect(classifyRow('nao liquidada')).not.toBe('fatura_paga')
-    expect(classifyRow('nao quitado')).not.toBe('fatura_paga')
-    expect(classifyRow('nao quitada')).not.toBe('fatura_paga')
-    expect(classifyRow('nao pago')).not.toBe('fatura_paga')
-    expect(classifyRow('nao paga')).not.toBe('fatura_paga')
-    expect(classifyRow('nunca pago')).not.toBe('fatura_paga')
-    expect(classifyRow('jamais quitou')).not.toBe('fatura_paga')
-    expect(classifyRow('sem pago')).not.toBe('fatura_paga')
-    expect(classifyRow('nao foi liquidado')).not.toBe('fatura_paga')
+    // Regression: row with status "Contato Realizado" and observation cell "cliente disse que ja pagou a fatura"
+    // MUST NOT be classified as fatura_paga
+    const cellsRegressionObs = [
+      'loja taguatinga',
+      'contato realizado',
+      'cliente disse que ja pagou a fatura',
+    ]
+    const rowTextRegressionObs = cellsRegressionObs.join(' ')
+    expect(classifyRow(rowTextRegressionObs, cellsRegressionObs)).toBe('contato_realizado')
+
+    // Partial sentences in observation cells should not match
+    expect(classifyRow('cliente já quitou / quitado', ['cliente já quitou / quitado'])).not.toBe(
+      'fatura_paga',
+    )
+    expect(classifyRow('nao liquidado', ['nao liquidado'])).not.toBe('fatura_paga')
+    expect(classifyRow('nao pago', ['nao pago'])).not.toBe('fatura_paga')
+    expect(classifyRow('nao paga', ['nao paga'])).not.toBe('fatura_paga')
   })
 
   it('should classify "Enviado Fatura(s)" (envio_fatura) and treat unmatched sending requests as "Outros Motivos" (outros)', () => {
@@ -153,10 +204,14 @@ describe('classifyRow', () => {
     expect(classifyRow('pp', ['pp'])).toBe('outros')
 
     // Words that should NOT trigger promessa_pagto:
-    expect(classifyRow('pagamento efetuado')).toBe('fatura_paga')
-    expect(classifyRow('pagamento realizado')).toBe('fatura_paga')
-    expect(classifyRow('solicitou informacao de pagamento')).toBe('outros')
-    expect(classifyRow('aguardando analise de pagamento')).toBe('pendente')
+    expect(classifyRow('pagamento efetuado', ['pagamento efetuado'])).toBe('fatura_paga')
+    expect(classifyRow('pagamento realizado', ['pagamento realizado'])).toBe('fatura_paga')
+    expect(
+      classifyRow('solicitou informacao de pagamento', ['solicitou informacao de pagamento']),
+    ).toBe('outros')
+    expect(
+      classifyRow('aguardando analise de pagamento', ['aguardando analise de pagamento']),
+    ).toBe('pendente')
   })
 
   it('should accurately classify rows with normalizedCells array for Promessa de Pagto. and prevent false positives on observation cells', () => {
@@ -182,10 +237,10 @@ describe('classifyRow', () => {
     const rowText5 = cells5.join(' ')
     expect(classifyRow(rowText5, cells5)).toBe('outros')
 
-    // Regression test: a cell with "fatura paga - promessa de pagto quitada" should NOT be classified as promessa_pagto
+    // Regression test: a cell with "fatura paga - promessa de pagto quitada" (not exact match for either) should fall into outros
     const cellsRegression = ['loja teste', 'cliente a', 'fatura paga - promessa de pagto quitada']
     const rowTextRegression = cellsRegression.join(' ')
-    expect(classifyRow(rowTextRegression, cellsRegression)).toBe('fatura_paga')
+    expect(classifyRow(rowTextRegression, cellsRegression)).toBe('outros')
 
     // False positive prevention: "promessa de pagto" inside observation cell when status is "fatura paga"
     const cellsFaturaPaga = [
