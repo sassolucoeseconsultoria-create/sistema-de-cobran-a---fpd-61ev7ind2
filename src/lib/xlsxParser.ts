@@ -4,7 +4,8 @@ import type { FpdStatusKey } from '@/types/fpd'
 export interface ParsedSheetCounts {
   sheetName: string
   sheetType: 'movel' | 'residencial' | 'outro'
-  totalRows: number
+  totalRows: number // Total de ocorrências/quantidades somadas
+  totalLinesCount?: number // Quantidade de linhas físicas de dados processadas
   envio_fatura: number
   pendente: number
   fatura_paga: number
@@ -370,6 +371,46 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
 /**
  * Checks if a row is a header row or a totals summary row
  */
+/**
+ * Converts column letters like 'A', 'Z', 'AE', 'AW' to 0-based column index.
+ * e.g. A -> 0, Z -> 25, AA -> 26, AE -> 30, AW -> 48
+ */
+export function columnLetterToIndex(columnLetter: string): number {
+  const clean = columnLetter.toUpperCase().trim()
+  let result = 0
+  for (let i = 0; i < clean.length; i++) {
+    result = result * 26 + (clean.charCodeAt(i) - 64)
+  }
+  return result - 1
+}
+
+/**
+ * Extracts a numeric quantity from a cell value in a given column.
+ * If empty, invalid, 0, or negative, defaults to 1 (each valid data row represents at least 1 occurrence unless specified).
+ * If it's a positive number or string number, parses it (e.g. "5" -> 5).
+ */
+export function extractRowQuantity(row: unknown[], colIndex: number): number {
+  if (!row || colIndex < 0 || colIndex >= row.length) {
+    return 1
+  }
+  const raw = row[colIndex]
+  if (raw === null || raw === undefined || raw === '') {
+    return 1
+  }
+  if (typeof raw === 'number' && !isNaN(raw)) {
+    return raw > 0 ? raw : 1
+  }
+  const str = String(raw).trim().replace(',', '.')
+  const parsed = parseFloat(str)
+  if (!isNaN(parsed) && parsed > 0) {
+    return parsed
+  }
+  return 1
+}
+
+/**
+ * Checks if a row is a header row or a totals summary row
+ */
 export function isHeaderOrTotalRow(rowValues: unknown[]): boolean {
   const normalizedCells = rowValues.map(normalizeText).filter(Boolean)
   if (normalizedCells.length === 0) return true // empty row
@@ -463,6 +504,7 @@ export function parseWorksheet(
   ws: XLSX.WorkSheet,
   sheetName: string,
   sheetType: 'movel' | 'residencial' | 'outro',
+  qtyColIndexOverride?: number,
 ): ParsedSheetCounts {
   const jsonData = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false })
 
@@ -470,6 +512,7 @@ export function parseWorksheet(
     sheetName,
     sheetType,
     totalRows: 0,
+    totalLinesCount: 0,
     envio_fatura: 0,
     pendente: 0,
     fatura_paga: 0,
@@ -484,6 +527,18 @@ export function parseWorksheet(
     return counts
   }
 
+  // Determine target quantity column index:
+  // For 'movel': column AE (index 30)
+  // For 'residencial': column AW (index 48)
+  const qtyColIndex =
+    qtyColIndexOverride !== undefined
+      ? qtyColIndexOverride
+      : sheetType === 'movel'
+        ? columnLetterToIndex('AE') // 30
+        : sheetType === 'residencial'
+          ? columnLetterToIndex('AW') // 48
+          : -1
+
   // Iterate rows (skip empty and headers/totals)
   for (let i = 0; i < jsonData.length; i++) {
     const row = jsonData[i]
@@ -497,13 +552,18 @@ export function parseWorksheet(
       continue
     }
 
-    // Join row cells into a normalized search string
+    // Join row cells into a normalized search string for classification
     const rowText = row.map(normalizeText).join(' ')
     if (!rowText.trim()) continue
 
     const category = classifyRow(rowText)
-    counts[category]++
-    counts.totalRows++
+    const qty = extractRowQuantity(row, qtyColIndex)
+
+    counts[category] += qty
+    counts.totalRows += qty
+    if (counts.totalLinesCount !== undefined) {
+      counts.totalLinesCount++
+    }
   }
 
   return counts
