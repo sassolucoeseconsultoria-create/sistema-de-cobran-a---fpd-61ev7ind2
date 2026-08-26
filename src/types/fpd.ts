@@ -14,7 +14,6 @@ export interface FpdRecord extends RecordModel {
   envio_fatura: number
   pendente?: number
   fatura_paga: number
-  envia_fatura?: number
   sem_contato: number
   promessa_pagto: number
   cancelados: number
@@ -38,7 +37,6 @@ export interface ImportedFileRecord extends RecordModel {
   envio_fatura?: number
   pendente?: number
   fatura_paga: number
-  envia_fatura?: number
   sem_contato: number
   promessa_pagto: number
   cancelados: number
@@ -65,7 +63,6 @@ export interface ConsolidatedRow {
   envioFatura: number
   pendente: number
   faturaPaga: number
-  enviaFatura: number
   semContato: number
   promessaPagto: number
   cancelados: number
@@ -83,7 +80,6 @@ export const DEFAULT_CONSOLIDATED_ROW: Omit<ConsolidatedRow, 'storeId' | 'storeN
   envioFatura: 0,
   pendente: 0,
   faturaPaga: 0,
-  enviaFatura: 0,
   semContato: 0,
   promessaPagto: 0,
   cancelados: 0,
@@ -96,7 +92,6 @@ export type FpdStatusKey =
   | 'envio_fatura'
   | 'pendente'
   | 'fatura_paga'
-  | 'envia_fatura'
   | 'sem_contato'
   | 'promessa_pagto'
   | 'cancelados'
@@ -138,14 +133,6 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
     textColor: '#0E7490',
     bgTint: 'rgba(8, 145, 178, 0.08)',
     borderTint: 'rgba(8, 145, 178, 0.25)',
-  },
-  {
-    key: 'envia_fatura',
-    label: 'Envia Fatura(s)',
-    color: '#D97706',
-    textColor: '#B45309',
-    bgTint: 'rgba(217, 119, 6, 0.08)',
-    borderTint: 'rgba(217, 119, 6, 0.25)',
   },
   {
     key: 'sem_contato',

@@ -160,7 +160,6 @@ export const Index: React.FC = () => {
           envioFatura: 0,
           pendente: 0,
           faturaPaga: 0,
-          enviaFatura: 0,
           semContato: 0,
           promessaPagto: 0,
           cancelados: 0,
@@ -184,7 +183,6 @@ export const Index: React.FC = () => {
         envioFatura: latest.envio_fatura || 0,
         pendente: latest.pendente || 0,
         faturaPaga: latest.fatura_paga || 0,
-        enviaFatura: latest.envia_fatura || 0,
         semContato: latest.sem_contato || 0,
         promessaPagto: latest.promessa_pagto || 0,
         cancelados: latest.cancelados || 0,
@@ -245,7 +243,6 @@ export const Index: React.FC = () => {
         acc.envioFatura += r.envioFatura
         acc.pendente += r.pendente
         acc.faturaPaga += r.faturaPaga
-        acc.enviaFatura += r.enviaFatura
         acc.semContato += r.semContato
         acc.promessaPagto += r.promessaPagto
         acc.cancelados += r.cancelados
@@ -259,7 +256,6 @@ export const Index: React.FC = () => {
         envioFatura: 0,
         pendente: 0,
         faturaPaga: 0,
-        enviaFatura: 0,
         semContato: 0,
         promessaPagto: 0,
         cancelados: 0,
@@ -275,7 +271,6 @@ export const Index: React.FC = () => {
   const animatedEnvioFatura = useCountUp(totals.envioFatura)
   const animatedPendente = useCountUp(totals.pendente)
   const animatedFaturaPaga = useCountUp(totals.faturaPaga)
-  const animatedEnviaFatura = useCountUp(totals.enviaFatura)
   const animatedSemContato = useCountUp(totals.semContato)
   const animatedPromessaPagto = useCountUp(totals.promessaPagto)
   const animatedCancelados = useCountUp(totals.cancelados)
@@ -692,7 +687,7 @@ export const Index: React.FC = () => {
             </Button>
           </div>
         </div>
-        {/* 15-Column Consolidated Table */}
+        {/* 14-Column Consolidated Table */}
         <div className="relative overflow-x-auto max-h-[70vh] border-b border-[#E3E9F2]">
           <table className="w-full text-left border-collapse text-[13px]">
             {/* Header */}
@@ -710,7 +705,7 @@ export const Index: React.FC = () => {
                 <th className="px-3 py-3.5 min-w-[110px] text-right border-r border-[#1e456f] bg-[#0E2A47]">
                   TOTAL LINHAS
                 </th>
-                {/* E–N Status Columns with Colored Chips */}
+                {/* E–M Status Columns with Colored Chips */}
                 {FPD_STATUSES.map((status) => (
                   <th
                     key={status.key}
@@ -724,7 +719,7 @@ export const Index: React.FC = () => {
                     </div>
                   </th>
                 ))}
-                {/* O - OBSERVAÇÃO */}
+                {/* N - OBSERVAÇÃO */}
                 <th className="px-3 py-3.5 min-w-[180px]">OBSERVAÇÃO</th>
               </tr>
             </thead>
@@ -733,7 +728,7 @@ export const Index: React.FC = () => {
             <tbody className="divide-y divide-[#E3E9F2]">
               {loading ? (
                 <tr>
-                  <td colSpan={15} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={14} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-6 h-6 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
                       <span>Carregando dados consolidados...</span>
@@ -742,7 +737,7 @@ export const Index: React.FC = () => {
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={15} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={14} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
                       <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
                       <p className="font-medium text-[#12365A]">Nenhuma loja encontrada</p>
@@ -819,7 +814,7 @@ export const Index: React.FC = () => {
                         )}
                       </td>
 
-                      {/* E–N: 10 Status columns with faint background tint */}
+                      {/* E–M: Status columns with faint background tint */}
                       {FPD_STATUSES.map((status) => {
                         const val = row.hasData
                           ? (row[
@@ -851,7 +846,7 @@ export const Index: React.FC = () => {
                         )
                       })}
 
-                      {/* O: OBSERVAÇÃO */}
+                      {/* N: OBSERVAÇÃO */}
                       <td className="px-3 py-2.5 text-[#5B6B82] truncate max-w-[200px]">
                         {row.observacao ? (
                           <Tooltip>
@@ -899,35 +894,31 @@ export const Index: React.FC = () => {
                 <td className="px-2.5 py-3 text-right text-[#67e8f9] tabular-nums border-r border-[#1e456f]">
                   {animatedFaturaPaga.toLocaleString('pt-BR')}
                 </td>
-                {/* H: Envia Fatura(s) */}
-                <td className="px-2.5 py-3 text-right text-[#fcd34d] tabular-nums border-r border-[#1e456f]">
-                  {animatedEnviaFatura.toLocaleString('pt-BR')}
-                </td>
-                {/* I: Sem Contato */}
+                {/* H: Sem Contato */}
                 <td className="px-2.5 py-3 text-right text-[#cbd5e1] tabular-nums border-r border-[#1e456f]">
                   {animatedSemContato.toLocaleString('pt-BR')}
                 </td>
-                {/* J: Promessa de Pagto. */}
+                {/* I: Promessa de Pagto. */}
                 <td className="px-2.5 py-3 text-right text-[#d8b4fe] tabular-nums border-r border-[#1e456f]">
                   {animatedPromessaPagto.toLocaleString('pt-BR')}
                 </td>
-                {/* K: Cancelados */}
+                {/* J: Cancelados */}
                 <td className="px-2.5 py-3 text-right text-[#fca5a5] tabular-nums border-r border-[#1e456f]">
                   {animatedCancelados.toLocaleString('pt-BR')}
                 </td>
-                {/* L: Não Tratados */}
+                {/* K: Não Tratados */}
                 <td className="px-2.5 py-3 text-right text-[#fdba74] tabular-nums border-r border-[#1e456f]">
                   {animatedNaoTratados.toLocaleString('pt-BR')}
                 </td>
-                {/* M: Contato Realizado */}
+                {/* L: Contato Realizado */}
                 <td className="px-2.5 py-3 text-right text-[#5eead4] tabular-nums border-r border-[#1e456f]">
                   {animatedContatoRealizado.toLocaleString('pt-BR')}
                 </td>
-                {/* N: Outros Motivos */}
+                {/* M: Outros Motivos */}
                 <td className="px-2.5 py-3 text-right text-[#c4b5fd] tabular-nums border-r border-[#1e456f]">
                   {animatedOutros.toLocaleString('pt-BR')}
                 </td>
-                {/* O */}
+                {/* N */}
                 <td className="px-3 py-3"></td>
               </tr>
             </tfoot>

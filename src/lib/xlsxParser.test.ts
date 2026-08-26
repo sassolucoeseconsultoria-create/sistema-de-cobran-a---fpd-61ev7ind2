@@ -67,25 +67,17 @@ describe('classifyRow', () => {
     expect(classifyRow('pgo')).toBe('outros')
   })
 
-  it('should distinguish "Envia Fatura(s)" (envia_fatura) from "Enviado Fatura(s)" (envio_fatura) without overlap', () => {
-    expect(classifyRow('envia fatura')).toBe('envia_fatura')
-    expect(classifyRow('enviar fatura')).toBe('envia_fatura')
-    expect(classifyRow('precisa enviar')).toBe('envia_fatura')
-    expect(classifyRow('a enviar')).toBe('envia_fatura')
-    expect(classifyRow('a enviar fatura')).toBe('envia_fatura')
-    expect(classifyRow('reenviar fatura')).toBe('envia_fatura')
-    expect(classifyRow('mandar fatura')).toBe('envia_fatura')
-    expect(classifyRow('solicitou envio')).toBe('envia_fatura')
-    expect(classifyRow('solicitou envio de fatura')).toBe('envia_fatura')
-    expect(classifyRow('enviar boleto')).toBe('envia_fatura')
-    expect(classifyRow('enviar codigo de barras')).toBe('envia_fatura')
-    expect(classifyRow('enviar pix')).toBe('envia_fatura')
-
-    // Contrast explicitly:
+  it('should classify "Enviado Fatura(s)" (envio_fatura) and treat unmatched sending requests as "Outros Motivos" (outros)', () => {
     expect(classifyRow('enviado fatura')).toBe('envio_fatura')
-    expect(classifyRow('enviar fatura')).toBe('envia_fatura')
     expect(classifyRow('fatura enviada')).toBe('envio_fatura')
-    expect(classifyRow('envia fatura')).toBe('envia_fatura')
+    expect(classifyRow('enviada 2 via')).toBe('envio_fatura')
+
+    // Phrases that used to be envia_fatura now fall into outros if not matching other rules
+    expect(classifyRow('enviar fatura')).toBe('outros')
+    expect(classifyRow('precisa enviar')).toBe('outros')
+    expect(classifyRow('a enviar')).toBe('outros')
+    expect(classifyRow('mandar fatura')).toBe('outros')
+    expect(classifyRow('enviar boleto')).toBe('outros')
   })
 
   it('should classify "Sem Contato" (sem_contato)', () => {
@@ -276,13 +268,13 @@ describe('isHeaderOrTotalRow', () => {
       ]),
     ).toBe(false)
 
-    // Data row with customer and status "ENVIA FATURA"
+    // Data row with customer and status "PENDENTE DE ENVIO"
     expect(
       isHeaderOrTotalRow([
         'LOJA SUL',
         'ANA SOUZA',
-        'ENVIA FATURA',
         'PENDENTE DE ENVIO',
+        'OBS GERAL',
         '61977777777',
       ]),
     ).toBe(false)
@@ -389,10 +381,10 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     row2[1] = 'FATURA PAGA'
     row2[30] = 3
 
-    // Row 3: Envia Fatura with quantity 2 in column AE
+    // Row 3: Outros Motivos with quantity 2 in column AE
     const row3 = Array(35).fill('')
     row3[0] = 'LOJA CENTRO'
-    row3[1] = 'ENVIA FATURA'
+    row3[1] = 'OUTRO MOTIVO QUALQUER'
     row3[30] = 2
 
     // Row 4: Sem Contato with quantity 5 in column AE
@@ -412,7 +404,7 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
 
     expect(counts.envio_fatura).toBe(4)
     expect(counts.fatura_paga).toBe(3)
-    expect(counts.envia_fatura).toBe(2)
+    expect(counts.outros).toBe(2)
     expect(counts.sem_contato).toBe(5)
     expect(counts.promessa_pagto).toBe(1)
     expect(counts.totalRows).toBe(15) // 4 + 3 + 2 + 5 + 1

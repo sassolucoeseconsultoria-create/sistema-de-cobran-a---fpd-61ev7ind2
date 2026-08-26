@@ -9,7 +9,6 @@ export interface ParsedSheetCounts {
   envio_fatura: number
   pendente: number
   fatura_paga: number
-  envia_fatura: number
   sem_contato: number
   promessa_pagto: number
   cancelados: number
@@ -33,7 +32,6 @@ export interface ParsedFileData {
     envio_fatura: number
     pendente: number
     fatura_paga: number
-    envia_fatura: number
     sem_contato: number
     promessa_pagto: number
     cancelados: number
@@ -104,16 +102,15 @@ export function guessReferenteDate(filename: string): string {
  * 1. ENVIADO FATURA(S) (key 'envio_fatura')
  * 2. PENDENTE (key 'pendente')
  * 3. FATURA(S) PAGA(S) (key 'fatura_paga')
- * 4. ENVIA FATURA(S) (key 'envia_fatura')
- * 5. SEM CONTATO (key 'sem_contato')
- * 6. PROMESSA DE PAGTO. (key 'promessa_pagto')
- * 7. CANCELADOS (key 'cancelados')
- * 8. CONTATO REALIZADO (key 'contato_realizado')
- * 9. NÃO TRATADOS (key 'nao_tratados') - ONLY for explicit untargeted / unprocessed rows
- * 10. OUTROS MOTIVOS (key 'outros') - Default fallback for other genuine statuses / reasons
+ * 4. SEM CONTATO (key 'sem_contato')
+ * 5. PROMESSA DE PAGTO. (key 'promessa_pagto')
+ * 6. CANCELADOS (key 'cancelados')
+ * 7. CONTATO REALIZADO (key 'contato_realizado')
+ * 8. NÃO TRATADOS (key 'nao_tratados') - ONLY for explicit untargeted / unprocessed rows
+ * 9. OUTROS MOTIVOS (key 'outros') - Default fallback for other genuine statuses / reasons
  */
 export function classifyRow(rowNormalizedText: string, normalizedCells?: string[]): FpdStatusKey {
-  // --- 1. ENVIADO FATURA(S) vs ENVIA FATURA(S) ---
+  // --- 1. ENVIADO FATURA(S) ---
   const isEnviadoFatura =
     rowNormalizedText.includes('enviado fatura') ||
     rowNormalizedText.includes('enviada fatura') ||
@@ -155,46 +152,8 @@ export function classifyRow(rowNormalizedText: string, normalizedCells?: string[
     /\benviad[oa]s?\b/.test(rowNormalizedText) ||
     /\b(envio|reencaminh[oa]s?)\b/.test(rowNormalizedText)
 
-  const isEnviaFatura =
-    rowNormalizedText.includes('envia fatura') ||
-    rowNormalizedText.includes('enviar fatura') ||
-    rowNormalizedText.includes('precisa enviar') ||
-    rowNormalizedText.includes('a enviar') ||
-    rowNormalizedText.includes('enviando fatura') ||
-    rowNormalizedText.includes('reenviar fatura') ||
-    rowNormalizedText.includes('mandar fatura') ||
-    rowNormalizedText.includes('encaminhar fatura') ||
-    rowNormalizedText.includes('solicitou envio') ||
-    rowNormalizedText.includes('solicitado envio') ||
-    rowNormalizedText.includes('solicitou 2 via') ||
-    rowNormalizedText.includes('solicita 2 via') ||
-    rowNormalizedText.includes('gerar 2 via') ||
-    rowNormalizedText.includes('gerar fatura') ||
-    rowNormalizedText.includes('enviar boleto') ||
-    rowNormalizedText.includes('envia boleto') ||
-    rowNormalizedText.includes('enviar codigo de barras') ||
-    rowNormalizedText.includes('envia codigo de barras') ||
-    rowNormalizedText.includes('enviar pix') ||
-    rowNormalizedText.includes('envia pix') ||
-    /\b(enviar|envia|mandar|encaminhar)\b/.test(rowNormalizedText)
-
-  if (isEnviadoFatura && !isEnviaFatura) {
+  if (isEnviadoFatura) {
     return 'envio_fatura' // Enviado Fatura(s)
-  }
-  if (isEnviaFatura && !isEnviadoFatura) {
-    return 'envia_fatura' // Envia Fatura(s)
-  }
-  if (isEnviadoFatura && isEnviaFatura) {
-    if (
-      rowNormalizedText.includes('enviado') ||
-      rowNormalizedText.includes('enviada') ||
-      rowNormalizedText.includes('reencaminhado') ||
-      rowNormalizedText.includes('foi envi') ||
-      rowNormalizedText.includes('fatura enviada')
-    ) {
-      return 'envio_fatura' // Enviado Fatura(s)
-    }
-    return 'envia_fatura' // Envia Fatura(s)
   }
 
   // --- 2. PROMESSA DE PAGTO. (key: promessa_pagto) ---
@@ -449,7 +408,6 @@ export function isHeaderOrTotalRow(rowValues: unknown[]): boolean {
   const hasStatusKeyword =
     combined.includes('enviad') ||
     combined.includes('envio') ||
-    combined.includes('envia') ||
     combined.includes('pago') ||
     combined.includes('paga') ||
     combined.includes('quitad') ||
@@ -546,7 +504,6 @@ export function parseWorksheet(
     envio_fatura: 0,
     pendente: 0,
     fatura_paga: 0,
-    envia_fatura: 0,
     sem_contato: 0,
     promessa_pagto: 0,
     cancelados: 0,
@@ -602,7 +559,6 @@ export function parseWorksheet(
   counts.envio_fatura = Math.round(counts.envio_fatura || 0)
   counts.pendente = Math.round(counts.pendente || 0)
   counts.fatura_paga = Math.round(counts.fatura_paga || 0)
-  counts.envia_fatura = Math.round(counts.envia_fatura || 0)
   counts.sem_contato = Math.round(counts.sem_contato || 0)
   counts.promessa_pagto = Math.round(counts.promessa_pagto || 0)
   counts.cancelados = Math.round(counts.cancelados || 0)
@@ -690,9 +646,6 @@ export async function parseXlsxFile(file: File): Promise<ParsedFileData> {
     ),
     pendente: safeInt((movelCounts?.pendente || 0) + (residencialCounts?.pendente || 0)),
     fatura_paga: safeInt((movelCounts?.fatura_paga || 0) + (residencialCounts?.fatura_paga || 0)),
-    envia_fatura: safeInt(
-      (movelCounts?.envia_fatura || 0) + (residencialCounts?.envia_fatura || 0),
-    ),
     sem_contato: safeInt((movelCounts?.sem_contato || 0) + (residencialCounts?.sem_contato || 0)),
     promessa_pagto: safeInt(
       (movelCounts?.promessa_pagto || 0) + (residencialCounts?.promessa_pagto || 0),

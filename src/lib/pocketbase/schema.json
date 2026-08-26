@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-26T16:58:51.108Z",
+  "generatedAt": "2026-08-26T17:06:17.978Z",
   "collections": [
     {
       "name": "users",
@@ -204,12 +204,6 @@
           "type": "number",
           "required": false,
           "system": false
-        },
-        {
-          "name": "envia_fatura",
-          "type": "number",
-          "required": false,
-          "system": false
         }
       ],
       "indexes": [
@@ -279,12 +273,6 @@
         },
         {
           "name": "fatura_paga",
-          "type": "number",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "envia_fatura",
           "type": "number",
           "required": false,
           "system": false

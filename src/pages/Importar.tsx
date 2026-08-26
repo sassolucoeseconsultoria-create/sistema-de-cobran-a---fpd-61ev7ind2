@@ -219,7 +219,6 @@ export const Importar: React.FC = () => {
         envio_fatura: item.parsedData.aggregated.envio_fatura,
         pendente: item.parsedData.aggregated.pendente,
         fatura_paga: item.parsedData.aggregated.fatura_paga,
-        envia_fatura: item.parsedData.aggregated.envia_fatura,
         sem_contato: item.parsedData.aggregated.sem_contato,
         promessa_pagto: item.parsedData.aggregated.promessa_pagto,
         cancelados: item.parsedData.aggregated.cancelados,
@@ -236,7 +235,6 @@ export const Importar: React.FC = () => {
         envio_fatura: item.parsedData.aggregated.envio_fatura,
         pendente: item.parsedData.aggregated.pendente,
         fatura_paga: item.parsedData.aggregated.fatura_paga,
-        envia_fatura: item.parsedData.aggregated.envia_fatura,
         sem_contato: item.parsedData.aggregated.sem_contato,
         promessa_pagto: item.parsedData.aggregated.promessa_pagto,
         cancelados: item.parsedData.aggregated.cancelados,
@@ -315,8 +313,8 @@ export const Importar: React.FC = () => {
             <span className="font-bold text-[#12365A] block">2. Classificação Automática</span>
             <p>
               As ocorrências são agrupadas nos status do consolidado: Enviado Fatura(s), Pendente,
-              Fatura(s) Paga(s), Envia Fatura(s), Sem Contato, Promessa de Pagto., Cancelados, Não
-              Tratados, Contato Realizado e Outros Motivos.
+              Fatura(s) Paga(s), Sem Contato, Promessa de Pagto., Cancelados, Não Tratados, Contato
+              Realizado e Outros Motivos.
             </p>
           </div>
           <div className="p-3 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] space-y-1">

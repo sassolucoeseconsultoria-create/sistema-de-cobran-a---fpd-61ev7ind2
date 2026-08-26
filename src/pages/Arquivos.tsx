@@ -143,7 +143,6 @@ export const Arquivos: React.FC = () => {
         acc.envioFatura += enviado
         acc.pendente += f.pendente || 0
         acc.faturaPaga += f.fatura_paga || 0
-        acc.enviaFatura += f.envia_fatura || 0
         acc.semContato += f.sem_contato || 0
         acc.promessaPagto += f.promessa_pagto || 0
         acc.cancelados += f.cancelados || 0
@@ -157,7 +156,6 @@ export const Arquivos: React.FC = () => {
         envioFatura: 0,
         pendente: 0,
         faturaPaga: 0,
-        enviaFatura: 0,
         semContato: 0,
         promessaPagto: 0,
         cancelados: 0,
@@ -620,9 +618,9 @@ export const Arquivos: React.FC = () => {
                 {/* 4 */}
                 <td className="px-3 py-3 border-r border-[#1e456f]"></td>
                 {/* 5: TOTAL LINHAS */}
-                <td className="px-3 py-3 text-right text-white tabular-nums border-r border-[#1e456f] bg-[#0E2A47]">
+                <th className="px-3 py-3 text-right text-white tabular-nums border-r border-[#1e456f] bg-[#0E2A47]">
                   {totals.totalLinhas.toLocaleString('pt-BR')}
-                </td>
+                </th>
                 {/* Status totals */}
                 <td className="px-2.5 py-3 text-right text-[#4ade80] tabular-nums border-r border-[#1e456f]">
                   {totals.envioFatura.toLocaleString('pt-BR')}
@@ -633,12 +631,9 @@ export const Arquivos: React.FC = () => {
                 <td className="px-2.5 py-3 text-right text-[#67e8f9] tabular-nums border-r border-[#1e456f]">
                   {totals.faturaPaga.toLocaleString('pt-BR')}
                 </td>
-                <td className="px-2.5 py-3 text-right text-[#fcd34d] tabular-nums border-r border-[#1e456f]">
-                  {totals.enviaFatura.toLocaleString('pt-BR')}
-                </td>
                 <td className="px-2.5 py-3 text-right text-[#cbd5e1] tabular-nums border-r border-[#1e456f]">
                   {totals.semContato.toLocaleString('pt-BR')}
-                </td>
+                </td>{' '}
                 <td className="px-2.5 py-3 text-right text-[#d8b4fe] tabular-nums border-r border-[#1e456f]">
                   {totals.promessaPagto.toLocaleString('pt-BR')}
                 </td>

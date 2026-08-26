@@ -78,7 +78,6 @@ export async function saveFpdRecord(data: {
   envio_fatura?: number
   pendente?: number
   fatura_paga?: number
-  envia_fatura?: number
   sem_contato?: number
   promessa_pagto?: number
   cancelados?: number
@@ -108,7 +107,6 @@ export async function saveFpdRecord(data: {
     envio_fatura: toSafeInt(data.envio_fatura),
     pendente: toSafeInt(data.pendente),
     fatura_paga: toSafeInt(data.fatura_paga),
-    envia_fatura: toSafeInt(data.envia_fatura),
     sem_contato: toSafeInt(data.sem_contato),
     promessa_pagto: toSafeInt(data.promessa_pagto),
     cancelados: toSafeInt(data.cancelados),
@@ -152,7 +150,6 @@ export async function saveImportedFile(data: {
   envio_fatura?: number
   pendente?: number
   fatura_paga?: number
-  envia_fatura?: number
   sem_contato?: number
   promessa_pagto?: number
   cancelados?: number
@@ -174,7 +171,6 @@ export async function saveImportedFile(data: {
     envio_fatura: enviadoVal,
     pendente: toSafeInt(data.pendente),
     fatura_paga: toSafeInt(data.fatura_paga),
-    envia_fatura: toSafeInt(data.envia_fatura),
     sem_contato: toSafeInt(data.sem_contato),
     promessa_pagto: toSafeInt(data.promessa_pagto),
     cancelados: toSafeInt(data.cancelados),

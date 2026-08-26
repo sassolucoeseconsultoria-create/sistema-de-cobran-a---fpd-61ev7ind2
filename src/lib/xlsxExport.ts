@@ -8,7 +8,6 @@ export function exportConsolidatedToXlsx(
     envioFatura: number
     pendente: number
     faturaPaga: number
-    enviaFatura: number
     semContato: number
     promessaPagto: number
     cancelados: number
@@ -18,7 +17,7 @@ export function exportConsolidatedToXlsx(
   },
   referenteLabel?: string,
 ) {
-  // Headers matching the 10 FPD columns in exact order
+  // Headers matching the 9 FPD columns in exact order
   const headers = [
     'LOJAS',
     'COORDENAÇÃO',
@@ -27,7 +26,6 @@ export function exportConsolidatedToXlsx(
     'Enviado Fatura(s)',
     'Pendente',
     'Fatura(s) Paga(s)',
-    'Envia Fatura(s)',
     'Sem Contato',
     'Promessa de Pagto.',
     'Cancelados',
@@ -45,7 +43,6 @@ export function exportConsolidatedToXlsx(
     r.hasData ? r.envioFatura : '',
     r.hasData ? r.pendente : '',
     r.hasData ? r.faturaPaga : '',
-    r.hasData ? r.enviaFatura : '',
     r.hasData ? r.semContato : '',
     r.hasData ? r.promessaPagto : '',
     r.hasData ? r.cancelados : '',
@@ -64,7 +61,6 @@ export function exportConsolidatedToXlsx(
     totals.envioFatura,
     totals.pendente,
     totals.faturaPaga,
-    totals.enviaFatura,
     totals.semContato,
     totals.promessaPagto,
     totals.cancelados,
@@ -87,7 +83,6 @@ export function exportConsolidatedToXlsx(
     { wch: 20 }, // Enviado Fatura(s)
     { wch: 15 }, // Pendente
     { wch: 18 }, // Fatura(s) Paga(s)
-    { wch: 18 }, // Envia Fatura(s)
     { wch: 16 }, // Sem Contato
     { wch: 20 }, // Promessa de Pagto.
     { wch: 15 }, // Cancelados
@@ -115,7 +110,6 @@ export function exportImportedFilesToXlsx(
     envioFatura: number
     pendente: number
     faturaPaga: number
-    enviaFatura: number
     semContato: number
     promessaPagto: number
     cancelados: number
@@ -133,7 +127,6 @@ export function exportImportedFilesToXlsx(
     'Enviado Fatura(s)',
     'Pendente',
     'Fatura(s) Paga(s)',
-    'Envia Fatura(s)',
     'Sem Contato',
     'Promessa de Pagto.',
     'Cancelados',
@@ -157,7 +150,6 @@ export function exportImportedFilesToXlsx(
       enviado,
       f.pendente || 0,
       f.fatura_paga || 0,
-      f.envia_fatura || 0,
       f.sem_contato || 0,
       f.promessa_pagto || 0,
       f.cancelados || 0,
@@ -179,7 +171,6 @@ export function exportImportedFilesToXlsx(
       totals.envioFatura,
       totals.pendente,
       totals.faturaPaga,
-      totals.enviaFatura,
       totals.semContato,
       totals.promessaPagto,
       totals.cancelados,
@@ -201,7 +192,6 @@ export function exportImportedFilesToXlsx(
     { wch: 20 }, // Enviado Fatura(s)
     { wch: 15 }, // Pendente
     { wch: 18 }, // Fatura(s) Paga(s)
-    { wch: 18 }, // Envia Fatura(s)
     { wch: 16 }, // Sem Contato
     { wch: 20 }, // Promessa de Pagto.
     { wch: 15 }, // Cancelados
