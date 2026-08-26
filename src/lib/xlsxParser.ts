@@ -96,328 +96,283 @@ export function guessReferenteDate(filename: string): string {
   return `${d}/${m}/${y}`
 }
 
-/**
- * Classify a row's normalized text into one of the FPD categories in exact consolidado order:
- *
- * 1. FATURA(S) PAGA(S) (key 'fatura_paga')
- * 2. ENVIADO FATURA(S) (key 'envio_fatura')
- * 3. PROMESSA DE PAGTO. (key 'promessa_pagto')
- * 4. SEM CONTATO (key 'sem_contato')
- * 5. CANCELADOS (key 'cancelados')
- * 6. PENDENTE (key 'pendente')
- * 7. CONTATO REALIZADO (key 'contato_realizado')
- * 8. OUTROS MOTIVOS (key 'outros') - Default fallback for other genuine statuses / reasons
- * 9. NÃO TRATADOS (key 'nao_tratados') - ONLY for explicit untargeted / unprocessed rows
- */
-export function classifyRow(rowNormalizedText: string, normalizedCells?: string[]): FpdStatusKey {
-  // --- 1. ENVIADO FATURA(S) ---
-  const isEnviadoFatura =
-    rowNormalizedText.includes('enviado fatura') ||
-    rowNormalizedText.includes('enviada fatura') ||
-    rowNormalizedText.includes('enviados fatura') ||
-    rowNormalizedText.includes('enviadas fatura') ||
-    rowNormalizedText.includes('fatura enviada') ||
-    rowNormalizedText.includes('faturas enviadas') ||
-    rowNormalizedText.includes('fatura reenviada') ||
-    rowNormalizedText.includes('fatura reencaminhada') ||
-    rowNormalizedText.includes('envio de fatura') ||
-    rowNormalizedText.includes('envio da fatura') ||
-    rowNormalizedText.includes('envio fatura') ||
-    rowNormalizedText.includes('env fatura') ||
-    rowNormalizedText.includes('env. fatura') ||
-    rowNormalizedText.includes('env fat') ||
-    rowNormalizedText.includes('fatura env') ||
-    rowNormalizedText.includes('boleto enviado') ||
-    rowNormalizedText.includes('enviado boleto') ||
-    rowNormalizedText.includes('enviado 2 via') ||
-    rowNormalizedText.includes('enviada 2 via') ||
-    rowNormalizedText.includes('enviado 2a via') ||
-    rowNormalizedText.includes('enviada 2a via') ||
-    rowNormalizedText.includes('2 via enviada') ||
-    rowNormalizedText.includes('2a via enviada') ||
-    rowNormalizedText.includes('segunda via enviada') ||
-    rowNormalizedText.includes('enviado segunda via') ||
-    rowNormalizedText.includes('enviada segunda via') ||
-    rowNormalizedText.includes('segunda via') ||
-    rowNormalizedText.includes('2 via') ||
-    rowNormalizedText.includes('2a via') ||
-    rowNormalizedText.includes('reenvio') ||
-    rowNormalizedText.includes('reencaminhado') ||
-    rowNormalizedText.includes('reencaminhada') ||
-    rowNormalizedText.includes('reencaminhar') ||
-    rowNormalizedText.includes('ja enviado') ||
-    rowNormalizedText.includes('ja enviada') ||
-    rowNormalizedText.includes('foi enviado') ||
-    rowNormalizedText.includes('foi enviada') ||
-    /\benviad[oa]s?\b/.test(rowNormalizedText) ||
-    /\b(envio|reencaminh[oa]s?)\b/.test(rowNormalizedText)
+// Exact match sets for each category in strict priority order (1 to 8)
+export const EXACT_ENVIO_FATURA = new Set([
+  'enviado fatura',
+  'enviado fatura(s)',
+  'enviada fatura',
+  'enviada(s) fatura(s)',
+  'fatura enviada',
+  'faturas enviadas',
+  'fatura reenviada',
+  'fatura reencaminhada',
+  'envio de fatura',
+  'envio da fatura',
+  'envio fatura',
+  'env fatura',
+  'env. fatura',
+  'env fat',
+  'fatura env',
+  'boleto enviado',
+  'enviado boleto',
+  'enviado 2 via',
+  'enviada 2 via',
+  'enviado 2a via',
+  'enviada 2a via',
+  '2 via enviada',
+  '2a via enviada',
+  'segunda via enviada',
+  'enviado segunda via',
+  'enviada segunda via',
+  'segunda via',
+  '2 via',
+  '2a via',
+  'reenvio',
+  'reencaminhado',
+  'reencaminhada',
+  'reencaminhar',
+  'ja enviado',
+  'ja enviada',
+  'foi enviado',
+  'foi enviada',
+  'enviado',
+  'enviada',
+  'envio',
+])
 
-  if (isEnviadoFatura) {
-    return 'envio_fatura' // Enviado Fatura(s)
+export const EXACT_PROMESSA_PAGTO = new Set([
+  'promessa de pagto.',
+  'promessa de pagto',
+  'promessa de pagamento',
+  'promessa pagto.',
+  'promessa pagto',
+  'promessa pagamento',
+])
+
+export const EXACT_FATURA_PAGA = new Set([
+  'fatura paga',
+  'faturas pagas',
+  'fatura(s) paga(s)',
+  'boleto pago',
+  'boleta paga',
+  'boleto quitado',
+  'boleto liquidado',
+  'fatura quitada',
+  'fatura liquidada',
+  'faturas quitadas',
+  'faturas liquidadas',
+  'fatura pg',
+  'faturas pg',
+  'pagamento efetuado',
+  'pagamento realizado',
+  'pagamento confirmado',
+  'debito pago',
+  'debito quitado',
+  'pix pago',
+  'pago pelo cliente',
+  'pagamento ok',
+  'pagamento identificado',
+  'quitado',
+  'liquidado',
+  'pago',
+  'paga',
+  'ja pago',
+  'ja paga',
+  'ja quitado',
+  'ja liquidado',
+])
+
+export const EXACT_SEM_CONTATO = new Set([
+  'sem contato',
+  'nao atende',
+  'nao atendeu',
+  'caixa postal',
+  'ocupado',
+  'desligado',
+  'fora de area',
+  'fora de servico',
+  'nao existe',
+  'telefone incorreto',
+  'numero incorreto',
+  'numero errado',
+  'telefone errado',
+  'numero invalido',
+  'telefone invalido',
+  'invalido',
+  'incorreto',
+  'mudo',
+  'mensagem gravada',
+  'chamada recusada',
+  'recusou chamada',
+  'ligacao caiu',
+  'impossibilitado de receber',
+])
+
+export const EXACT_CANCELADOS = new Set([
+  'cancelado',
+  'cancelada',
+  'cancelados',
+  'canceladas',
+  'cancel',
+  'devolucao',
+  'devolvido',
+  'devolvida',
+  'fraude',
+  'inversao',
+  'desistencia',
+  'desistiu',
+  'desistente',
+  'estorno',
+  'portabilidade',
+  'obito',
+  'falecido',
+  'sinistro',
+  'desativado',
+  'desativada',
+  'desabilitado',
+  'desabilitada',
+])
+
+export const EXACT_PENDENTE = new Set([
+  'pendente',
+  'em analise',
+  'em andamento',
+  'em tratativa',
+  'aguardando retorno',
+  'aguardando resposta',
+  'aguardando cliente',
+  'retorno agendado',
+  'retornar',
+  'retorno',
+])
+
+export const EXACT_CONTATO_REALIZADO = new Set([
+  'contato realizado',
+  'contato efetuado',
+  'contato feito',
+  'fez contato',
+  'contactado',
+  'contactada',
+  'contatado',
+  'contatada',
+  'cliente atendido',
+  'cliente atendida',
+  'atendido',
+  'atendida',
+  'atendidos',
+  'atendidas',
+  'atendimento realizado',
+  'falou com cliente',
+  'falou com o cliente',
+  'falou com titular',
+  'falou com terceiro',
+  'falou com a mae',
+  'falou com o pai',
+  'falou com esposo',
+  'falou com esposa',
+  'contato com sucesso',
+  'contato ok',
+  'recado',
+  'deixou recado',
+])
+
+export const EXACT_NAO_TRATADOS = new Set([
+  'nao tratado',
+  'nao tratada',
+  'naotratado',
+  'naotratada',
+  'nao trabalhado',
+  'nao trabalhada',
+  'a tratar',
+  'sem tratamento',
+  'sem status',
+  'em branco',
+  'nao abordado',
+  'novo',
+  'virgem',
+  'aguardando',
+])
+
+/**
+ * Classify a row using EXCLUSIVELY exact match per individual cell against allowed variations.
+ * Priority order (top to bottom, first match wins):
+ *
+ * 1. Enviado Fatura(s) (key 'envio_fatura') - coluna F do consolidado
+ * 2. Promessa de Pagto. (key 'promessa_pagto') - coluna G do consolidado
+ * 3. Fatura(s) Paga(s) (key 'fatura_paga') - coluna E do consolidado
+ * 4. Sem Contato (key 'sem_contato') - coluna H do consolidado
+ * 5. Cancelados (key 'cancelados') - coluna I do consolidado
+ * 6. Pendente (key 'pendente') - coluna J do consolidado
+ * 7. Contato Realizado (key 'contato_realizado') - coluna K do consolidado
+ * 8. Não Tratados (key 'nao_tratados') - coluna M do consolidado
+ * 9. Outros Motivos (key 'outros') - coluna L do consolidado (FALLBACK)
+ */
+export function classifyRow(input: string | string[], explicitCells?: string[]): FpdStatusKey {
+  // Support both classifyRow(cells) and classifyRow(rowText, cells) or classifyRow(singleCellString)
+  let cells: string[]
+  if (Array.isArray(input)) {
+    cells = input
+  } else if (explicitCells && Array.isArray(explicitCells)) {
+    cells = explicitCells
+  } else if (typeof input === 'string') {
+    cells = [input]
+  } else {
+    cells = []
   }
 
-  // --- 2. PROMESSA DE PAGTO. (key: promessa_pagto) ---
-  // Check individual cells for exact match (NOT the joined row text)
-  const exactPromessaOptions = new Set([
-    'promessa de pagto.',
-    'promessa de pagto',
-    'promessa de pagamento',
-    'promessa pagto.',
-    'promessa pagto',
-    'promessa pagamento',
-  ])
+  // 1. Enviado Fatura(s)
+  if (cells.some((cell) => EXACT_ENVIO_FATURA.has(cell))) {
+    return 'envio_fatura'
+  }
 
-  if (normalizedCells && normalizedCells.some((cell) => exactPromessaOptions.has(cell))) {
+  // 2. Promessa de Pagto.
+  if (cells.some((cell) => EXACT_PROMESSA_PAGTO.has(cell))) {
     return 'promessa_pagto'
   }
 
-  // --- 3. FATURA(S) PAGA(S) (key: fatura_paga) ---
-  // Check individual cells for exact match (NOT the joined row text)
-  const exactFaturaPagaOptions = new Set([
-    'fatura paga',
-    'faturas pagas',
-    'fatura(s) paga(s)',
-    'boleto pago',
-    'boleta paga',
-    'boleto quitado',
-    'boleto liquidado',
-    'fatura quitada',
-    'fatura liquidada',
-    'faturas quitadas',
-    'faturas liquidadas',
-    'fatura pg',
-    'faturas pg',
-    'pagamento efetuado',
-    'pagamento realizado',
-    'pagamento confirmado',
-    'debito pago',
-    'debito quitado',
-    'pix pago',
-    'pago pelo cliente',
-    'pagamento ok',
-    'pagamento identificado',
-    'quitado',
-    'liquidado',
-    'pago',
-    'paga',
-    'ja pago',
-    'ja paga',
-    'ja quitado',
-    'ja liquidado',
-  ])
-
-  if (normalizedCells && normalizedCells.some((cell) => exactFaturaPagaOptions.has(cell))) {
+  // 3. Fatura(s) Paga(s)
+  if (cells.some((cell) => EXACT_FATURA_PAGA.has(cell))) {
     return 'fatura_paga'
   }
 
-  // --- 4. SEM CONTATO (key: sem_contato) ---
-  if (
-    rowNormalizedText.includes('sem contato') ||
-    rowNormalizedText.includes('nao atende') ||
-    rowNormalizedText.includes('nao atendeu') ||
-    rowNormalizedText.includes('caixa postal') ||
-    rowNormalizedText.includes('ocupado') ||
-    rowNormalizedText.includes('desligado') ||
-    rowNormalizedText.includes('fora de area') ||
-    rowNormalizedText.includes('fora de servico') ||
-    rowNormalizedText.includes('nao existe') ||
-    rowNormalizedText.includes('telefone incorreto') ||
-    rowNormalizedText.includes('numero incorreto') ||
-    rowNormalizedText.includes('numero errado') ||
-    rowNormalizedText.includes('telefone errado') ||
-    rowNormalizedText.includes('numero invalido') ||
-    rowNormalizedText.includes('telefone invalido') ||
-    rowNormalizedText.includes('invalido') ||
-    rowNormalizedText.includes('incorreto') ||
-    rowNormalizedText.includes('mudo') ||
-    rowNormalizedText.includes('mensagem gravada') ||
-    rowNormalizedText.includes('chamada recusada') ||
-    rowNormalizedText.includes('recusou chamada') ||
-    rowNormalizedText.includes('ligacao caiu') ||
-    rowNormalizedText.includes('impossibilitado de receber')
-  ) {
+  // 4. Sem Contato
+  if (cells.some((cell) => EXACT_SEM_CONTATO.has(cell))) {
     return 'sem_contato'
   }
 
-  // --- 5. CANCELADOS (key: cancelados) ---
-  const isDevolucaoCancel =
-    rowNormalizedText.includes('devolucao') ||
-    rowNormalizedText.includes('devolvido') ||
-    rowNormalizedText.includes('devolvida') ||
-    (/\bdevolveu\b/.test(rowNormalizedText) &&
-      !/\bdevolveu\s+(a\s+|o\s+)?(ligacao|chamada|ligou|retornou)\b/.test(rowNormalizedText))
-
-  if (
-    rowNormalizedText.includes('cancel') ||
-    isDevolucaoCancel ||
-    rowNormalizedText.includes('fraude') ||
-    rowNormalizedText.includes('inversao') ||
-    rowNormalizedText.includes('desist') ||
-    rowNormalizedText.includes('estorno') ||
-    rowNormalizedText.includes('portabilidade') ||
-    rowNormalizedText.includes('obito') ||
-    rowNormalizedText.includes('falecido') ||
-    rowNormalizedText.includes('sinistro') ||
-    rowNormalizedText.includes('desativad') ||
-    rowNormalizedText.includes('desabilitad')
-  ) {
+  // 5. Cancelados
+  if (cells.some((cell) => EXACT_CANCELADOS.has(cell))) {
     return 'cancelados'
   }
 
-  // --- 6. PENDENTE (key: pendente) ---
-  if (
-    rowNormalizedText.includes('pendente') ||
-    rowNormalizedText.includes('em analise') ||
-    rowNormalizedText.includes('em andamento') ||
-    rowNormalizedText.includes('em tratativa') ||
-    rowNormalizedText.includes('aguardando retorno') ||
-    rowNormalizedText.includes('aguardando resposta') ||
-    rowNormalizedText.includes('aguardando cliente') ||
-    rowNormalizedText.includes('retorno agendado') ||
-    rowNormalizedText.includes('retornar') ||
-    rowNormalizedText.includes('retorno')
-  ) {
+  // 6. Pendente
+  if (cells.some((cell) => EXACT_PENDENTE.has(cell))) {
     return 'pendente'
   }
 
-  // --- 7. CONTATO REALIZADO (key: contato_realizado) ---
-  const hasPositiveAtendido = () => {
-    const regex = /\b(atendido|atendida|atendidos|atendidas)\b/g
-    let match: RegExpExecArray | null
-    while ((match = regex.exec(rowNormalizedText)) !== null) {
-      const preceding = rowNormalizedText.slice(Math.max(0, match.index - 30), match.index)
-      const isNegated =
-        /\b(nao|não|nunca|jamais|mal|pessimo|péssimo|sem)\s+(foi\s+|ser\s+|sendo\s+|estar\s+|esta\s+|estava\s+|ter\s+|tinha\s+)?$/i.test(
-          preceding.trim(),
-        ) || /(nao|não|nunca|jamais|mal|pessimo|péssimo)\s.{0,15}$/i.test(preceding.trim())
-      if (!isNegated) {
-        return true
-      }
-    }
-    return false
-  }
-
-  if (
-    rowNormalizedText.includes('contato realizado') ||
-    rowNormalizedText.includes('contato efetuado') ||
-    rowNormalizedText.includes('contato feito') ||
-    rowNormalizedText.includes('fez contato') ||
-    rowNormalizedText.includes('contactado') ||
-    rowNormalizedText.includes('contactada') ||
-    rowNormalizedText.includes('contatado') ||
-    rowNormalizedText.includes('contatada') ||
-    rowNormalizedText.includes('cliente atendido') ||
-    rowNormalizedText.includes('cliente atendida') ||
-    hasPositiveAtendido() ||
-    rowNormalizedText.includes('falou com cliente') ||
-    rowNormalizedText.includes('falou com o cliente') ||
-    rowNormalizedText.includes('falou com titular') ||
-    rowNormalizedText.includes('falou com terceiro') ||
-    rowNormalizedText.includes('falou com a mae') ||
-    rowNormalizedText.includes('falou com o pai') ||
-    rowNormalizedText.includes('falou com esposo') ||
-    rowNormalizedText.includes('falou com esposa') ||
-    rowNormalizedText.includes('recado') ||
-    rowNormalizedText.includes('deixou recado') ||
-    rowNormalizedText.includes('contato com sucesso') ||
-    rowNormalizedText.includes('contato ok') ||
-    rowNormalizedText.includes('atendimento realizado')
-  ) {
+  // 7. Contato Realizado
+  if (cells.some((cell) => EXACT_CONTATO_REALIZADO.has(cell))) {
     return 'contato_realizado'
   }
 
-  // --- 8. NÃO TRATADOS (key: nao_tratados) ---
-  // ONLY explicitly marked as untargeted / unprocessed / blank
-  if (
-    rowNormalizedText.includes('nao tratado') ||
-    rowNormalizedText.includes('nao tratada') ||
-    rowNormalizedText.includes('naotratado') ||
-    rowNormalizedText.includes('naotratada') ||
-    rowNormalizedText.includes('nao trabalhad') ||
-    rowNormalizedText.includes('a tratar') ||
-    rowNormalizedText.includes('sem tratamento') ||
-    rowNormalizedText.includes('sem status') ||
-    rowNormalizedText.includes('em branco') ||
-    rowNormalizedText.includes('nao abordado') ||
-    rowNormalizedText.includes('novo') ||
-    rowNormalizedText.includes('virgem') ||
-    rowNormalizedText === 'aguardando'
-  ) {
+  // 8. Não Tratados
+  if (cells.some((cell) => EXACT_NAO_TRATADOS.has(cell))) {
     return 'nao_tratados'
   }
 
-  // --- 9. OUTROS MOTIVOS (key: outros) ---
-  // Fallback for any other valid status or observation that does not match the 8 categories above
+  // 9. Outros Motivos (FALLBACK)
   return 'outros'
 }
 
 /**
- * Checks if a row is a header row or a totals summary row
- */
-/**
- * Converts column letters like 'A', 'Z', 'AE', 'AW' to 0-based column index.
- * e.g. A -> 0, Z -> 25, AA -> 26, AE -> 30, AW -> 48
- */
-export function columnLetterToIndex(columnLetter: string): number {
-  const clean = columnLetter.toUpperCase().trim()
-  let result = 0
-  for (let i = 0; i < clean.length; i++) {
-    result = result * 26 + (clean.charCodeAt(i) - 64)
-  }
-  return result - 1
-}
-
-/**
- * Extracts a numeric quantity from a cell value in a given column.
- * If empty, invalid, 0, or negative, defaults to 1 (each valid data row represents at least 1 occurrence unless specified).
- * If it's a positive number or string number, parses it (e.g. "5" -> 5).
- */
-export function extractRowQuantity(row: unknown[], colIndex: number): number {
-  if (!row || colIndex < 0 || colIndex >= row.length) {
-    return 1
-  }
-  const raw = row[colIndex]
-  if (raw === null || raw === undefined || raw === '') {
-    return 1
-  }
-  if (typeof raw === 'number' && !isNaN(raw)) {
-    return raw > 0 ? Math.round(raw) : 1
-  }
-  const str = String(raw).trim().replace(',', '.')
-  const parsed = parseFloat(str)
-  if (!isNaN(parsed) && parsed > 0) {
-    return Math.round(parsed)
-  }
-  return 1
-}
-
-/**
- * Checks if a row is a header row or a totals summary row
+ * Checks if a row is a header row or a totals summary row by structural keywords.
+ * Status classification is NOT handled here.
  */
 export function isHeaderOrTotalRow(rowValues: unknown[]): boolean {
   const normalizedCells = rowValues.map(normalizeText).filter(Boolean)
   if (normalizedCells.length === 0) return true // empty row
 
-  const combined = normalizedCells.join(' ')
-
-  // 1. NEVER discard a row if it contains operational FPD status indicators
-  const hasStatusKeyword =
-    combined.includes('enviad') ||
-    combined.includes('envio') ||
-    combined.includes('pago') ||
-    combined.includes('paga') ||
-    combined.includes('quitad') ||
-    combined.includes('liquid') ||
-    combined.includes('promessa') ||
-    combined.includes('sem contato') ||
-    combined.includes('caixa postal') ||
-    combined.includes('cancel') ||
-    combined.includes('pendente') ||
-    combined.includes('contato') ||
-    combined.includes('tratad') ||
-    combined.includes('atendido')
-
-  // 2. Total / Summary rows detection
+  // 1. Total / Summary rows detection
   const firstCell = normalizedCells[0] || ''
   const isPureTotalRow =
     firstCell === 'total' ||
@@ -426,15 +381,14 @@ export function isHeaderOrTotalRow(rowValues: unknown[]): boolean {
     firstCell === 'resumo' ||
     firstCell.startsWith('total ') ||
     firstCell.startsWith('totais ') ||
-    combined === 'total' ||
-    combined === 'totais' ||
-    combined === 'total geral'
+    (normalizedCells.length === 1 &&
+      (firstCell === 'total' || firstCell === 'totais' || firstCell === 'total geral'))
 
-  if (isPureTotalRow && !hasStatusKeyword) {
+  if (isPureTotalRow) {
     return true
   }
 
-  // 3. Header detection:
+  // 2. Structural header detection:
   const headerKeywords = [
     'status',
     'motivo',
@@ -473,12 +427,49 @@ export function isHeaderOrTotalRow(rowValues: unknown[]): boolean {
     }
   }
 
-  // If at least 2 distinct standard header column names match as cell titles and NO status keyword is present
-  if (exactMatchesCount >= 2 && !hasStatusKeyword) {
+  // If at least 2 distinct standard structural header column names match as cell titles
+  if (exactMatchesCount >= 2) {
     return true
   }
 
   return false
+}
+
+/**
+ * Converts column letters like 'A', 'Z', 'AE', 'AW' to 0-based column index.
+ * e.g. A -> 0, Z -> 25, AA -> 26, AE -> 30, AW -> 48
+ */
+export function columnLetterToIndex(columnLetter: string): number {
+  const clean = columnLetter.toUpperCase().trim()
+  let result = 0
+  for (let i = 0; i < clean.length; i++) {
+    result = result * 26 + (clean.charCodeAt(i) - 64)
+  }
+  return result - 1
+}
+
+/**
+ * Extracts a numeric quantity from a cell value in a given column.
+ * If empty, invalid, 0, or negative, defaults to 1 (each valid data row represents at least 1 occurrence unless specified).
+ * If it's a positive number or string number, parses it (e.g. "5" -> 5).
+ */
+export function extractRowQuantity(row: unknown[], colIndex: number): number {
+  if (!row || colIndex < 0 || colIndex >= row.length) {
+    return 1
+  }
+  const raw = row[colIndex]
+  if (raw === null || raw === undefined || raw === '') {
+    return 1
+  }
+  if (typeof raw === 'number' && !isNaN(raw)) {
+    return raw > 0 ? Math.round(raw) : 1
+  }
+  const str = String(raw).trim().replace(',', '.')
+  const parsed = parseFloat(str)
+  if (!isNaN(parsed) && parsed > 0) {
+    return Math.round(parsed)
+  }
+  return 1
 }
 
 /**
@@ -536,12 +527,8 @@ export function parseWorksheet(
       continue
     }
 
-    // Join row cells into a normalized search string for classification
     const normalizedCells = row.map(normalizeText)
-    const rowText = normalizedCells.join(' ')
-    if (!rowText.trim()) continue
-
-    const category = classifyRow(rowText, normalizedCells)
+    const category = classifyRow(normalizedCells)
     const qty = Math.round(extractRowQuantity(row, qtyColIndex))
 
     counts[category] = Math.round((counts[category] || 0) + (Number.isFinite(qty) ? qty : 1))
