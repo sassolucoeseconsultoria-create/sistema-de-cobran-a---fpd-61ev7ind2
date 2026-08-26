@@ -3,6 +3,7 @@ import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
   Table2,
   FileSpreadsheet,
+  FolderOpen,
   Store,
   LogOut,
   Menu,
@@ -42,6 +43,12 @@ export const Layout: React.FC = () => {
       description: 'Upload e processamento .xlsx',
     },
     {
+      to: '/arquivos',
+      label: 'Arquivos Importados',
+      icon: FolderOpen,
+      description: 'Visão analítica por arquivo bruto',
+    },
+    {
       to: '/lojas',
       label: 'Lojas',
       icon: Store,
@@ -61,6 +68,11 @@ export const Layout: React.FC = () => {
         return {
           title: 'Importação de Planilhas .xlsx',
           subtitle: 'Consolidação automática das abas Móvel e Residencial por loja',
+        }
+      case '/arquivos':
+        return {
+          title: 'Arquivos Importados (Visão Analítica)',
+          subtitle: 'Dados brutos extraídos de cada arquivo .xlsx antes da consolidação',
         }
       case '/lojas':
         return {

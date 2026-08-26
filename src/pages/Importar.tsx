@@ -19,7 +19,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
-import { fetchStores, createStore, saveFpdRecord, findStoreByName } from '@/services/fpdService'
+import {
+  fetchStores,
+  createStore,
+  saveFpdRecord,
+  saveImportedFile,
+  findStoreByName,
+} from '@/services/fpdService'
 import { parseXlsxFile, type ParsedFileData } from '@/lib/xlsxParser'
 import { FPD_STATUSES, type StoreRecord } from '@/types/fpd'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
@@ -175,24 +181,54 @@ export const Importar: React.FC = () => {
 
       let storeId = item.matchedStoreId
 
+      let finalStoreName = item.newStoreName || item.parsedData.guessedStoreName
+
       // If new store or matchedStoreId is 'new'
       if (storeId === 'new') {
         const storeName = (item.newStoreName || item.parsedData.guessedStoreName)
           .trim()
           .toUpperCase()
+        finalStoreName = storeName
         // Check if exists in backend
         const existing = await findStoreByName(storeName)
         if (existing) {
           storeId = existing.id
+          finalStoreName = existing.name
         } else {
           const created = await createStore({
             name: storeName,
           })
           storeId = created.id
+          finalStoreName = created.name
+        }
+      } else {
+        const selected = stores.find((s) => s.id === storeId)
+        if (selected) {
+          finalStoreName = selected.name
         }
       }
 
-      // Save FPD Record (upsert by store + referente)
+      // 1. Save raw individual imported file to imported_files collection BEFORE aggregating/updating consolidated
+      await saveImportedFile({
+        storeId,
+        storeName: finalStoreName,
+        fileName: item.file.name,
+        referenceDate: item.referenteDate,
+        total_linhas: item.parsedData.aggregated.total_linhas,
+        enviado_faturas: item.parsedData.aggregated.envio_fatura,
+        envio_fatura: item.parsedData.aggregated.envio_fatura,
+        pendente: item.parsedData.aggregated.pendente,
+        fatura_paga: item.parsedData.aggregated.fatura_paga,
+        envia_fatura: item.parsedData.aggregated.envia_fatura,
+        sem_contato: item.parsedData.aggregated.sem_contato,
+        promessa_pagto: item.parsedData.aggregated.promessa_pagto,
+        cancelados: item.parsedData.aggregated.cancelados,
+        nao_tratados: item.parsedData.aggregated.nao_tratados,
+        contato_realizado: item.parsedData.aggregated.contato_realizado,
+        outros: item.parsedData.aggregated.outros,
+      })
+
+      // 2. Save/update consolidated FPD Record (upsert by store + referente)
       await saveFpdRecord({
         storeId,
         referente: item.referenteDate,
@@ -604,13 +640,22 @@ export const Importar: React.FC = () => {
                   Todos os arquivos foram consolidados com sucesso!
                 </span>
               </div>
-              <Button
-                onClick={() => navigate('/')}
-                className="bg-[#12365A] hover:bg-[#0E2A47] text-white text-xs font-semibold gap-2"
-              >
-                <span>Ver Tabela Consolidada</span>
-                <ArrowRight className="w-4 h-4" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => navigate('/arquivos')}
+                  className="bg-white hover:bg-slate-50 text-[#12365A] text-xs font-semibold gap-2 border-[#0E9F8A]/40"
+                >
+                  <span>Ver Arquivos Importados</span>
+                </Button>
+                <Button
+                  onClick={() => navigate('/')}
+                  className="bg-[#12365A] hover:bg-[#0E2A47] text-white text-xs font-semibold gap-2"
+                >
+                  <span>Ver Tabela Consolidada</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           )}
         </div>

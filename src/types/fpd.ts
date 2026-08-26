@@ -27,6 +27,30 @@ export interface FpdRecord extends RecordModel {
   }
 }
 
+export interface ImportedFileRecord extends RecordModel {
+  store?: string
+  store_id?: string
+  store_name?: string
+  file_name: string
+  reference_date?: string
+  total_linhas: number
+  enviado_faturas?: number
+  envio_fatura?: number
+  pendente?: number
+  fatura_paga: number
+  envia_fatura?: number
+  sem_contato: number
+  promessa_pagto: number
+  cancelados: number
+  nao_tratados: number
+  contato_realizado?: number
+  outros?: number
+  imported_at?: string
+  expand?: {
+    store?: StoreRecord
+  }
+}
+
 export interface ConsolidatedRow {
   storeId: string
   storeName: string

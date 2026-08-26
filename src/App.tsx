@@ -10,6 +10,7 @@ import Layout from '@/components/Layout'
 // Real Pages
 import Index from '@/pages/Index'
 import Importar from '@/pages/Importar'
+import Arquivos from '@/pages/Arquivos'
 import Lojas from '@/pages/Lojas'
 import Login from '@/pages/Login'
 import NotFound from '@/pages/NotFound'
@@ -34,6 +35,7 @@ const App = () => (
           >
             <Route path="/" element={<Index />} />
             <Route path="/importar" element={<Importar />} />
+            <Route path="/arquivos" element={<Arquivos />} />
             <Route path="/lojas" element={<Lojas />} />
           </Route>
 

@@ -1,5 +1,5 @@
 import pb from '@/lib/pocketbase/client'
-import type { StoreRecord, FpdRecord } from '@/types/fpd'
+import type { StoreRecord, FpdRecord, ImportedFileRecord } from '@/types/fpd'
 
 export async function fetchStores(): Promise<StoreRecord[]> {
   return await pb.collection('stores').getFullList<StoreRecord>({
@@ -142,9 +142,83 @@ export async function clearAllFpdRecords(): Promise<number> {
   return records.length
 }
 
+export async function saveImportedFile(data: {
+  storeId?: string
+  storeName?: string
+  fileName: string
+  referenceDate?: string
+  total_linhas?: number
+  enviado_faturas?: number
+  envio_fatura?: number
+  pendente?: number
+  fatura_paga?: number
+  envia_fatura?: number
+  sem_contato?: number
+  promessa_pagto?: number
+  cancelados?: number
+  nao_tratados?: number
+  contato_realizado?: number
+  outros?: number
+}): Promise<ImportedFileRecord> {
+  const enviadoVal = toSafeInt(
+    data.enviado_faturas !== undefined ? data.enviado_faturas : data.envio_fatura,
+  )
+
+  const payload = {
+    store: data.storeId || null,
+    store_name: data.storeName || '',
+    file_name: data.fileName,
+    reference_date: data.referenceDate?.trim() || '',
+    total_linhas: toSafeInt(data.total_linhas),
+    enviado_faturas: enviadoVal,
+    envio_fatura: enviadoVal,
+    pendente: toSafeInt(data.pendente),
+    fatura_paga: toSafeInt(data.fatura_paga),
+    envia_fatura: toSafeInt(data.envia_fatura),
+    sem_contato: toSafeInt(data.sem_contato),
+    promessa_pagto: toSafeInt(data.promessa_pagto),
+    cancelados: toSafeInt(data.cancelados),
+    nao_tratados: toSafeInt(data.nao_tratados),
+    contato_realizado: toSafeInt(data.contato_realizado),
+    outros: toSafeInt(data.outros),
+  }
+
+  return await pb.collection('imported_files').create<ImportedFileRecord>(payload)
+}
+
+export async function fetchImportedFiles(): Promise<ImportedFileRecord[]> {
+  return await pb.collection('imported_files').getFullList<ImportedFileRecord>({
+    sort: '-created',
+    expand: 'store',
+  })
+}
+
+export async function getImportedFiles(): Promise<ImportedFileRecord[]> {
+  return fetchImportedFiles()
+}
+
+export async function deleteImportedFile(id: string): Promise<boolean> {
+  return await pb.collection('imported_files').delete(id)
+}
+
+export async function clearAllImportedFiles(): Promise<number> {
+  const files = await pb.collection('imported_files').getFullList<ImportedFileRecord>({
+    fields: 'id',
+  })
+
+  const batchSize = 10
+  for (let i = 0; i < files.length; i += batchSize) {
+    const batch = files.slice(i, i + batchSize)
+    await Promise.all(batch.map((f) => pb.collection('imported_files').delete(f.id)))
+  }
+
+  return files.length
+}
+
 export async function clearAllStores(): Promise<number> {
-  // First, remove all FPD records associated with stores
+  // First, remove all FPD records and imported files associated with stores
   await clearAllFpdRecords()
+  await clearAllImportedFiles()
 
   const stores = await pb.collection('stores').getFullList<StoreRecord>({
     fields: 'id',
