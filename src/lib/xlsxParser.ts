@@ -118,7 +118,7 @@ export function guessReferenteDate(filename: string): string {
  *    "sem contato", "caixa postal", "nao atende", "ocupado", "desligado", "invalido", "numero errado", etc.
  *
  * 6. PROMESSA DE PAGTO. (key 'promessa_pagto'):
- *    "promessa de pagamento", "promessa de pagto", "promessa", "acordo", "vai pagar", "prometeu pagar", etc.
+ *    "promessa de pagamento", "promessa de pagto", "promessa pgto", "prometeu pagar", "promete pagar", "vai pagar", "irá pagar", "combinou pagamento", etc.
  *
  * 7. CANCELADOS (key 'cancelados'):
  *    "cancelado", "cancelamento", "devolucao", "fraude", "inversao", "desistencia", "estorno", etc.
@@ -211,7 +211,48 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     return 'envia_fatura' // Envia Fatura(s)
   }
 
-  // --- 2. FATURA(S) PAGA(S) (key: fatura_paga) ---
+  // --- 2. PROMESSA DE PAGTO. (key: promessa_pagto) ---
+  // Specific promise-to-pay phrases only (avoid matching loose words like "acordo", "negociacao", "parcelamento", "prom", or isolated payment terms)
+  const isPromessaPagto =
+    rowNormalizedText.includes('promessa de pagamento') ||
+    rowNormalizedText.includes('promessa de pagto') ||
+    rowNormalizedText.includes('promessa de pgto') ||
+    rowNormalizedText.includes('promessa de pag') ||
+    rowNormalizedText.includes('promessa pagto') ||
+    rowNormalizedText.includes('promessa pgto') ||
+    rowNormalizedText.includes('promessa pagamento') ||
+    rowNormalizedText.includes('promessa pagar') ||
+    rowNormalizedText.includes('prometeu pagar') ||
+    rowNormalizedText.includes('promete pagar') ||
+    rowNormalizedText.includes('prometeu pagto') ||
+    rowNormalizedText.includes('vai pagar') ||
+    rowNormalizedText.includes('ira pagar') ||
+    rowNormalizedText.includes('combinou pagamento') ||
+    rowNormalizedText.includes('combinou pagto') ||
+    rowNormalizedText.includes('combinado pagamento') ||
+    rowNormalizedText.includes('combinado pagto') ||
+    /\bpp\b/.test(rowNormalizedText)
+
+  if (isPromessaPagto) {
+    // Check if it's explicitly already paid with receipt/confirmation despite mentioning promise
+    const isAlreadyPaid =
+      (rowNormalizedText.includes('ja pago') ||
+        rowNormalizedText.includes('ja paga') ||
+        rowNormalizedText.includes('comprovante') ||
+        rowNormalizedText.includes('fatura paga') ||
+        rowNormalizedText.includes('pagamento efetuado') ||
+        rowNormalizedText.includes('pagamento realizado') ||
+        rowNormalizedText.includes('pagamento confirmado')) &&
+      !rowNormalizedText.includes('promete') &&
+      !rowNormalizedText.includes('vai pagar') &&
+      !rowNormalizedText.includes('ira pagar')
+
+    if (!isAlreadyPaid) {
+      return 'promessa_pagto'
+    }
+  }
+
+  // --- 3. FATURA(S) PAGA(S) (key: fatura_paga) ---
   if (
     rowNormalizedText.includes('fatura paga') ||
     rowNormalizedText.includes('faturas pagas') ||
@@ -233,33 +274,7 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     /\b(pago|paga|pagos|pagas|quitou|liquidou)\b/.test(rowNormalizedText) ||
     /\b(pg|pga|pgo)\b/.test(rowNormalizedText)
   ) {
-    // If it is a promise to pay (e.g. "promessa de pagamento") rather than confirmed payment
-    if (
-      (rowNormalizedText.includes('promess') || rowNormalizedText.includes('acordo')) &&
-      !rowNormalizedText.includes('ja pago') &&
-      !rowNormalizedText.includes('ja paga') &&
-      !rowNormalizedText.includes('comprovante') &&
-      !rowNormalizedText.includes('fatura paga')
-    ) {
-      return 'promessa_pagto'
-    }
     return 'fatura_paga'
-  }
-
-  // --- 3. PROMESSA DE PAGTO. (key: promessa_pagto) ---
-  if (
-    rowNormalizedText.includes('promessa de pagamento') ||
-    rowNormalizedText.includes('promessa de pagto') ||
-    rowNormalizedText.includes('promessa pagto') ||
-    rowNormalizedText.includes('promessa') ||
-    rowNormalizedText.includes('prometeu pagar') ||
-    rowNormalizedText.includes('vai pagar') ||
-    rowNormalizedText.includes('acordo') ||
-    rowNormalizedText.includes('negociacao') ||
-    rowNormalizedText.includes('parcelamento') ||
-    /\b(pp|prom)\b/.test(rowNormalizedText)
-  ) {
-    return 'promessa_pagto'
   }
 
   // --- 4. SEM CONTATO (key: sem_contato) ---
