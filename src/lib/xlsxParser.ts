@@ -214,11 +214,16 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
 
   // --- 2. PROMESSA DE PAGTO. (key: promessa_pagto) ---
   // Specific promise-to-pay phrases only (avoid matching loose words like "acordo", "negociacao", "parcelamento", "prom", or isolated payment terms)
+  // Ensure "vai pagar" / "ira pagar" are not preceded by negation ("nao", "nunca", "jamais", etc.)
+  const hasAffirmativeVaiOuIraPagar =
+    /\b(vai|ira) pagar\b/.test(rowNormalizedText) &&
+    !/\b(nao|nunca|jamais|recusou|recusa|sem)\s+(vai|ira)\s+pagar\b/.test(rowNormalizedText) &&
+    !/\b(nao|nunca|jamais)\s+\w+\s+(vai|ira)\s+pagar\b/.test(rowNormalizedText)
+
   const isPromessaPagto =
     rowNormalizedText.includes('promessa de pagamento') ||
     rowNormalizedText.includes('promessa de pagto') ||
     rowNormalizedText.includes('promessa de pgto') ||
-    rowNormalizedText.includes('promessa de pag') ||
     rowNormalizedText.includes('promessa pagto') ||
     rowNormalizedText.includes('promessa pgto') ||
     rowNormalizedText.includes('promessa pagamento') ||
@@ -226,8 +231,7 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('prometeu pagar') ||
     rowNormalizedText.includes('promete pagar') ||
     rowNormalizedText.includes('prometeu pagto') ||
-    rowNormalizedText.includes('vai pagar') ||
-    rowNormalizedText.includes('ira pagar') ||
+    hasAffirmativeVaiOuIraPagar ||
     rowNormalizedText.includes('combinou pagamento') ||
     rowNormalizedText.includes('combinou pagto') ||
     rowNormalizedText.includes('combinado pagamento') ||
@@ -244,8 +248,7 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
         rowNormalizedText.includes('pagamento realizado') ||
         rowNormalizedText.includes('pagamento confirmado')) &&
       !rowNormalizedText.includes('promete') &&
-      !rowNormalizedText.includes('vai pagar') &&
-      !rowNormalizedText.includes('ira pagar')
+      !hasAffirmativeVaiOuIraPagar
 
     if (!isAlreadyPaid) {
       return 'promessa_pagto'
