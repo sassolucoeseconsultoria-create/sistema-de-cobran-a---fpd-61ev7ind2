@@ -63,18 +63,26 @@ export async function fetchFpdRecordsByStore(storeId: string): Promise<FpdRecord
   })
 }
 
+const toSafeInt = (val: unknown): number => {
+  if (typeof val === 'number' && Number.isFinite(val)) {
+    return Math.max(0, Math.round(val))
+  }
+  const parsed = Number(val)
+  return Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : 0
+}
+
 export async function saveFpdRecord(data: {
   storeId: string
   referente?: string
-  total_linhas: number
-  envio_fatura: number
-  pendente: number
-  fatura_paga: number
-  envia_fatura: number
-  sem_contato: number
-  promessa_pagto: number
-  cancelados: number
-  nao_tratados: number
+  total_linhas?: number
+  envio_fatura?: number
+  pendente?: number
+  fatura_paga?: number
+  envia_fatura?: number
+  sem_contato?: number
+  promessa_pagto?: number
+  cancelados?: number
+  nao_tratados?: number
   contato_realizado?: number
 }): Promise<FpdRecord> {
   // Check if a record already exists for this store + referente (if referente provided)
@@ -95,16 +103,16 @@ export async function saveFpdRecord(data: {
   const payload = {
     store: data.storeId,
     referente: data.referente?.trim() || '',
-    total_linhas: data.total_linhas,
-    envio_fatura: data.envio_fatura,
-    pendente: data.pendente,
-    fatura_paga: data.fatura_paga,
-    envia_fatura: data.envia_fatura,
-    sem_contato: data.sem_contato,
-    promessa_pagto: data.promessa_pagto,
-    cancelados: data.cancelados,
-    nao_tratados: data.nao_tratados,
-    contato_realizado: data.contato_realizado ?? 0,
+    total_linhas: toSafeInt(data.total_linhas),
+    envio_fatura: toSafeInt(data.envio_fatura),
+    pendente: toSafeInt(data.pendente),
+    fatura_paga: toSafeInt(data.fatura_paga),
+    envia_fatura: toSafeInt(data.envia_fatura),
+    sem_contato: toSafeInt(data.sem_contato),
+    promessa_pagto: toSafeInt(data.promessa_pagto),
+    cancelados: toSafeInt(data.cancelados),
+    nao_tratados: toSafeInt(data.nao_tratados),
+    contato_realizado: toSafeInt(data.contato_realizado),
   }
 
   if (existingId) {

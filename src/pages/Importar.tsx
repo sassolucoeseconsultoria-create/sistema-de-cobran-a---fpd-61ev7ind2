@@ -22,6 +22,7 @@ import { useToast } from '@/hooks/use-toast'
 import { fetchStores, createStore, saveFpdRecord, findStoreByName } from '@/services/fpdService'
 import { parseXlsxFile, type ParsedFileData } from '@/lib/xlsxParser'
 import { FPD_STATUSES, type StoreRecord } from '@/types/fpd'
+import { getErrorMessage } from '@/lib/pocketbase/errors'
 import { cn } from '@/lib/utils'
 
 interface FileQueueItem {
@@ -209,7 +210,8 @@ export const Importar: React.FC = () => {
       setFileQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: 'done' } : q)))
       return true
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      console.error('Erro ao salvar registro FPD:', err)
+      const msg = getErrorMessage(err)
       setFileQueue((prev) =>
         prev.map((q) =>
           q.id === item.id ? { ...q, status: 'error', errorMessage: `Erro ao salvar: ${msg}` } : q,

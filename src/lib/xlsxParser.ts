@@ -400,12 +400,12 @@ export function extractRowQuantity(row: unknown[], colIndex: number): number {
     return 1
   }
   if (typeof raw === 'number' && !isNaN(raw)) {
-    return raw > 0 ? raw : 1
+    return raw > 0 ? Math.round(raw) : 1
   }
   const str = String(raw).trim().replace(',', '.')
   const parsed = parseFloat(str)
   if (!isNaN(parsed) && parsed > 0) {
-    return parsed
+    return Math.round(parsed)
   }
   return 1
 }
@@ -559,14 +559,26 @@ export function parseWorksheet(
     if (!rowText.trim()) continue
 
     const category = classifyRow(rowText)
-    const qty = extractRowQuantity(row, qtyColIndex)
+    const qty = Math.round(extractRowQuantity(row, qtyColIndex))
 
-    counts[category] += qty
-    counts.totalRows += qty
+    counts[category] = Math.round((counts[category] || 0) + (Number.isFinite(qty) ? qty : 1))
+    counts.totalRows = Math.round((counts.totalRows || 0) + (Number.isFinite(qty) ? qty : 1))
     if (counts.totalLinesCount !== undefined) {
       counts.totalLinesCount++
     }
   }
+
+  // Ensure every status counter is a guaranteed finite integer (>= 0)
+  counts.envio_fatura = Math.round(counts.envio_fatura || 0)
+  counts.pendente = Math.round(counts.pendente || 0)
+  counts.fatura_paga = Math.round(counts.fatura_paga || 0)
+  counts.envia_fatura = Math.round(counts.envia_fatura || 0)
+  counts.sem_contato = Math.round(counts.sem_contato || 0)
+  counts.promessa_pagto = Math.round(counts.promessa_pagto || 0)
+  counts.cancelados = Math.round(counts.cancelados || 0)
+  counts.nao_tratados = Math.round(counts.nao_tratados || 0)
+  counts.contato_realizado = Math.round(counts.contato_realizado || 0)
+  counts.totalRows = Math.round(counts.totalRows || 0)
 
   return counts
 }
@@ -632,18 +644,35 @@ export async function parseXlsxFile(file: File): Promise<ParsedFileData> {
     residencialCounts = parseWorksheet(ws, residencialSheetName, 'residencial')
   }
 
+  const safeInt = (val: unknown): number => {
+    if (typeof val === 'number' && Number.isFinite(val)) {
+      return Math.round(val)
+    }
+    const parsed = Number(val)
+    return Number.isFinite(parsed) ? Math.round(parsed) : 0
+  }
+
   const aggregated = {
-    total_linhas: (movelCounts?.totalRows || 0) + (residencialCounts?.totalRows || 0),
-    envio_fatura: (movelCounts?.envio_fatura || 0) + (residencialCounts?.envio_fatura || 0),
-    pendente: (movelCounts?.pendente || 0) + (residencialCounts?.pendente || 0),
-    fatura_paga: (movelCounts?.fatura_paga || 0) + (residencialCounts?.fatura_paga || 0),
-    envia_fatura: (movelCounts?.envia_fatura || 0) + (residencialCounts?.envia_fatura || 0),
-    sem_contato: (movelCounts?.sem_contato || 0) + (residencialCounts?.sem_contato || 0),
-    promessa_pagto: (movelCounts?.promessa_pagto || 0) + (residencialCounts?.promessa_pagto || 0),
-    cancelados: (movelCounts?.cancelados || 0) + (residencialCounts?.cancelados || 0),
-    nao_tratados: (movelCounts?.nao_tratados || 0) + (residencialCounts?.nao_tratados || 0),
-    contato_realizado:
+    total_linhas: safeInt((movelCounts?.totalRows || 0) + (residencialCounts?.totalRows || 0)),
+    envio_fatura: safeInt(
+      (movelCounts?.envio_fatura || 0) + (residencialCounts?.envio_fatura || 0),
+    ),
+    pendente: safeInt((movelCounts?.pendente || 0) + (residencialCounts?.pendente || 0)),
+    fatura_paga: safeInt((movelCounts?.fatura_paga || 0) + (residencialCounts?.fatura_paga || 0)),
+    envia_fatura: safeInt(
+      (movelCounts?.envia_fatura || 0) + (residencialCounts?.envia_fatura || 0),
+    ),
+    sem_contato: safeInt((movelCounts?.sem_contato || 0) + (residencialCounts?.sem_contato || 0)),
+    promessa_pagto: safeInt(
+      (movelCounts?.promessa_pagto || 0) + (residencialCounts?.promessa_pagto || 0),
+    ),
+    cancelados: safeInt((movelCounts?.cancelados || 0) + (residencialCounts?.cancelados || 0)),
+    nao_tratados: safeInt(
+      (movelCounts?.nao_tratados || 0) + (residencialCounts?.nao_tratados || 0),
+    ),
+    contato_realizado: safeInt(
       (movelCounts?.contato_realizado || 0) + (residencialCounts?.contato_realizado || 0),
+    ),
   }
 
   return {
