@@ -67,14 +67,14 @@ export async function saveFpdRecord(data: {
   storeId: string
   referente?: string
   total_linhas: number
-  fatura_paga: number
   envio_fatura: number
-  contato_realizado: number
-  promessa_pagto: number
+  pendente: number
+  fatura_paga: number
+  envia_fatura: number
   sem_contato: number
+  promessa_pagto: number
   cancelados: number
   nao_tratados: number
-  outros: number
 }): Promise<FpdRecord> {
   // Check if a record already exists for this store + referente (if referente provided)
   let existingId: string | null = null
@@ -95,14 +95,14 @@ export async function saveFpdRecord(data: {
     store: data.storeId,
     referente: data.referente?.trim() || '',
     total_linhas: data.total_linhas,
-    fatura_paga: data.fatura_paga,
     envio_fatura: data.envio_fatura,
-    contato_realizado: data.contato_realizado,
-    promessa_pagto: data.promessa_pagto,
+    pendente: data.pendente,
+    fatura_paga: data.fatura_paga,
+    envia_fatura: data.envia_fatura,
     sem_contato: data.sem_contato,
+    promessa_pagto: data.promessa_pagto,
     cancelados: data.cancelados,
     nao_tratados: data.nao_tratados,
-    outros: data.outros,
   }
 
   if (existingId) {

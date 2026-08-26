@@ -13,11 +13,9 @@ import {
   TrendingUp,
   BarChart3,
   Calendar,
-  Layers,
   Edit2,
   Check,
   Trash2,
-  ExternalLink,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -73,7 +71,6 @@ export const Index: React.FC = () => {
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   // Inline editing in Drawer or Table
-  const [editingStoreId, setEditingStoreId] = useState<string | null>(null)
   const [editCoordenacao, setEditCoordenacao] = useState('')
   const [editSupervisao, setEditSupervisao] = useState('')
   const [editObservacao, setEditObservacao] = useState('')
@@ -171,14 +168,14 @@ export const Index: React.FC = () => {
           observacao: store.observacao || '',
           hasData: false,
           totalLinhas: 0,
-          faturaPaga: 0,
           envioFatura: 0,
-          contatoRealizado: 0,
-          promessaPagto: 0,
+          pendente: 0,
+          faturaPaga: 0,
+          enviaFatura: 0,
           semContato: 0,
+          promessaPagto: 0,
           cancelados: 0,
           naoTratados: 0,
-          outros: 0,
         }
       }
 
@@ -193,14 +190,14 @@ export const Index: React.FC = () => {
         referente: latest.referente,
         importadoEm: latest.importado_em || latest.created,
         totalLinhas: latest.total_linhas || 0,
-        faturaPaga: latest.fatura_paga || 0,
         envioFatura: latest.envio_fatura || 0,
-        contatoRealizado: latest.contato_realizado || 0,
-        promessaPagto: latest.promessa_pagto || 0,
+        pendente: latest.pendente || 0,
+        faturaPaga: latest.fatura_paga || 0,
+        enviaFatura: latest.envia_fatura || 0,
         semContato: latest.sem_contato || 0,
+        promessaPagto: latest.promessa_pagto || 0,
         cancelados: latest.cancelados || 0,
         naoTratados: latest.nao_tratados || 0,
-        outros: latest.outros || 0,
       }
     })
   }, [stores, records])
@@ -252,40 +249,40 @@ export const Index: React.FC = () => {
       (acc, r) => {
         if (!r.hasData) return acc
         acc.totalLinhas += r.totalLinhas
-        acc.faturaPaga += r.faturaPaga
         acc.envioFatura += r.envioFatura
-        acc.contatoRealizado += r.contatoRealizado
-        acc.promessaPagto += r.promessaPagto
+        acc.pendente += r.pendente
+        acc.faturaPaga += r.faturaPaga
+        acc.enviaFatura += r.enviaFatura
         acc.semContato += r.semContato
+        acc.promessaPagto += r.promessaPagto
         acc.cancelados += r.cancelados
         acc.naoTratados += r.naoTratados
-        acc.outros += r.outros
         return acc
       },
       {
         totalLinhas: 0,
-        faturaPaga: 0,
         envioFatura: 0,
-        contatoRealizado: 0,
-        promessaPagto: 0,
+        pendente: 0,
+        faturaPaga: 0,
+        enviaFatura: 0,
         semContato: 0,
+        promessaPagto: 0,
         cancelados: 0,
         naoTratados: 0,
-        outros: 0,
       },
     )
   }, [filteredRows])
 
   // Animated totals
   const animatedTotalLinhas = useCountUp(totals.totalLinhas)
-  const animatedFaturaPaga = useCountUp(totals.faturaPaga)
   const animatedEnvioFatura = useCountUp(totals.envioFatura)
-  const animatedContatoRealizado = useCountUp(totals.contatoRealizado)
-  const animatedPromessaPagto = useCountUp(totals.promessaPagto)
+  const animatedPendente = useCountUp(totals.pendente)
+  const animatedFaturaPaga = useCountUp(totals.faturaPaga)
+  const animatedEnviaFatura = useCountUp(totals.enviaFatura)
   const animatedSemContato = useCountUp(totals.semContato)
+  const animatedPromessaPagto = useCountUp(totals.promessaPagto)
   const animatedCancelados = useCountUp(totals.cancelados)
   const animatedNaoTratados = useCountUp(totals.naoTratados)
-  const animatedOutros = useCountUp(totals.outros)
 
   // Latest Referente date
   const latestReferente = useMemo(() => {
@@ -464,17 +461,17 @@ export const Index: React.FC = () => {
               Faturas Pagas
             </p>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-bold text-[#16A34A] tabular-nums">
+              <span className="text-2xl font-bold text-[#0891B2] tabular-nums">
                 {animatedFaturaPaga.toLocaleString('pt-BR')}
               </span>
               {totals.totalLinhas > 0 && (
-                <span className="text-xs text-[#16A34A] font-medium">
+                <span className="text-xs text-[#0891B2] font-medium">
                   {((totals.faturaPaga / totals.totalLinhas) * 100).toFixed(1)}%
                 </span>
               )}
             </div>
           </div>
-          <div className="w-10 h-10 rounded-lg bg-[#16A34A]/10 text-[#16A34A] flex items-center justify-center">
+          <div className="w-10 h-10 rounded-lg bg-[#0891B2]/10 text-[#0891B2] flex items-center justify-center">
             <BarChart3 className="w-5 h-5" />
           </div>
         </div>
@@ -901,35 +898,35 @@ export const Index: React.FC = () => {
                 </td>
                 {/* E: Enviado Fatura(s) */}
                 <td className="px-2.5 py-3 text-right text-[#4ade80] tabular-nums border-r border-[#1e456f]">
-                  {animatedFaturaPaga.toLocaleString('pt-BR')}
+                  {animatedEnvioFatura.toLocaleString('pt-BR')}
                 </td>
                 {/* F: Pendente */}
                 <td className="px-2.5 py-3 text-right text-[#93c5fd] tabular-nums border-r border-[#1e456f]">
-                  {animatedEnvioFatura.toLocaleString('pt-BR')}
+                  {animatedPendente.toLocaleString('pt-BR')}
                 </td>
                 {/* G: Fatura(s) Paga(s) */}
                 <td className="px-2.5 py-3 text-right text-[#67e8f9] tabular-nums border-r border-[#1e456f]">
-                  {animatedContatoRealizado.toLocaleString('pt-BR')}
+                  {animatedFaturaPaga.toLocaleString('pt-BR')}
                 </td>
                 {/* H: Envia Fatura(s) */}
                 <td className="px-2.5 py-3 text-right text-[#fcd34d] tabular-nums border-r border-[#1e456f]">
-                  {animatedPromessaPagto.toLocaleString('pt-BR')}
+                  {animatedEnviaFatura.toLocaleString('pt-BR')}
                 </td>
                 {/* I: Sem Contato */}
                 <td className="px-2.5 py-3 text-right text-[#cbd5e1] tabular-nums border-r border-[#1e456f]">
                   {animatedSemContato.toLocaleString('pt-BR')}
                 </td>
                 {/* J: Promessa de Pagto. */}
+                <td className="px-2.5 py-3 text-right text-[#d8b4fe] tabular-nums border-r border-[#1e456f]">
+                  {animatedPromessaPagto.toLocaleString('pt-BR')}
+                </td>
+                {/* K: Cancelados */}
                 <td className="px-2.5 py-3 text-right text-[#fca5a5] tabular-nums border-r border-[#1e456f]">
                   {animatedCancelados.toLocaleString('pt-BR')}
                 </td>
-                {/* K: Cancelados */}
+                {/* L: Não Tratados */}
                 <td className="px-2.5 py-3 text-right text-[#fdba74] tabular-nums border-r border-[#1e456f]">
                   {animatedNaoTratados.toLocaleString('pt-BR')}
-                </td>
-                {/* L: Não Tratados */}
-                <td className="px-2.5 py-3 text-right text-[#d8b4fe] tabular-nums border-r border-[#1e456f]">
-                  {animatedOutros.toLocaleString('pt-BR')}
                 </td>
                 {/* M */}
                 <td className="px-3 py-3"></td>

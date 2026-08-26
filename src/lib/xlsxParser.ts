@@ -5,14 +5,14 @@ export interface ParsedSheetCounts {
   sheetName: string
   sheetType: 'movel' | 'residencial' | 'outro'
   totalRows: number
-  fatura_paga: number
   envio_fatura: number
-  contato_realizado: number
-  promessa_pagto: number
+  pendente: number
+  fatura_paga: number
+  envia_fatura: number
   sem_contato: number
+  promessa_pagto: number
   cancelados: number
   nao_tratados: number
-  outros: number
 }
 
 export interface ParsedFileData {
@@ -27,14 +27,14 @@ export interface ParsedFileData {
   residencialCounts?: ParsedSheetCounts
   aggregated: {
     total_linhas: number
-    fatura_paga: number
     envio_fatura: number
-    contato_realizado: number
-    promessa_pagto: number
+    pendente: number
+    fatura_paga: number
+    envia_fatura: number
     sem_contato: number
+    promessa_pagto: number
     cancelados: number
     nao_tratados: number
-    outros: number
   }
 }
 
@@ -96,47 +96,43 @@ export function guessReferenteDate(filename: string): string {
 /**
  * Classify a row's normalized text into exactly one of 8 FPD categories:
  *
- * 1. ENVIADO FATURA(S) (column/key 'fatura_paga'):
- *    Past tense / invoice already sent. Captures: "enviado fatura", "envio fatura", "fatura enviada",
- *    "env fatura", "envio de fatura", "enviada 2 via", "fatura reenviada", "reencaminhado", "enviado", etc.
+ * 1. ENVIADO FATURA(S) (key 'envio_fatura'):
+ *    Past tense / invoice already sent. Captures: "envio", "enviad", "reencaminh", "2 via",
+ *    "segunda via", "fatura enviada", "reenvio", "envio fatura", "enviado fatura", etc.
  *
- * 2. ENVIA FATURA(S) (column/key 'promessa_pagto'):
- *    Action / intention to send / pending sending action: "envia fatura", "enviar fatura", "a enviar fatura",
- *    "reenviar fatura", "mandar fatura", "solicitado envio fatura", etc.
- *    (Carefully separated from Enviado Fatura so there is NO overlap).
+ * 2. PENDENTE (key 'pendente'):
+ *    Pending treatment / status: "pendente", "aguardando retorno", "em analise", "em tratativa", etc.
+ *    (when not payment paid, not invoice sending).
  *
- * 3. FATURA(S) PAGA(S) (column/key 'contato_realizado'):
+ * 3. FATURA(S) PAGA(S) (key 'fatura_paga'):
  *    Payment confirmed / paid invoice: "fatura paga", "boleto pago", "liquidado", "pago", "paga", "quitado",
  *    "pagamento realizado", "ja pago", etc.
  *
- * 4. PENDENTE (column/key 'envio_fatura'):
- *    Pending treatment / pending status: "pendente", "aguardando retorno", "em analise", etc.
+ * 4. ENVIA FATURA(S) (key 'envia_fatura'):
+ *    Action / intention / pending sending: "envia fatura", "enviar fatura", "precisa enviar", "a enviar",
+ *    "mandar fatura", "solicitou envio", etc.
  *
- * 5. SEM CONTATO (column/key 'sem_contato'):
+ * 5. SEM CONTATO (key 'sem_contato'):
  *    "sem contato", "caixa postal", "nao atende", "ocupado", "desligado", "invalido", "numero errado", etc.
  *
- * 6. PROMESSA DE PAGTO. (column/key 'cancelados'):
+ * 6. PROMESSA DE PAGTO. (key 'promessa_pagto'):
  *    "promessa de pagamento", "promessa de pagto", "promessa", "acordo", "vai pagar", "prometeu pagar", etc.
  *
- * 7. CANCELADOS (column/key 'nao_tratados'):
+ * 7. CANCELADOS (key 'cancelados'):
  *    "cancelado", "cancelamento", "devolucao", "fraude", "inversao", "desistencia", "estorno", etc.
  *
- * 8. NÃO TRATADOS (column/key 'outros'):
- *    "nao tratado", "nao trabalhado", "sem status", "em branco", "a tratar" OR fallback.
+ * 8. NÃO TRATADOS (key 'nao_tratados'):
+ *    "nao tratad", "naotratad", "nao trabalhad", "a tratar", "aguardando", "sem status", "em branco", "virgem", fallback.
  */
 export function classifyRow(rowNormalizedText: string): FpdStatusKey {
   // --- 1. ENVIADO FATURA(S) vs ENVIA FATURA(S) ---
-  // Must distinguish between past (Enviado = fatura_paga) and future/infinitive/present action (Envia = promessa_pagto)
-
   const isEnviadoFatura =
-    // Past participle / already sent variations:
     rowNormalizedText.includes('enviado fatura') ||
     rowNormalizedText.includes('enviada fatura') ||
     rowNormalizedText.includes('enviados fatura') ||
     rowNormalizedText.includes('enviadas fatura') ||
     rowNormalizedText.includes('fatura enviada') ||
     rowNormalizedText.includes('faturas enviadas') ||
-    rowNormalizedText.includes('fatura enviando') ||
     rowNormalizedText.includes('fatura reenviada') ||
     rowNormalizedText.includes('fatura reencaminhada') ||
     rowNormalizedText.includes('envio de fatura') ||
@@ -154,8 +150,16 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('enviada 2a via') ||
     rowNormalizedText.includes('2 via enviada') ||
     rowNormalizedText.includes('2a via enviada') ||
+    rowNormalizedText.includes('segunda via enviada') ||
+    rowNormalizedText.includes('enviado segunda via') ||
+    rowNormalizedText.includes('enviada segunda via') ||
+    rowNormalizedText.includes('segunda via') ||
+    rowNormalizedText.includes('2 via') ||
+    rowNormalizedText.includes('2a via') ||
+    rowNormalizedText.includes('reenvio') ||
     rowNormalizedText.includes('reencaminhado') ||
     rowNormalizedText.includes('reencaminhada') ||
+    rowNormalizedText.includes('reencaminhar') ||
     rowNormalizedText.includes('ja enviado') ||
     rowNormalizedText.includes('ja enviada') ||
     rowNormalizedText.includes('foi enviado') ||
@@ -164,11 +168,11 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     /\b(envio|reencaminh[oa]s?)\b/.test(rowNormalizedText)
 
   const isEnviaFatura =
-    // Infinitive / present imperative action variations:
-    rowNormalizedText.includes('enviar fatura') ||
     rowNormalizedText.includes('envia fatura') ||
+    rowNormalizedText.includes('enviar fatura') ||
+    rowNormalizedText.includes('precisa enviar') ||
+    rowNormalizedText.includes('a enviar') ||
     rowNormalizedText.includes('enviando fatura') ||
-    rowNormalizedText.includes('a enviar fatura') ||
     rowNormalizedText.includes('reenviar fatura') ||
     rowNormalizedText.includes('mandar fatura') ||
     rowNormalizedText.includes('encaminhar fatura') ||
@@ -186,28 +190,26 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('envia pix') ||
     /\b(enviar|envia|mandar|encaminhar)\b/.test(rowNormalizedText)
 
-  // Disambiguation: if both or matched, decide accurately
   if (isEnviadoFatura && !isEnviaFatura) {
-    return 'fatura_paga' // Enviado Fatura(s)
+    return 'envio_fatura' // Enviado Fatura(s)
   }
   if (isEnviaFatura && !isEnviadoFatura) {
-    return 'promessa_pagto' // Envia Fatura(s)
+    return 'envia_fatura' // Envia Fatura(s)
   }
   if (isEnviadoFatura && isEnviaFatura) {
-    // If text specifically mentions past participle like "enviado" or "fatura enviada", it is Enviado
     if (
       rowNormalizedText.includes('enviado') ||
       rowNormalizedText.includes('enviada') ||
       rowNormalizedText.includes('reencaminhado') ||
-      rowNormalizedText.includes('foi envi')
+      rowNormalizedText.includes('foi envi') ||
+      rowNormalizedText.includes('fatura enviada')
     ) {
-      return 'fatura_paga' // Enviado Fatura(s)
+      return 'envio_fatura' // Enviado Fatura(s)
     }
-    return 'promessa_pagto' // Envia Fatura(s)
+    return 'envia_fatura' // Envia Fatura(s)
   }
 
-  // --- 2. FATURA(S) PAGA(S) (column: contato_realizado) ---
-  // Payment confirmed / already paid
+  // --- 2. FATURA(S) PAGA(S) (key: fatura_paga) ---
   if (
     rowNormalizedText.includes('fatura paga') ||
     rowNormalizedText.includes('faturas pagas') ||
@@ -229,7 +231,7 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     /\b(pago|paga|pagos|pagas|quitou|liquidou)\b/.test(rowNormalizedText) ||
     /\b(pg|pga|pgo)\b/.test(rowNormalizedText)
   ) {
-    // Check if it's explicitly a promise to pay (e.g. "promessa de pagamento") rather than payment done
+    // If it is a promise to pay (e.g. "promessa de pagamento") rather than confirmed payment
     if (
       (rowNormalizedText.includes('promess') || rowNormalizedText.includes('acordo')) &&
       !rowNormalizedText.includes('ja pago') &&
@@ -237,12 +239,12 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
       !rowNormalizedText.includes('comprovante') &&
       !rowNormalizedText.includes('fatura paga')
     ) {
-      return 'cancelados' // Promessa de Pagto.
+      return 'promessa_pagto'
     }
-    return 'contato_realizado' // Fatura(s) Paga(s)
+    return 'fatura_paga'
   }
 
-  // --- 3. PROMESSA DE PAGTO. (column: cancelados) ---
+  // --- 3. PROMESSA DE PAGTO. (key: promessa_pagto) ---
   if (
     rowNormalizedText.includes('promessa de pagamento') ||
     rowNormalizedText.includes('promessa de pagto') ||
@@ -255,10 +257,10 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('parcelamento') ||
     /\b(pp|prom)\b/.test(rowNormalizedText)
   ) {
-    return 'cancelados' // Promessa de Pagto.
+    return 'promessa_pagto'
   }
 
-  // --- 4. SEM CONTATO (column: sem_contato) ---
+  // --- 4. SEM CONTATO (key: sem_contato) ---
   if (
     rowNormalizedText.includes('sem contato') ||
     rowNormalizedText.includes('nao atende') ||
@@ -278,10 +280,10 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('recado') ||
     rowNormalizedText.includes('mensagem gravada')
   ) {
-    return 'sem_contato' // Sem Contato
+    return 'sem_contato'
   }
 
-  // --- 5. CANCELADOS (column: nao_tratados) ---
+  // --- 5. CANCELADOS (key: cancelados) ---
   if (
     rowNormalizedText.includes('cancel') ||
     rowNormalizedText.includes('devol') ||
@@ -293,36 +295,36 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('obito') ||
     rowNormalizedText.includes('falecido')
   ) {
-    return 'nao_tratados' // Cancelados
+    return 'cancelados'
   }
 
-  // --- 6. PENDENTE (column: envio_fatura) ---
+  // --- 6. PENDENTE (key: pendente) ---
   if (
     rowNormalizedText.includes('pendente') ||
-    rowNormalizedText.includes('aguardando') ||
     rowNormalizedText.includes('em analise') ||
     rowNormalizedText.includes('em andamento') ||
     rowNormalizedText.includes('em tratativa') ||
     rowNormalizedText.includes('retorno')
   ) {
-    return 'envio_fatura' // Pendente
+    return 'pendente'
   }
 
-  // --- 7. NÃO TRATADOS (column: outros) ---
+  // --- 7. NÃO TRATADOS (key: nao_tratados) ---
   if (
     rowNormalizedText.includes('nao tratad') ||
     rowNormalizedText.includes('naotratad') ||
     rowNormalizedText.includes('nao trabalhad') ||
     rowNormalizedText.includes('a tratar') ||
+    rowNormalizedText.includes('aguardando') ||
     rowNormalizedText.includes('sem status') ||
     rowNormalizedText.includes('em branco') ||
     rowNormalizedText.includes('novo') ||
     rowNormalizedText.includes('virgem')
   ) {
-    return 'outros' // Não Tratados
+    return 'nao_tratados'
   }
 
-  return 'outros'
+  return 'nao_tratados'
 }
 
 /**
@@ -335,7 +337,6 @@ export function isHeaderOrTotalRow(rowValues: unknown[]): boolean {
   const combined = normalizedCells.join(' ')
 
   // 1. NEVER discard a row if it contains operational FPD status indicators
-  // like "enviado fatura", "fatura paga", "sem contato", "promessa", etc.
   const hasStatusKeyword =
     combined.includes('enviad') ||
     combined.includes('envio') ||
@@ -352,7 +353,6 @@ export function isHeaderOrTotalRow(rowValues: unknown[]): boolean {
     /\b(pg|pga|pgo|pp)\b/.test(combined)
 
   // 2. Total / Summary rows detection
-  // A summary row that starts with 'total' or 'totais' (e.g. "Total Geral: 50" or "Total")
   const firstCell = normalizedCells[0] || ''
   const isPureTotalRow =
     firstCell === 'total' ||
@@ -370,7 +370,6 @@ export function isHeaderOrTotalRow(rowValues: unknown[]): boolean {
   }
 
   // 3. Header detection:
-  // Typical column names in telecom / FPD spreadsheets
   const headerKeywords = [
     'status',
     'motivo',
@@ -431,14 +430,14 @@ export function parseWorksheet(
     sheetName,
     sheetType,
     totalRows: 0,
-    fatura_paga: 0,
     envio_fatura: 0,
-    contato_realizado: 0,
-    promessa_pagto: 0,
+    pendente: 0,
+    fatura_paga: 0,
+    envia_fatura: 0,
     sem_contato: 0,
+    promessa_pagto: 0,
     cancelados: 0,
     nao_tratados: 0,
-    outros: 0,
   }
 
   if (!jsonData || jsonData.length === 0) {
@@ -533,15 +532,14 @@ export async function parseXlsxFile(file: File): Promise<ParsedFileData> {
 
   const aggregated = {
     total_linhas: (movelCounts?.totalRows || 0) + (residencialCounts?.totalRows || 0),
-    fatura_paga: (movelCounts?.fatura_paga || 0) + (residencialCounts?.fatura_paga || 0),
     envio_fatura: (movelCounts?.envio_fatura || 0) + (residencialCounts?.envio_fatura || 0),
-    contato_realizado:
-      (movelCounts?.contato_realizado || 0) + (residencialCounts?.contato_realizado || 0),
-    promessa_pagto: (movelCounts?.promessa_pagto || 0) + (residencialCounts?.promessa_pagto || 0),
+    pendente: (movelCounts?.pendente || 0) + (residencialCounts?.pendente || 0),
+    fatura_paga: (movelCounts?.fatura_paga || 0) + (residencialCounts?.fatura_paga || 0),
+    envia_fatura: (movelCounts?.envia_fatura || 0) + (residencialCounts?.envia_fatura || 0),
     sem_contato: (movelCounts?.sem_contato || 0) + (residencialCounts?.sem_contato || 0),
+    promessa_pagto: (movelCounts?.promessa_pagto || 0) + (residencialCounts?.promessa_pagto || 0),
     cancelados: (movelCounts?.cancelados || 0) + (residencialCounts?.cancelados || 0),
     nao_tratados: (movelCounts?.nao_tratados || 0) + (residencialCounts?.nao_tratados || 0),
-    outros: (movelCounts?.outros || 0) + (residencialCounts?.outros || 0),
   }
 
   return {

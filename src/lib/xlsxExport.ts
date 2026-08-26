@@ -5,18 +5,18 @@ export function exportConsolidatedToXlsx(
   rows: ConsolidatedRow[],
   totals: {
     totalLinhas: number
-    faturaPaga: number
     envioFatura: number
-    contatoRealizado: number
-    promessaPagto: number
+    pendente: number
+    faturaPaga: number
+    enviaFatura: number
     semContato: number
+    promessaPagto: number
     cancelados: number
     naoTratados: number
-    outros: number
   },
   referenteLabel?: string,
 ) {
-  // Headers matching the reference template with new status names
+  // Headers matching the 8 FPD columns in exact order
   const headers = [
     'LOJAS',
     'COORDENAÇÃO',
@@ -38,14 +38,14 @@ export function exportConsolidatedToXlsx(
     r.coordenacao || '',
     r.supervisao || '',
     r.hasData ? r.totalLinhas : '',
-    r.hasData ? r.faturaPaga : '',
     r.hasData ? r.envioFatura : '',
-    r.hasData ? r.contatoRealizado : '',
-    r.hasData ? r.promessaPagto : '',
+    r.hasData ? r.pendente : '',
+    r.hasData ? r.faturaPaga : '',
+    r.hasData ? r.enviaFatura : '',
     r.hasData ? r.semContato : '',
+    r.hasData ? r.promessaPagto : '',
     r.hasData ? r.cancelados : '',
     r.hasData ? r.naoTratados : '',
-    r.hasData ? r.outros : '',
     r.observacao || '',
   ])
 
@@ -55,14 +55,14 @@ export function exportConsolidatedToXlsx(
     '',
     '',
     totals.totalLinhas,
-    totals.faturaPaga,
     totals.envioFatura,
-    totals.contatoRealizado,
-    totals.promessaPagto,
+    totals.pendente,
+    totals.faturaPaga,
+    totals.enviaFatura,
     totals.semContato,
+    totals.promessaPagto,
     totals.cancelados,
     totals.naoTratados,
-    totals.outros,
     '',
   ]
 

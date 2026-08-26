@@ -196,14 +196,14 @@ export const Importar: React.FC = () => {
         storeId,
         referente: item.referenteDate,
         total_linhas: item.parsedData.aggregated.total_linhas,
-        fatura_paga: item.parsedData.aggregated.fatura_paga,
         envio_fatura: item.parsedData.aggregated.envio_fatura,
-        contato_realizado: item.parsedData.aggregated.contato_realizado,
-        promessa_pagto: item.parsedData.aggregated.promessa_pagto,
+        pendente: item.parsedData.aggregated.pendente,
+        fatura_paga: item.parsedData.aggregated.fatura_paga,
+        envia_fatura: item.parsedData.aggregated.envia_fatura,
         sem_contato: item.parsedData.aggregated.sem_contato,
+        promessa_pagto: item.parsedData.aggregated.promessa_pagto,
         cancelados: item.parsedData.aggregated.cancelados,
         nao_tratados: item.parsedData.aggregated.nao_tratados,
-        outros: item.parsedData.aggregated.outros,
       })
 
       setFileQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: 'done' } : q)))
@@ -460,11 +460,11 @@ export const Importar: React.FC = () => {
                             </span>
                             <span>•</span>
                             <span className="text-[#16A34A] font-medium">
-                              Pagas: {item.parsedData.aggregated.fatura_paga}
+                              Enviado: {item.parsedData.aggregated.envio_fatura}
                             </span>
                             <span>•</span>
-                            <span className="text-[#2563EB] font-medium">
-                              Envio: {item.parsedData.aggregated.envio_fatura}
+                            <span className="text-[#0891B2] font-medium">
+                              Pagas: {item.parsedData.aggregated.fatura_paga}
                             </span>
                           </div>
                         )}

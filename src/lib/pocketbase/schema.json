@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-26T12:28:03.694Z",
+  "generatedAt": "2026-08-26T12:32:46.619Z",
   "collections": [
     {
       "name": "users",
@@ -198,6 +198,18 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "pendente",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "envia_fatura",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

@@ -10,62 +10,69 @@ describe('normalizeText', () => {
 })
 
 describe('classifyRow', () => {
-  it('should accurately classify variations of "Enviado Fatura(s)" (fatura_paga)', () => {
-    expect(classifyRow('enviado fatura')).toBe('fatura_paga')
-    expect(classifyRow('enviado fatura(s)')).toBe('fatura_paga')
-    expect(classifyRow('envio fatura')).toBe('fatura_paga')
-    expect(classifyRow('fatura enviada')).toBe('fatura_paga')
-    expect(classifyRow('env fatura')).toBe('fatura_paga')
-    expect(classifyRow('envio de fatura')).toBe('fatura_paga')
-    expect(classifyRow('envio da fatura por whatsapp')).toBe('fatura_paga')
-    expect(classifyRow('enviado')).toBe('fatura_paga')
-    expect(classifyRow('enviada')).toBe('fatura_paga')
-    expect(classifyRow('fatura reenviada')).toBe('fatura_paga')
-    expect(classifyRow('reencaminhado')).toBe('fatura_paga')
-    expect(classifyRow('2 via enviada')).toBe('fatura_paga')
-    expect(classifyRow('enviado boleto')).toBe('fatura_paga')
-    expect(classifyRow('boleto enviado')).toBe('fatura_paga')
+  it('should accurately classify variations of "Enviado Fatura(s)" (envio_fatura)', () => {
+    expect(classifyRow('enviado fatura')).toBe('envio_fatura')
+    expect(classifyRow('enviado fatura(s)')).toBe('envio_fatura')
+    expect(classifyRow('envio fatura')).toBe('envio_fatura')
+    expect(classifyRow('fatura enviada')).toBe('envio_fatura')
+    expect(classifyRow('env fatura')).toBe('envio_fatura')
+    expect(classifyRow('envio de fatura')).toBe('envio_fatura')
+    expect(classifyRow('envio da fatura por whatsapp')).toBe('envio_fatura')
+    expect(classifyRow('enviado')).toBe('envio_fatura')
+    expect(classifyRow('enviada')).toBe('envio_fatura')
+    expect(classifyRow('fatura reenviada')).toBe('envio_fatura')
+    expect(classifyRow('reencaminhado')).toBe('envio_fatura')
+    expect(classifyRow('2 via')).toBe('envio_fatura')
+    expect(classifyRow('2 via enviada')).toBe('envio_fatura')
+    expect(classifyRow('segunda via')).toBe('envio_fatura')
+    expect(classifyRow('reenvio')).toBe('envio_fatura')
+    expect(classifyRow('enviado boleto')).toBe('envio_fatura')
+    expect(classifyRow('boleto enviado')).toBe('envio_fatura')
   })
 
-  it('should distinguish "Envia Fatura(s)" (promessa_pagto) from "Enviado Fatura(s)" without overlap', () => {
-    expect(classifyRow('envia fatura')).toBe('promessa_pagto')
-    expect(classifyRow('enviar fatura')).toBe('promessa_pagto')
-    expect(classifyRow('enviar fatura(s)')).toBe('promessa_pagto')
-    expect(classifyRow('a enviar fatura')).toBe('promessa_pagto')
-    expect(classifyRow('reenviar fatura')).toBe('promessa_pagto')
-    expect(classifyRow('mandar fatura')).toBe('promessa_pagto')
-    expect(classifyRow('solicitou envio de fatura')).toBe('promessa_pagto')
-    expect(classifyRow('enviar boleto')).toBe('promessa_pagto')
-    expect(classifyRow('enviar codigo de barras')).toBe('promessa_pagto')
-    expect(classifyRow('enviar pix')).toBe('promessa_pagto')
+  it('should accurately classify variations of "Pendente" (pendente)', () => {
+    expect(classifyRow('pendente')).toBe('pendente')
+    expect(classifyRow('em analise')).toBe('pendente')
+    expect(classifyRow('em andamento')).toBe('pendente')
+    expect(classifyRow('em tratativa')).toBe('pendente')
+    expect(classifyRow('aguardando retorno')).toBe('pendente')
+  })
+
+  it('should accurately classify variations of "Fatura(s) Paga(s)" (fatura_paga)', () => {
+    expect(classifyRow('fatura paga')).toBe('fatura_paga')
+    expect(classifyRow('faturas pagas')).toBe('fatura_paga')
+    expect(classifyRow('pago')).toBe('fatura_paga')
+    expect(classifyRow('paga')).toBe('fatura_paga')
+    expect(classifyRow('fatura paga pelo cliente')).toBe('fatura_paga')
+    expect(classifyRow('boleto pago')).toBe('fatura_paga')
+    expect(classifyRow('pg')).toBe('fatura_paga')
+    expect(classifyRow('fatura pg')).toBe('fatura_paga')
+    expect(classifyRow('pagamento efetuado')).toBe('fatura_paga')
+    expect(classifyRow('cliente já quitou / quitado')).toBe('fatura_paga')
+    expect(classifyRow('liquidado')).toBe('fatura_paga')
+    expect(classifyRow('debito pago')).toBe('fatura_paga')
+    expect(classifyRow('ja pago')).toBe('fatura_paga')
+  })
+
+  it('should distinguish "Envia Fatura(s)" (envia_fatura) from "Enviado Fatura(s)" (envio_fatura) without overlap', () => {
+    expect(classifyRow('envia fatura')).toBe('envia_fatura')
+    expect(classifyRow('enviar fatura')).toBe('envia_fatura')
+    expect(classifyRow('precisa enviar')).toBe('envia_fatura')
+    expect(classifyRow('a enviar')).toBe('envia_fatura')
+    expect(classifyRow('a enviar fatura')).toBe('envia_fatura')
+    expect(classifyRow('reenviar fatura')).toBe('envia_fatura')
+    expect(classifyRow('mandar fatura')).toBe('envia_fatura')
+    expect(classifyRow('solicitou envio')).toBe('envia_fatura')
+    expect(classifyRow('solicitou envio de fatura')).toBe('envia_fatura')
+    expect(classifyRow('enviar boleto')).toBe('envia_fatura')
+    expect(classifyRow('enviar codigo de barras')).toBe('envia_fatura')
+    expect(classifyRow('enviar pix')).toBe('envia_fatura')
 
     // Contrast explicitly:
-    expect(classifyRow('enviado fatura')).toBe('fatura_paga')
-    expect(classifyRow('enviar fatura')).toBe('promessa_pagto')
-    expect(classifyRow('fatura enviada')).toBe('fatura_paga')
-    expect(classifyRow('envia fatura')).toBe('promessa_pagto')
-  })
-
-  it('should classify "Fatura(s) Paga(s)" (contato_realizado)', () => {
-    expect(classifyRow('fatura paga')).toBe('contato_realizado')
-    expect(classifyRow('faturas pagas')).toBe('contato_realizado')
-    expect(classifyRow('pago')).toBe('contato_realizado')
-    expect(classifyRow('fatura paga pelo cliente')).toBe('contato_realizado')
-    expect(classifyRow('boleto pago')).toBe('contato_realizado')
-    expect(classifyRow('pg')).toBe('contato_realizado')
-    expect(classifyRow('fatura pg')).toBe('contato_realizado')
-    expect(classifyRow('pagamento efetuado')).toBe('contato_realizado')
-    expect(classifyRow('cliente já quitou / quitado')).toBe('contato_realizado')
-    expect(classifyRow('liquidado')).toBe('contato_realizado')
-    expect(classifyRow('debito pago')).toBe('contato_realizado')
-    expect(classifyRow('ja pago')).toBe('contato_realizado')
-  })
-
-  it('should classify "Pendente" (envio_fatura)', () => {
-    expect(classifyRow('pendente')).toBe('envio_fatura')
-    expect(classifyRow('aguardando retorno')).toBe('envio_fatura')
-    expect(classifyRow('em analise')).toBe('envio_fatura')
-    expect(classifyRow('em tratativa')).toBe('envio_fatura')
+    expect(classifyRow('enviado fatura')).toBe('envio_fatura')
+    expect(classifyRow('enviar fatura')).toBe('envia_fatura')
+    expect(classifyRow('fatura enviada')).toBe('envio_fatura')
+    expect(classifyRow('envia fatura')).toBe('envia_fatura')
   })
 
   it('should classify "Sem Contato" (sem_contato)', () => {
@@ -78,30 +85,34 @@ describe('classifyRow', () => {
     expect(classifyRow('desligado')).toBe('sem_contato')
   })
 
-  it('should classify "Promessa de Pagto." (cancelados)', () => {
-    expect(classifyRow('promessa de pagamento')).toBe('cancelados')
-    expect(classifyRow('promessa de pagto para 25/08')).toBe('cancelados')
-    expect(classifyRow('pp')).toBe('cancelados')
-    expect(classifyRow('acordo')).toBe('cancelados')
-    expect(classifyRow('prometeu pagar amanha')).toBe('cancelados')
-    expect(classifyRow('vai pagar')).toBe('cancelados')
+  it('should classify "Promessa de Pagto." (promessa_pagto)', () => {
+    expect(classifyRow('promessa de pagamento')).toBe('promessa_pagto')
+    expect(classifyRow('promessa de pagto para 25/08')).toBe('promessa_pagto')
+    expect(classifyRow('promessa pagto')).toBe('promessa_pagto')
+    expect(classifyRow('pp')).toBe('promessa_pagto')
+    expect(classifyRow('acordo')).toBe('promessa_pagto')
+    expect(classifyRow('prometeu pagar amanha')).toBe('promessa_pagto')
+    expect(classifyRow('vai pagar')).toBe('promessa_pagto')
   })
 
-  it('should classify "Cancelados" (nao_tratados)', () => {
-    expect(classifyRow('pedido cancelado')).toBe('nao_tratados')
-    expect(classifyRow('fraude confirmada')).toBe('nao_tratados')
-    expect(classifyRow('desistencia do cliente')).toBe('nao_tratados')
-    expect(classifyRow('devolucao')).toBe('nao_tratados')
-    expect(classifyRow('portabilidade')).toBe('nao_tratados')
+  it('should classify "Cancelados" (cancelados)', () => {
+    expect(classifyRow('pedido cancelado')).toBe('cancelados')
+    expect(classifyRow('cancelamento')).toBe('cancelados')
+    expect(classifyRow('fraude confirmada')).toBe('cancelados')
+    expect(classifyRow('desistencia do cliente')).toBe('cancelados')
+    expect(classifyRow('devolucao')).toBe('cancelados')
+    expect(classifyRow('portabilidade')).toBe('cancelados')
   })
 
-  it('should classify "Não Tratados" (outros)', () => {
-    expect(classifyRow('nao tratado')).toBe('outros')
-    expect(classifyRow('naotratado')).toBe('outros')
-    expect(classifyRow('nao trabalhado')).toBe('outros')
-    expect(classifyRow('a tratar')).toBe('outros')
-    expect(classifyRow('sem status')).toBe('outros')
-    expect(classifyRow('algum texto desconhecido')).toBe('outros')
+  it('should classify "Não Tratados" (nao_tratados)', () => {
+    expect(classifyRow('nao tratado')).toBe('nao_tratados')
+    expect(classifyRow('naotratad')).toBe('nao_tratados')
+    expect(classifyRow('nao trabalhad')).toBe('nao_tratados')
+    expect(classifyRow('a tratar')).toBe('nao_tratados')
+    expect(classifyRow('aguardando')).toBe('nao_tratados')
+    expect(classifyRow('sem status')).toBe('nao_tratados')
+    expect(classifyRow('em branco')).toBe('nao_tratados')
+    expect(classifyRow('algum texto desconhecido')).toBe('nao_tratados')
   })
 })
 
@@ -157,14 +168,14 @@ describe('isHeaderOrTotalRow', () => {
 
     let movelCount = 0
     for (const text of movelStatuses) {
-      if (classifyRow(normalizeText(text)) === 'fatura_paga') {
+      if (classifyRow(normalizeText(text)) === 'envio_fatura') {
         movelCount++
       }
     }
 
     let resCount = 0
     for (const text of residencialStatuses) {
-      if (classifyRow(normalizeText(text)) === 'fatura_paga') {
+      if (classifyRow(normalizeText(text)) === 'envio_fatura') {
         resCount++
       }
     }
