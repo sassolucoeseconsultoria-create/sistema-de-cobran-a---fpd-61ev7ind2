@@ -94,79 +94,171 @@ export function guessReferenteDate(filename: string): string {
 }
 
 /**
- * Classify a row's normalized text into exactly one of 8 FPD categories,
- * following the specific evaluation priority defined in PRD:
- * 1. FATURA PAGA: contains "pago" or "paga"
- * 2. ENVIO FATURA: contains "envio" or "enviad"
- * 3. CONTATO REALIZADO: contains "contato realizad" or "realizad" (when "sem contato" not present)
- * 4. PROMESSA PAGTO.: contains "promess"
- * 5. SEM CONTATO: contains "sem contato"
- * 6. CANCELADOS: contains "cancel"
- * 7. NÃO TRATADOS: contains "nao tratad" or "nao atendid"
- * 8. OUTROS: contains "outros"/"outro" OR catch-all for any other unclassified row
+ * Classify a row's normalized text into exactly one of 8 FPD categories:
+ *
+ * 1. ENVIADO FATURA(S) (column/key 'fatura_paga'):
+ *    Past tense / invoice already sent. Captures: "enviado fatura", "envio fatura", "fatura enviada",
+ *    "env fatura", "envio de fatura", "enviada 2 via", "fatura reenviada", "reencaminhado", "enviado", etc.
+ *
+ * 2. ENVIA FATURA(S) (column/key 'promessa_pagto'):
+ *    Action / intention to send / pending sending action: "envia fatura", "enviar fatura", "a enviar fatura",
+ *    "reenviar fatura", "mandar fatura", "solicitado envio fatura", etc.
+ *    (Carefully separated from Enviado Fatura so there is NO overlap).
+ *
+ * 3. FATURA(S) PAGA(S) (column/key 'contato_realizado'):
+ *    Payment confirmed / paid invoice: "fatura paga", "boleto pago", "liquidado", "pago", "paga", "quitado",
+ *    "pagamento realizado", "ja pago", etc.
+ *
+ * 4. PENDENTE (column/key 'envio_fatura'):
+ *    Pending treatment / pending status: "pendente", "aguardando retorno", "em analise", etc.
+ *
+ * 5. SEM CONTATO (column/key 'sem_contato'):
+ *    "sem contato", "caixa postal", "nao atende", "ocupado", "desligado", "invalido", "numero errado", etc.
+ *
+ * 6. PROMESSA DE PAGTO. (column/key 'cancelados'):
+ *    "promessa de pagamento", "promessa de pagto", "promessa", "acordo", "vai pagar", "prometeu pagar", etc.
+ *
+ * 7. CANCELADOS (column/key 'nao_tratados'):
+ *    "cancelado", "cancelamento", "devolucao", "fraude", "inversao", "desistencia", "estorno", etc.
+ *
+ * 8. NÃO TRATADOS (column/key 'outros'):
+ *    "nao tratado", "nao trabalhado", "sem status", "em branco", "a tratar" OR fallback.
  */
 export function classifyRow(rowNormalizedText: string): FpdStatusKey {
-  // 1. FATURA PAGA: "fatura paga", "boleto pago", "liquidado", "pago", "paga", "pg", "quitado", "quitada", "pagamento realizado", etc.
+  // --- 1. ENVIADO FATURA(S) vs ENVIA FATURA(S) ---
+  // Must distinguish between past (Enviado = fatura_paga) and future/infinitive/present action (Envia = promessa_pagto)
+
+  const isEnviadoFatura =
+    // Past participle / already sent variations:
+    rowNormalizedText.includes('enviado fatura') ||
+    rowNormalizedText.includes('enviada fatura') ||
+    rowNormalizedText.includes('enviados fatura') ||
+    rowNormalizedText.includes('enviadas fatura') ||
+    rowNormalizedText.includes('fatura enviada') ||
+    rowNormalizedText.includes('faturas enviadas') ||
+    rowNormalizedText.includes('fatura enviando') ||
+    rowNormalizedText.includes('fatura reenviada') ||
+    rowNormalizedText.includes('fatura reencaminhada') ||
+    rowNormalizedText.includes('envio de fatura') ||
+    rowNormalizedText.includes('envio da fatura') ||
+    rowNormalizedText.includes('envio fatura') ||
+    rowNormalizedText.includes('env fatura') ||
+    rowNormalizedText.includes('env. fatura') ||
+    rowNormalizedText.includes('env fat') ||
+    rowNormalizedText.includes('fatura env') ||
+    rowNormalizedText.includes('boleto enviado') ||
+    rowNormalizedText.includes('enviado boleto') ||
+    rowNormalizedText.includes('enviado 2 via') ||
+    rowNormalizedText.includes('enviada 2 via') ||
+    rowNormalizedText.includes('enviado 2a via') ||
+    rowNormalizedText.includes('enviada 2a via') ||
+    rowNormalizedText.includes('2 via enviada') ||
+    rowNormalizedText.includes('2a via enviada') ||
+    rowNormalizedText.includes('reencaminhado') ||
+    rowNormalizedText.includes('reencaminhada') ||
+    rowNormalizedText.includes('ja enviado') ||
+    rowNormalizedText.includes('ja enviada') ||
+    rowNormalizedText.includes('foi enviado') ||
+    rowNormalizedText.includes('foi enviada') ||
+    /\benviad[oa]s?\b/.test(rowNormalizedText) ||
+    /\b(envio|reencaminh[oa]s?)\b/.test(rowNormalizedText)
+
+  const isEnviaFatura =
+    // Infinitive / present imperative action variations:
+    rowNormalizedText.includes('enviar fatura') ||
+    rowNormalizedText.includes('envia fatura') ||
+    rowNormalizedText.includes('enviando fatura') ||
+    rowNormalizedText.includes('a enviar fatura') ||
+    rowNormalizedText.includes('reenviar fatura') ||
+    rowNormalizedText.includes('mandar fatura') ||
+    rowNormalizedText.includes('encaminhar fatura') ||
+    rowNormalizedText.includes('solicitou envio') ||
+    rowNormalizedText.includes('solicitado envio') ||
+    rowNormalizedText.includes('solicitou 2 via') ||
+    rowNormalizedText.includes('solicita 2 via') ||
+    rowNormalizedText.includes('gerar 2 via') ||
+    rowNormalizedText.includes('gerar fatura') ||
+    rowNormalizedText.includes('enviar boleto') ||
+    rowNormalizedText.includes('envia boleto') ||
+    rowNormalizedText.includes('enviar codigo de barras') ||
+    rowNormalizedText.includes('envia codigo de barras') ||
+    rowNormalizedText.includes('enviar pix') ||
+    rowNormalizedText.includes('envia pix') ||
+    /\b(enviar|envia|mandar|encaminhar)\b/.test(rowNormalizedText)
+
+  // Disambiguation: if both or matched, decide accurately
+  if (isEnviadoFatura && !isEnviaFatura) {
+    return 'fatura_paga' // Enviado Fatura(s)
+  }
+  if (isEnviaFatura && !isEnviadoFatura) {
+    return 'promessa_pagto' // Envia Fatura(s)
+  }
+  if (isEnviadoFatura && isEnviaFatura) {
+    // If text specifically mentions past participle like "enviado" or "fatura enviada", it is Enviado
+    if (
+      rowNormalizedText.includes('enviado') ||
+      rowNormalizedText.includes('enviada') ||
+      rowNormalizedText.includes('reencaminhado') ||
+      rowNormalizedText.includes('foi envi')
+    ) {
+      return 'fatura_paga' // Enviado Fatura(s)
+    }
+    return 'promessa_pagto' // Envia Fatura(s)
+  }
+
+  // --- 2. FATURA(S) PAGA(S) (column: contato_realizado) ---
+  // Payment confirmed / already paid
   if (
     rowNormalizedText.includes('fatura paga') ||
+    rowNormalizedText.includes('faturas pagas') ||
     rowNormalizedText.includes('fatura pg') ||
-    rowNormalizedText.includes('paga') ||
-    rowNormalizedText.includes('pago') ||
-    rowNormalizedText.includes('pagto') ||
-    rowNormalizedText.includes('pagamento') ||
     rowNormalizedText.includes('boleto pago') ||
-    rowNormalizedText.includes('quitad') ||
-    rowNormalizedText.includes('liquid') ||
+    rowNormalizedText.includes('ja pago') ||
+    rowNormalizedText.includes('ja paga') ||
+    rowNormalizedText.includes('ja quitad') ||
+    rowNormalizedText.includes('comprovante') ||
+    rowNormalizedText.includes('liquidado') ||
+    rowNormalizedText.includes('liquidada') ||
+    rowNormalizedText.includes('quitado') ||
+    rowNormalizedText.includes('quitada') ||
+    rowNormalizedText.includes('pagamento efetuado') ||
+    rowNormalizedText.includes('pagamento realizado') ||
+    rowNormalizedText.includes('pagamento confirmado') ||
+    rowNormalizedText.includes('debito pago') ||
+    rowNormalizedText.includes('pix pago') ||
+    /\b(pago|paga|pagos|pagas|quitou|liquidou)\b/.test(rowNormalizedText) ||
     /\b(pg|pga|pgo)\b/.test(rowNormalizedText)
   ) {
-    // If it's a promise of payment, prioritize promise unless explicit payment made
+    // Check if it's explicitly a promise to pay (e.g. "promessa de pagamento") rather than payment done
     if (
-      (rowNormalizedText.includes('promess') || rowNormalizedText.includes('promessa')) &&
-      !rowNormalizedText.includes('fatura paga') &&
-      !rowNormalizedText.includes('comprovante') &&
+      (rowNormalizedText.includes('promess') || rowNormalizedText.includes('acordo')) &&
       !rowNormalizedText.includes('ja pago') &&
-      !rowNormalizedText.includes('ja paga')
+      !rowNormalizedText.includes('ja paga') &&
+      !rowNormalizedText.includes('comprovante') &&
+      !rowNormalizedText.includes('fatura paga')
     ) {
-      return 'promessa_pagto'
+      return 'cancelados' // Promessa de Pagto.
     }
-    return 'fatura_paga'
+    return 'contato_realizado' // Fatura(s) Paga(s)
   }
 
-  // 2. PROMESSA PAGTO.: contains "promess", "pp", "acordo", etc.
+  // --- 3. PROMESSA DE PAGTO. (column: cancelados) ---
   if (
-    rowNormalizedText.includes('promess') ||
+    rowNormalizedText.includes('promessa de pagamento') ||
+    rowNormalizedText.includes('promessa de pagto') ||
+    rowNormalizedText.includes('promessa pagto') ||
+    rowNormalizedText.includes('promessa') ||
+    rowNormalizedText.includes('prometeu pagar') ||
+    rowNormalizedText.includes('vai pagar') ||
     rowNormalizedText.includes('acordo') ||
-    /\b(pp)\b/.test(rowNormalizedText)
+    rowNormalizedText.includes('negociacao') ||
+    rowNormalizedText.includes('parcelamento') ||
+    /\b(pp|prom)\b/.test(rowNormalizedText)
   ) {
-    return 'promessa_pagto'
+    return 'cancelados' // Promessa de Pagto.
   }
 
-  // 3. ENVIO FATURA: contains "envio", "enviad", "reencaminh", "2 via", "segunda via", etc.
-  if (
-    rowNormalizedText.includes('envio') ||
-    rowNormalizedText.includes('enviad') ||
-    rowNormalizedText.includes('reencaminh') ||
-    rowNormalizedText.includes('2a via') ||
-    rowNormalizedText.includes('2 via') ||
-    rowNormalizedText.includes('segunda via')
-  ) {
-    return 'envio_fatura'
-  }
-
-  // 4. CONTATO REALIZADO: "contato realizad", "atendid", "recado", etc. (when "sem contato" not present)
-  if (
-    !rowNormalizedText.includes('sem contato') &&
-    !rowNormalizedText.includes('nao atendid') &&
-    (rowNormalizedText.includes('contato realizad') ||
-      rowNormalizedText.includes('realizad') ||
-      rowNormalizedText.includes('atendid') ||
-      rowNormalizedText.includes('falou com') ||
-      rowNormalizedText.includes('recado'))
-  ) {
-    return 'contato_realizado'
-  }
-
-  // 5. SEM CONTATO: "sem contato", "caixa postal", "nao atende", "ocupado", "desligado", "invalido", etc.
+  // --- 4. SEM CONTATO (column: sem_contato) ---
   if (
     rowNormalizedText.includes('sem contato') ||
     rowNormalizedText.includes('nao atende') ||
@@ -175,36 +267,59 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('chamou') ||
     rowNormalizedText.includes('ocupado') ||
     rowNormalizedText.includes('desligado') ||
+    rowNormalizedText.includes('fora de area') ||
+    rowNormalizedText.includes('nao existe') ||
     rowNormalizedText.includes('telefone incorreto') ||
+    rowNormalizedText.includes('numero incorreto') ||
+    rowNormalizedText.includes('numero errado') ||
     rowNormalizedText.includes('invalido') ||
     rowNormalizedText.includes('incorreto') ||
-    rowNormalizedText.includes('mudo')
+    rowNormalizedText.includes('mudo') ||
+    rowNormalizedText.includes('recado') ||
+    rowNormalizedText.includes('mensagem gravada')
   ) {
-    return 'sem_contato'
+    return 'sem_contato' // Sem Contato
   }
 
-  // 6. CANCELADOS: "cancel", "devol", "fraude", "inversao", "desistencia", etc.
+  // --- 5. CANCELADOS (column: nao_tratados) ---
   if (
     rowNormalizedText.includes('cancel') ||
     rowNormalizedText.includes('devol') ||
     rowNormalizedText.includes('fraude') ||
     rowNormalizedText.includes('inversao') ||
-    rowNormalizedText.includes('desist')
+    rowNormalizedText.includes('desist') ||
+    rowNormalizedText.includes('estorno') ||
+    rowNormalizedText.includes('portabilidade') ||
+    rowNormalizedText.includes('obito') ||
+    rowNormalizedText.includes('falecido')
   ) {
-    return 'cancelados'
+    return 'nao_tratados' // Cancelados
   }
 
-  // 7. NÃO TRATADOS: "nao tratad", "nao trabalhad", "pendente", "em branco", "sem status", "naotratado", etc.
+  // --- 6. PENDENTE (column: envio_fatura) ---
+  if (
+    rowNormalizedText.includes('pendente') ||
+    rowNormalizedText.includes('aguardando') ||
+    rowNormalizedText.includes('em analise') ||
+    rowNormalizedText.includes('em andamento') ||
+    rowNormalizedText.includes('em tratativa') ||
+    rowNormalizedText.includes('retorno')
+  ) {
+    return 'envio_fatura' // Pendente
+  }
+
+  // --- 7. NÃO TRATADOS (column: outros) ---
   if (
     rowNormalizedText.includes('nao tratad') ||
     rowNormalizedText.includes('naotratad') ||
     rowNormalizedText.includes('nao trabalhad') ||
     rowNormalizedText.includes('a tratar') ||
-    rowNormalizedText.includes('pendente') ||
-    rowNormalizedText.includes('aguardando') ||
-    rowNormalizedText.includes('sem status')
+    rowNormalizedText.includes('sem status') ||
+    rowNormalizedText.includes('em branco') ||
+    rowNormalizedText.includes('novo') ||
+    rowNormalizedText.includes('virgem')
   ) {
-    return 'nao_tratados'
+    return 'outros' // Não Tratados
   }
 
   return 'outros'
@@ -219,13 +334,22 @@ export function isHeaderOrTotalRow(rowValues: unknown[]): boolean {
 
   const combined = normalizedCells.join(' ')
 
-  // 1. NEVER discard a row if it contains payment or status indicators unless it's strictly a header definition row
-  const hasPaymentKeyword =
+  // 1. NEVER discard a row if it contains operational FPD status indicators
+  // like "enviado fatura", "fatura paga", "sem contato", "promessa", etc.
+  const hasStatusKeyword =
+    combined.includes('enviad') ||
+    combined.includes('envio') ||
+    combined.includes('envia') ||
     combined.includes('pago') ||
     combined.includes('paga') ||
     combined.includes('quitad') ||
     combined.includes('liquid') ||
-    /\b(pg|pga|pgo)\b/.test(combined)
+    combined.includes('promess') ||
+    combined.includes('sem contato') ||
+    combined.includes('caixa postal') ||
+    combined.includes('cancel') ||
+    combined.includes('pendente') ||
+    /\b(pg|pga|pgo|pp)\b/.test(combined)
 
   // 2. Total / Summary rows detection
   // A summary row that starts with 'total' or 'totais' (e.g. "Total Geral: 50" or "Total")
@@ -241,7 +365,7 @@ export function isHeaderOrTotalRow(rowValues: unknown[]): boolean {
     combined === 'totais' ||
     combined === 'total geral'
 
-  if (isPureTotalRow && !hasPaymentKeyword) {
+  if (isPureTotalRow && !hasStatusKeyword) {
     return true
   }
 
@@ -285,8 +409,8 @@ export function isHeaderOrTotalRow(rowValues: unknown[]): boolean {
     }
   }
 
-  // If at least 2 distinct standard header column names match as cell titles and NO individual customer data is present
-  if (exactMatchesCount >= 2 && !hasPaymentKeyword) {
+  // If at least 2 distinct standard header column names match as cell titles and NO status keyword is present
+  if (exactMatchesCount >= 2 && !hasStatusKeyword) {
     return true
   }
 
