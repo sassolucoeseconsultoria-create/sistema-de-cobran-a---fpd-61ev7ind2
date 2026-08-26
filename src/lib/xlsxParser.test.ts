@@ -53,13 +53,18 @@ describe('classifyRow', () => {
     expect(classifyRow('paga')).toBe('fatura_paga')
     expect(classifyRow('fatura paga pelo cliente')).toBe('fatura_paga')
     expect(classifyRow('boleto pago')).toBe('fatura_paga')
-    expect(classifyRow('pg')).toBe('fatura_paga')
     expect(classifyRow('fatura pg')).toBe('fatura_paga')
     expect(classifyRow('pagamento efetuado')).toBe('fatura_paga')
     expect(classifyRow('cliente já quitou / quitado')).toBe('fatura_paga')
     expect(classifyRow('liquidado')).toBe('fatura_paga')
     expect(classifyRow('debito pago')).toBe('fatura_paga')
     expect(classifyRow('ja pago')).toBe('fatura_paga')
+
+    // Bug 1: Standalone 'pg', 'pga', 'pgo' should NOT match fatura_paga
+    expect(classifyRow('pg')).toBe('nao_tratados')
+    expect(classifyRow('codigo pg 123')).toBe('nao_tratados')
+    expect(classifyRow('pga')).toBe('nao_tratados')
+    expect(classifyRow('pgo')).toBe('nao_tratados')
   })
 
   it('should distinguish "Envia Fatura(s)" (envia_fatura) from "Enviado Fatura(s)" (envio_fatura) without overlap', () => {
@@ -91,6 +96,13 @@ describe('classifyRow', () => {
     expect(classifyRow('telefone incorreto')).toBe('sem_contato')
     expect(classifyRow('numero invalido')).toBe('sem_contato')
     expect(classifyRow('desligado')).toBe('sem_contato')
+
+    // Bugs 2 & 3: 'chamou' and 'recado' should NOT classify as sem_contato
+    expect(classifyRow('chamou')).not.toBe('sem_contato')
+    expect(classifyRow('chamou e desligou')).not.toBe('sem_contato')
+    expect(classifyRow('recado')).not.toBe('sem_contato')
+    expect(classifyRow('deixou recado')).not.toBe('sem_contato')
+    expect(classifyRow('deixou recado com a mae')).not.toBe('sem_contato')
   })
 
   it('should classify "Promessa de Pagto." (promessa_pagto) strictly and avoid over-matching', () => {
@@ -136,7 +148,17 @@ describe('classifyRow', () => {
     expect(classifyRow('fraude confirmada')).toBe('cancelados')
     expect(classifyRow('desistencia do cliente')).toBe('cancelados')
     expect(classifyRow('devolucao')).toBe('cancelados')
+    expect(classifyRow(normalizeText('Devolução do aparelho'))).toBe('cancelados')
+    expect(classifyRow('aparelho devolvido')).toBe('cancelados')
+    expect(classifyRow('mercadoria devolvida')).toBe('cancelados')
     expect(classifyRow('portabilidade')).toBe('cancelados')
+
+    // Bug 5: 'devolveu ligacao/chamada/ligou/retornou' should NOT classify as cancelados
+    expect(classifyRow('devolveu ligacao')).not.toBe('cancelados')
+    expect(classifyRow('devolveu chamada')).not.toBe('cancelados')
+    expect(classifyRow('devolveu a ligacao')).not.toBe('cancelados')
+    expect(classifyRow('cliente devolveu ligou')).not.toBe('cancelados')
+    expect(classifyRow('devolveu retornou')).not.toBe('cancelados')
   })
 
   it('should classify "Contato Realizado" (contato_realizado)', () => {
@@ -146,8 +168,21 @@ describe('classifyRow', () => {
     expect(classifyRow('contactado')).toBe('contato_realizado')
     expect(classifyRow('contatado')).toBe('contato_realizado')
     expect(classifyRow('cliente atendido')).toBe('contato_realizado')
+    expect(classifyRow('atendido')).toBe('contato_realizado')
+    expect(classifyRow('atendida pelo consultor')).toBe('contato_realizado')
     expect(classifyRow('falou com cliente')).toBe('contato_realizado')
     expect(classifyRow('contato ok')).toBe('contato_realizado')
+
+    // Bug 4: Negated "atendido" should NOT classify as contato_realizado
+    expect(classifyRow('nao atendido')).not.toBe('contato_realizado')
+    expect(classifyRow(normalizeText('não atendido'))).not.toBe('contato_realizado')
+    expect(classifyRow('nunca atendido')).not.toBe('contato_realizado')
+    expect(classifyRow('jamais atendido')).not.toBe('contato_realizado')
+    expect(classifyRow('mal atendido')).not.toBe('contato_realizado')
+    expect(classifyRow('pessimo atendido')).not.toBe('contato_realizado')
+    expect(classifyRow(normalizeText('péssimo atendido'))).not.toBe('contato_realizado')
+    expect(classifyRow('nao foi atendido')).not.toBe('contato_realizado')
+    expect(classifyRow(normalizeText('não foi atendido'))).not.toBe('contato_realizado')
   })
 
   it('should classify "Não Tratados" (nao_tratados)', () => {
@@ -205,6 +240,27 @@ describe('isHeaderOrTotalRow', () => {
     // Single total row
     expect(isHeaderOrTotalRow(['Total Geral', 50])).toBe(true)
     expect(isHeaderOrTotalRow(['Total', 19])).toBe(true)
+
+    // Rows with 'contato', 'tratad', 'atendido' must NOT be discarded as header/total
+    expect(
+      isHeaderOrTotalRow([
+        'LOJA SUL',
+        'CLIENTE TESTE',
+        'CONTATO REALIZADO',
+        'STATUS OK',
+        'MOTIVO OK',
+      ]),
+    ).toBe(false)
+    expect(
+      isHeaderOrTotalRow([
+        'LOJA SUL',
+        'CLIENTE TESTE',
+        'NAO TRATADOS',
+        'STATUS PENDENTE',
+        'MOTIVO X',
+      ]),
+    ).toBe(false)
+    expect(isHeaderOrTotalRow(['LOJA CENTRO', 'CLIENTE ATENDIDO', 'STATUS', 'MOTIVO'])).toBe(false)
   })
 
   it('should correctly sum occurrences across Móvel (19) and Residencial (1) for Enviado Fatura', () => {

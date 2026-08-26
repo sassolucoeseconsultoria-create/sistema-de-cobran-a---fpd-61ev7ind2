@@ -250,8 +250,7 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('pagamento confirmado') ||
     rowNormalizedText.includes('debito pago') ||
     rowNormalizedText.includes('pix pago') ||
-    /\b(pago|paga|pagos|pagas|quitou|liquidou)\b/.test(rowNormalizedText) ||
-    /\b(pg|pga|pgo)\b/.test(rowNormalizedText)
+    /\b(pago|paga|pagos|pagas|quitou|liquidou)\b/.test(rowNormalizedText)
   ) {
     return 'fatura_paga'
   }
@@ -262,7 +261,6 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('nao atende') ||
     rowNormalizedText.includes('nao atendeu') ||
     rowNormalizedText.includes('caixa postal') ||
-    rowNormalizedText.includes('chamou') ||
     rowNormalizedText.includes('ocupado') ||
     rowNormalizedText.includes('desligado') ||
     rowNormalizedText.includes('fora de area') ||
@@ -273,16 +271,22 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('invalido') ||
     rowNormalizedText.includes('incorreto') ||
     rowNormalizedText.includes('mudo') ||
-    rowNormalizedText.includes('recado') ||
     rowNormalizedText.includes('mensagem gravada')
   ) {
     return 'sem_contato'
   }
 
   // --- 5. CANCELADOS (key: cancelados) ---
+  const isDevolucaoCancel =
+    rowNormalizedText.includes('devolucao') ||
+    rowNormalizedText.includes('devolvido') ||
+    rowNormalizedText.includes('devolvida') ||
+    (/\bdevolveu\b/.test(rowNormalizedText) &&
+      !/\bdevolveu\s+(a\s+|o\s+)?(ligacao|chamada|ligou|retornou)\b/.test(rowNormalizedText))
+
   if (
     rowNormalizedText.includes('cancel') ||
-    rowNormalizedText.includes('devol') ||
+    isDevolucaoCancel ||
     rowNormalizedText.includes('fraude') ||
     rowNormalizedText.includes('inversao') ||
     rowNormalizedText.includes('desist') ||
@@ -306,6 +310,25 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
   }
 
   // --- 7. CONTATO REALIZADO (key: contato_realizado) ---
+  const hasPositiveAtendido = () => {
+    // Regex matches "atendido" / "atendida" when NOT preceded by negative words within 10 characters
+    // Check all occurrences of atendido/atendida
+    const regex = /\b(atendido|atendida|atendidos|atendidas)\b/g
+    let match: RegExpExecArray | null
+    while ((match = regex.exec(rowNormalizedText)) !== null) {
+      const preceding = rowNormalizedText.slice(Math.max(0, match.index - 30), match.index)
+      // Check if preceding text ends with or contains a negative modifier right before atendido
+      const isNegated =
+        /\b(nao|não|nunca|jamais|mal|pessimo|péssimo|sem)\s+(foi\s+|ser\s+|sendo\s+|estar\s+|esta\s+|estava\s+|ter\s+|tinha\s+)?$/i.test(
+          preceding.trim(),
+        ) || /(nao|não|nunca|jamais|mal|pessimo|péssimo)\s.{0,15}$/i.test(preceding.trim())
+      if (!isNegated) {
+        return true
+      }
+    }
+    return false
+  }
+
   if (
     rowNormalizedText.includes('contato realizado') ||
     rowNormalizedText.includes('contato efetuado') ||
@@ -317,7 +340,7 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('contatada') ||
     rowNormalizedText.includes('cliente atendido') ||
     rowNormalizedText.includes('cliente atendida') ||
-    rowNormalizedText.includes('atendido') ||
+    hasPositiveAtendido() ||
     rowNormalizedText.includes('falou com cliente') ||
     rowNormalizedText.includes('falou com o cliente') ||
     rowNormalizedText.includes('falou com titular') ||
@@ -409,7 +432,9 @@ export function isHeaderOrTotalRow(rowValues: unknown[]): boolean {
     combined.includes('caixa postal') ||
     combined.includes('cancel') ||
     combined.includes('pendente') ||
-    /\b(pg|pga|pgo)\b/.test(combined)
+    combined.includes('contato') ||
+    combined.includes('tratad') ||
+    combined.includes('atendido')
 
   // 2. Total / Summary rows detection
   const firstCell = normalizedCells[0] || ''
