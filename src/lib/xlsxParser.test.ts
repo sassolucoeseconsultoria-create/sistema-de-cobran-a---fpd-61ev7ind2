@@ -70,11 +70,11 @@ describe('classifyRow', () => {
     // Specific case from instructions
     expect(classifyRow(['enviado fatura(s)'])).toBe('envio_fatura')
 
-    // Partial matches must NOT match envio_fatura (they fall back to outros)
-    expect(classifyRow(['envio da fatura por whatsapp'])).toBe('outros')
-    expect(classifyRow(['fatura enviada para o cliente'])).toBe('outros')
-    expect(classifyRow(['enviar fatura'])).toBe('outros')
-    expect(classifyRow(['precisa enviar'])).toBe('outros')
+    // Partial matches must NOT match envio_fatura (they return null / are ignored)
+    expect(classifyRow(['envio da fatura por whatsapp'])).toBeNull()
+    expect(classifyRow(['fatura enviada para o cliente'])).toBeNull()
+    expect(classifyRow(['enviar fatura'])).toBeNull()
+    expect(classifyRow(['precisa enviar'])).toBeNull()
   })
 
   it('should accurately classify all exact variations of 2. "Promessa de Pagto." (promessa_pagto)', () => {
@@ -97,14 +97,14 @@ describe('classifyRow', () => {
     expect(classifyRow([normalizeText('Promessa de Pagto.')])).toBe('promessa_pagto')
     expect(classifyRow([normalizeText('PROMESSA DE PAGAMENTO')])).toBe('promessa_pagto')
 
-    // Partial matches and observation phrases must NOT classify as promessa_pagto
-    expect(classifyRow(['promessa de pagto - cliente'])).toBe('outros')
-    expect(classifyRow(['status promessa de pagto cliente'])).toBe('outros')
-    expect(classifyRow(['prometeu pagar amanha'])).toBe('outros')
-    expect(classifyRow(['promete pagar'])).toBe('outros')
-    expect(classifyRow(['vai pagar'])).toBe('outros')
-    expect(classifyRow(['combinou pagamento'])).toBe('outros')
-    expect(classifyRow(['pp'])).toBe('outros')
+    // Partial matches and observation phrases must NOT classify as promessa_pagto (return null)
+    expect(classifyRow(['promessa de pagto - cliente'])).toBeNull()
+    expect(classifyRow(['status promessa de pagto cliente'])).toBeNull()
+    expect(classifyRow(['prometeu pagar amanha'])).toBeNull()
+    expect(classifyRow(['promete pagar'])).toBeNull()
+    expect(classifyRow(['vai pagar'])).toBeNull()
+    expect(classifyRow(['combinou pagamento'])).toBeNull()
+    expect(classifyRow(['pp'])).toBeNull()
   })
 
   it('should accurately classify all exact variations of 3. "Fatura(s) Paga(s)" (fatura_paga)', () => {
@@ -153,15 +153,15 @@ describe('classifyRow', () => {
     expect(classifyRow([normalizeText('Fatura Quitada')])).toBe('fatura_paga')
 
     // Extra / partial text must NOT match fatura_paga
-    expect(classifyRow(['fatura paga - promessa de pagto quitada'])).toBe('outros')
-    expect(classifyRow(['pg'])).toBe('outros')
-    expect(classifyRow(['codigo pg 123'])).toBe('outros')
-    expect(classifyRow(['solicitou comprovante de residencia'])).toBe('outros')
-    expect(classifyRow(['aguardando comprovante'])).toBe('outros')
-    expect(classifyRow(['cliente ja quitou / quitado'])).toBe('outros')
-    expect(classifyRow(['nao liquidado'])).toBe('outros')
-    expect(classifyRow(['nao pago'])).toBe('outros')
-    expect(classifyRow(['nao paga'])).toBe('outros')
+    expect(classifyRow(['fatura paga - promessa de pagto quitada'])).toBeNull()
+    expect(classifyRow(['pg'])).toBeNull()
+    expect(classifyRow(['codigo pg 123'])).toBeNull()
+    expect(classifyRow(['solicitou comprovante de residencia'])).toBeNull()
+    expect(classifyRow(['aguardando comprovante'])).toBeNull()
+    expect(classifyRow(['cliente ja quitou / quitado'])).toBeNull()
+    expect(classifyRow(['nao liquidado'])).toBeNull()
+    expect(classifyRow(['nao pago'])).toBeNull()
+    expect(classifyRow(['nao paga'])).toBeNull()
   })
 
   it('should accurately classify all exact variations of 4. "Sem Contato" (sem_contato)', () => {
@@ -197,8 +197,8 @@ describe('classifyRow', () => {
     }
 
     // Partial/extra text should not match
-    expect(classifyRow(['numero ocupado'])).toBe('outros')
-    expect(classifyRow(['chamou e desligou'])).toBe('outros')
+    expect(classifyRow(['numero ocupado'])).toBeNull()
+    expect(classifyRow(['chamou e desligou'])).toBeNull()
   })
 
   it('should accurately classify all exact variations of 5. "Cancelados" (cancelados)', () => {
@@ -233,11 +233,11 @@ describe('classifyRow', () => {
     }
 
     // Partial/extra text should not match
-    expect(classifyRow(['pedido cancelado'])).toBe('outros')
-    expect(classifyRow(['fraude confirmada'])).toBe('outros')
-    expect(classifyRow(['desistencia do cliente'])).toBe('outros')
-    expect(classifyRow(['devolucao do aparelho'])).toBe('outros')
-    expect(classifyRow(['devolveu ligacao'])).toBe('outros')
+    expect(classifyRow(['pedido cancelado'])).toBeNull()
+    expect(classifyRow(['fraude confirmada'])).toBeNull()
+    expect(classifyRow(['desistencia do cliente'])).toBeNull()
+    expect(classifyRow(['devolucao do aparelho'])).toBeNull()
+    expect(classifyRow(['devolveu ligacao'])).toBeNull()
   })
 
   it('should accurately classify all exact variations of 6. "Pendente" (pendente)', () => {
@@ -260,8 +260,8 @@ describe('classifyRow', () => {
     }
 
     // Partial/extra text should not match
-    expect(classifyRow(['pendente de envio'])).toBe('outros')
-    expect(classifyRow(['aguardando analise de pagamento'])).toBe('outros')
+    expect(classifyRow(['pendente de envio'])).toBeNull()
+    expect(classifyRow(['aguardando analise de pagamento'])).toBeNull()
   })
 
   it('should accurately classify all exact variations of 7. "Contato Realizado" (contato_realizado)', () => {
@@ -301,9 +301,9 @@ describe('classifyRow', () => {
     }
 
     // Partial / extra / negated phrases should NOT match
-    expect(classifyRow(['atendida pelo consultor'])).toBe('outros')
-    expect(classifyRow(['nao atendido'])).toBe('outros')
-    expect(classifyRow(['deixou recado com a mae'])).toBe('outros')
+    expect(classifyRow(['atendida pelo consultor'])).toBeNull()
+    expect(classifyRow(['nao atendido'])).toBeNull()
+    expect(classifyRow(['deixou recado com a mae'])).toBeNull()
   })
 
   it('should accurately classify all exact variations of 8. "Não Tratados" (nao_tratados)', () => {
@@ -330,20 +330,36 @@ describe('classifyRow', () => {
     }
 
     // Partial matches
-    expect(classifyRow(['nao trabalhad'])).toBe('outros')
+    expect(classifyRow(['nao trabalhad'])).toBeNull()
   })
 
-  it('should classify unclassified or unrecognized statuses as "Outros Motivos" (outros) as fallback (9)', () => {
-    expect(classifyRow(['algum texto desconhecido'])).toBe('outros')
-    expect(classifyRow(['reclamacao anatel'])).toBe('outros')
-    expect(classifyRow(['contestacao de valores'])).toBe('outros')
-    expect(classifyRow(['duvida de cobertura'])).toBe('outros')
-    expect(classifyRow(['cliente em viagem'])).toBe('outros')
-    expect(classifyRow(['solicitou estorno parcial'])).toBe('outros')
-    expect(classifyRow(['negociacao com a gerencia'])).toBe('outros')
+  it('should classify ONLY exact matches for 9. "Outros Motivos" (outros)', () => {
+    const exactOutrosVariations = [
+      'outros motivos',
+      'outros',
+      'outro motivo',
+      'outro',
+      'demais motivos',
+      'demais',
+    ]
+
+    for (const variation of exactOutrosVariations) {
+      expect(classifyRow([variation])).toBe('outros')
+      expect(classifyRow(['cliente 1', variation])).toBe('outros')
+    }
   })
 
-  it('should respect exact priority order: 1. Enviado Fatura > 2. Promessa Pagto > 3. Fatura Paga > 4. Sem Contato > 5. Cancelados > 6. Pendente > 7. Contato Realizado > 8. Não Tratados', () => {
+  it('should return null (ignore silently) for unclassified or unrecognized text without exact match', () => {
+    expect(classifyRow(['algum texto desconhecido'])).toBeNull()
+    expect(classifyRow(['reclamacao anatel'])).toBeNull()
+    expect(classifyRow(['contestacao de valores'])).toBeNull()
+    expect(classifyRow(['duvida de cobertura'])).toBeNull()
+    expect(classifyRow(['cliente em viagem'])).toBeNull()
+    expect(classifyRow(['solicitou estorno parcial'])).toBeNull()
+    expect(classifyRow(['negociacao com a gerencia'])).toBeNull()
+  })
+
+  it('should respect exact priority order: 1. Enviado Fatura > 2. Promessa Pagto > 3. Fatura Paga > 4. Sem Contato > 5. Cancelados > 6. Pendente > 7. Contato Realizado > 8. Não Tratados > 9. Outros Motivos', () => {
     // 1. Enviado Fatura vs 2. Promessa Pagto
     expect(classifyRow(['enviado fatura', 'promessa de pagto'])).toBe('envio_fatura')
 
@@ -367,17 +383,20 @@ describe('classifyRow', () => {
 
     // 7. Contato Realizado vs 8. Não Tratados
     expect(classifyRow(['contato realizado', 'nao tratado'])).toBe('contato_realizado')
+
+    // 8. Não Tratados vs 9. Outros Motivos
+    expect(classifyRow(['nao tratado', 'outros motivos'])).toBe('nao_tratados')
   })
 
   it('regression tests: unified text containing a keyword when NO cell has exact value MUST NOT classify as that status', () => {
     // Row whose joined text contains "promessa de pagto" across split cells or within a sentence
     const rowSplit = ['loja x', 'status: promessa de pagto do cliente', 'obs adicional']
     expect(rowSplit.join(' ')).toContain('promessa de pagto')
-    expect(classifyRow(rowSplit)).toBe('outros')
+    expect(classifyRow(rowSplit)).toBeNull()
 
     // Row whose cell has extra text: "promessa de pagto - cliente"
     const rowExtraText = ['loja x', 'promessa de pagto - cliente']
-    expect(classifyRow(rowExtraText)).toBe('outros')
+    expect(classifyRow(rowExtraText)).toBeNull()
 
     // Row with status "contato realizado" and an observation cell mentioning "disse que a fatura paga ja foi entregue"
     const rowObsWithFaturaPaga = [
@@ -389,19 +408,21 @@ describe('classifyRow', () => {
 
     // Row with observation mentioning "cliente enviou comprovante" (not exact "enviado")
     const rowObsEnvio = ['loja z', 'cliente enviou comprovante', 'outra info']
-    expect(classifyRow(rowObsEnvio)).toBe('outros')
+    expect(classifyRow(rowObsEnvio)).toBeNull()
   })
 })
 
 describe('isHeaderOrTotalRow', () => {
   it('should identify header rows and total rows accurately', () => {
-    // Header row with 2+ structural header keywords
+    // Header row with 2+ structural header keywords at positions 0 and 1
     expect(isHeaderOrTotalRow(['LOJA', 'CLIENTE', 'STATUS', 'MOTIVO', 'TELEFONE', 'DATA'])).toBe(
       true,
     )
     expect(isHeaderOrTotalRow(['OPERADOR', 'SUPERVISAO', 'CONTRATO', 'CPF'])).toBe(true)
+    expect(isHeaderOrTotalRow(['STATUS', 'MOTIVO'])).toBe(true)
+    expect(isHeaderOrTotalRow(['CLIENTE', 'NOME', 'CPF'])).toBe(true)
 
-    // Data row with customer name and status
+    // Data row with customer name and status (first cell is NOT a header keyword)
     expect(
       isHeaderOrTotalRow([
         'LOJA CENTRO',
@@ -423,11 +444,38 @@ describe('isHeaderOrTotalRow', () => {
       ]),
     ).toBe(false)
 
+    // Data row where first cell is a store name like 'CELNET ALEXANIA' and second cell is customer name
+    expect(
+      isHeaderOrTotalRow(['CELNET ALEXANIA', 'MARCOS DA SILVA', 'CONTRATO 123456', 'FATURA PAGA']),
+    ).toBe(false)
+
+    // Critical Bug 2 test: Data row with observation mentioning "cliente" and "contrato" must NOT be dropped
+    expect(
+      isHeaderOrTotalRow([
+        'LOJA SUL',
+        'JOAO DA SILVA',
+        'FATURA PAGA',
+        'cliente pediu 2 via do contrato',
+        '61988888888',
+      ]),
+    ).toBe(false)
+
+    // Data row starting with customer name and containing "vencimento", "observacao", "plano"
+    expect(
+      isHeaderOrTotalRow([
+        'ANTONIO CARLOS',
+        '61999999999',
+        'plano controle com vencimento dia 10',
+        'observacao: cliente solicitou desconto',
+      ]),
+    ).toBe(false)
+
     // Single total row
     expect(isHeaderOrTotalRow(['Total Geral', 50])).toBe(true)
     expect(isHeaderOrTotalRow(['Total', 19])).toBe(true)
     expect(isHeaderOrTotalRow(['Resumo'])).toBe(true)
     expect(isHeaderOrTotalRow(['Totais'])).toBe(true)
+    expect(isHeaderOrTotalRow(['Total Geral'])).toBe(true)
   })
 
   it('should correctly sum occurrences across Móvel (19) and Residencial (1) for Enviado Fatura', () => {
@@ -452,6 +500,35 @@ describe('isHeaderOrTotalRow', () => {
     expect(movelCount).toBe(19)
     expect(resCount).toBe(1)
     expect(movelCount + resCount).toBe(20)
+  })
+
+  it('regression test: CELNET ALEXANIA reference numbers should match exact breakdown', () => {
+    // 13 Fatura Paga, 20 Enviado Fatura, 5 Promessa Pagto, 1 Sem Contato, 1 Cancelados, 1 Contato Realizado, 0 Outros, 0 Pendente, 0 Não Tratados
+    const sampleRows = [
+      ['LOJA', 'STATUS', 'OBSERVACAO'], // Header
+      ...Array(13).fill(['CELNET ALEXANIA', 'FATURA PAGA', 'CLIENTE PAGOU']),
+      ...Array(20).fill(['CELNET ALEXANIA', 'ENVIADO FATURA(S)', 'ENVIADO POR EMAIL']),
+      ...Array(5).fill(['CELNET ALEXANIA', 'PROMESSA DE PAGTO.', 'VAI PAGAR DIA 10']),
+      ...Array(1).fill(['CELNET ALEXANIA', 'SEM CONTATO', 'NAO ATENDE']),
+      ...Array(1).fill(['CELNET ALEXANIA', 'CANCELADO', 'CANCELOU PLANO']),
+      ...Array(1).fill(['CELNET ALEXANIA', 'CONTATO REALIZADO', 'FALOU COM O TITULAR']),
+      ['CELNET ALEXANIA', 'LINHA COM TEXTO ALEATORIO SEM STATUS', 'OBSERVACAO QUALQUER'], // Should be skipped silently
+    ]
+
+    const ws = XLSX.utils.aoa_to_sheet(sampleRows)
+    const counts = parseWorksheet(ws, 'Móvel', 'movel')
+
+    expect(counts.fatura_paga).toBe(13)
+    expect(counts.envio_fatura).toBe(20)
+    expect(counts.promessa_pagto).toBe(5)
+    expect(counts.sem_contato).toBe(1)
+    expect(counts.cancelados).toBe(1)
+    expect(counts.contato_realizado).toBe(1)
+    expect(counts.outros).toBe(0)
+    expect(counts.pendente).toBe(0)
+    expect(counts.nao_tratados).toBe(0)
+    expect(counts.totalRows).toBe(41) // 13 + 20 + 5 + 1 + 1 + 1 = 41
+    expect(counts.totalLinesCount).toBe(41)
   })
 })
 
@@ -506,11 +583,17 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     row2[1] = 'FATURA PAGA'
     row2[30] = 3
 
-    // Row 3: Outros Motivos with quantity 2 in column AE
+    // Row 3: Outros Motivos with quantity 2 in column AE (exact match "OUTROS MOTIVOS")
     const row3 = Array(35).fill('')
     row3[0] = 'LOJA CENTRO'
-    row3[1] = 'OUTRO MOTIVO QUALQUER'
+    row3[1] = 'OUTROS MOTIVOS'
     row3[30] = 2
+
+    // Row 3b: Unknown row that should be ignored silently without incrementing totalRows or status
+    const row3b = Array(35).fill('')
+    row3b[0] = 'LOJA CENTRO'
+    row3b[1] = 'TEXTO DESCONHECIDO SEM MATCH'
+    row3b[30] = 99
 
     // Row 4: Sem Contato with quantity 5 in column AE
     const row4 = Array(35).fill('')
@@ -524,7 +607,7 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     row5[1] = 'PROMESSA DE PAGTO'
     // no index 30 set
 
-    const ws = XLSX.utils.aoa_to_sheet([headerRow, row1, row2, row3, row4, row5])
+    const ws = XLSX.utils.aoa_to_sheet([headerRow, row1, row2, row3, row3b, row4, row5])
     const counts = parseWorksheet(ws, 'Móvel', 'movel')
 
     expect(counts.envio_fatura).toBe(4)
@@ -532,7 +615,7 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     expect(counts.outros).toBe(2)
     expect(counts.sem_contato).toBe(5)
     expect(counts.promessa_pagto).toBe(1)
-    expect(counts.totalRows).toBe(15) // 4 + 3 + 2 + 5 + 1
+    expect(counts.totalRows).toBe(15) // 4 + 3 + 2 + 5 + 1 (row3b is skipped completely)
     expect(counts.totalLinesCount).toBe(5)
   })
 
@@ -553,7 +636,7 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     // Row 2: Cancelados with quantity 7 in column AW
     const row2 = Array(55).fill('')
     row2[0] = 'LOJA NORTE'
-    row2[1] = 'PEDIDO CANCELADO'
+    row2[1] = 'CANCELADO'
     row2[48] = '7'
 
     // Row 3: Contato Realizado with quantity 8 in column AW

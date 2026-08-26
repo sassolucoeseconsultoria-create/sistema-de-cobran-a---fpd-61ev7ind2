@@ -293,6 +293,84 @@ export const EXACT_NAO_TRATADOS = new Set([
   'aguardando',
 ])
 
+export const EXACT_OUTROS = new Set([
+  'outros motivos',
+  'outros',
+  'outro motivo',
+  'outro',
+  'demais motivos',
+  'demais',
+])
+
+// First cell structural headers
+export const HEADER_FIRST_CELL_KEYWORDS = new Set([
+  'status',
+  'motivo',
+  'cliente',
+  'loja',
+  'data',
+  'acoes',
+  'cpf',
+  'cnpj',
+  'contrato',
+  'plano',
+  'vencimento',
+  'observacao',
+  'protocolo',
+  'operador',
+  'consultor',
+  'regional',
+  'ddd',
+  'telefone',
+  'numero',
+  'segmento',
+  'data acao',
+  'coordenacao',
+  'supervisao',
+  'substatus',
+  'historico',
+  'atraso',
+])
+
+// Second cell structural headers to confirm a genuine header row
+export const HEADER_SECOND_CELL_KEYWORDS = new Set([
+  'nome',
+  'endereco',
+  'cidade',
+  'uf',
+  'bairro',
+  'cep',
+  'email',
+  'contato',
+  'celular',
+  'status',
+  'motivo',
+  'cliente',
+  'loja',
+  'data',
+  'acoes',
+  'cpf',
+  'cnpj',
+  'contrato',
+  'plano',
+  'vencimento',
+  'observacao',
+  'protocolo',
+  'operador',
+  'consultor',
+  'regional',
+  'ddd',
+  'telefone',
+  'numero',
+  'segmento',
+  'data acao',
+  'coordenacao',
+  'supervisao',
+  'substatus',
+  'historico',
+  'atraso',
+])
+
 /**
  * Classify a row using EXCLUSIVELY exact match per individual cell against allowed variations.
  * Priority order (top to bottom, first match wins):
@@ -305,9 +383,14 @@ export const EXACT_NAO_TRATADOS = new Set([
  * 6. Pendente (key 'pendente') - coluna J do consolidado
  * 7. Contato Realizado (key 'contato_realizado') - coluna K do consolidado
  * 8. Não Tratados (key 'nao_tratados') - coluna M do consolidado
- * 9. Outros Motivos (key 'outros') - coluna L do consolidado (FALLBACK)
+ * 9. Outros Motivos (key 'outros') - coluna L do consolidado (EXACT MATCH ONLY)
+ *
+ * Returns null if no status matches. Unmatched rows are ignored silently.
  */
-export function classifyRow(input: string | string[], explicitCells?: string[]): FpdStatusKey {
+export function classifyRow(
+  input: string | string[],
+  explicitCells?: string[],
+): FpdStatusKey | null {
   // Support both classifyRow(cells) and classifyRow(rowText, cells) or classifyRow(singleCellString)
   let cells: string[]
   if (Array.isArray(input)) {
@@ -360,8 +443,13 @@ export function classifyRow(input: string | string[], explicitCells?: string[]):
     return 'nao_tratados'
   }
 
-  // 9. Outros Motivos (FALLBACK)
-  return 'outros'
+  // 9. Outros Motivos (EXACT MATCH ONLY)
+  if (cells.some((cell) => EXACT_OUTROS.has(cell))) {
+    return 'outros'
+  }
+
+  // No match -> ignore row silently
+  return null
 }
 
 /**
@@ -372,7 +460,7 @@ export function isHeaderOrTotalRow(rowValues: unknown[]): boolean {
   const normalizedCells = rowValues.map(normalizeText).filter(Boolean)
   if (normalizedCells.length === 0) return true // empty row
 
-  // 1. Total / Summary rows detection
+  // 1. Total / Summary rows detection (first cell = 'total', 'totais', 'total geral', 'resumo')
   const firstCell = normalizedCells[0] || ''
   const isPureTotalRow =
     firstCell === 'total' ||
@@ -382,54 +470,22 @@ export function isHeaderOrTotalRow(rowValues: unknown[]): boolean {
     firstCell.startsWith('total ') ||
     firstCell.startsWith('totais ') ||
     (normalizedCells.length === 1 &&
-      (firstCell === 'total' || firstCell === 'totais' || firstCell === 'total geral'))
+      (firstCell === 'total' ||
+        firstCell === 'totais' ||
+        firstCell === 'total geral' ||
+        firstCell === 'resumo'))
 
   if (isPureTotalRow) {
     return true
   }
 
   // 2. Structural header detection:
-  const headerKeywords = [
-    'status',
-    'motivo',
-    'cliente',
-    'loja',
-    'coordenacao',
-    'supervisao',
-    'telefone',
-    'cpf',
-    'cnpj',
-    'contrato',
-    'plano',
-    'vencimento',
-    'atraso',
-    'historico',
-    'observacao',
-    'protocolo',
-    'operador',
-    'consultor',
-    'regional',
-    'ddd',
-    'numero',
-    'segmento',
-    'data acao',
-    'substatus',
-  ]
-
-  let exactMatchesCount = 0
-  for (const kw of headerKeywords) {
-    if (
-      normalizedCells.some(
-        (c) => c === kw || c.startsWith(`${kw} `) || c.endsWith(` ${kw}`) || c.includes(` ${kw} `),
-      )
-    ) {
-      exactMatchesCount++
+  // Must have a structural first cell AND a second cell that is also a recognized header keyword.
+  if (normalizedCells.length >= 2) {
+    const secondCell = normalizedCells[1] || ''
+    if (HEADER_FIRST_CELL_KEYWORDS.has(firstCell) && HEADER_SECOND_CELL_KEYWORDS.has(secondCell)) {
+      return true
     }
-  }
-
-  // If at least 2 distinct standard structural header column names match as cell titles
-  if (exactMatchesCount >= 2) {
-    return true
   }
 
   return false
@@ -529,10 +585,16 @@ export function parseWorksheet(
 
     const normalizedCells = row.map(normalizeText)
     const category = classifyRow(normalizedCells)
-    const qty = Math.round(extractRowQuantity(row, qtyColIndex))
+    if (!category) {
+      // Row didn't match any known status -> skip/ignore silently
+      continue
+    }
 
-    counts[category] = Math.round((counts[category] || 0) + (Number.isFinite(qty) ? qty : 1))
-    counts.totalRows = Math.round((counts.totalRows || 0) + (Number.isFinite(qty) ? qty : 1))
+    const qty = Math.round(extractRowQuantity(row, qtyColIndex))
+    const validQty = Number.isFinite(qty) && qty > 0 ? qty : 1
+
+    counts[category] = Math.round((counts[category] || 0) + validQty)
+    counts.totalRows = Math.round((counts.totalRows || 0) + validQty)
     if (counts.totalLinesCount !== undefined) {
       counts.totalLinesCount++
     }
