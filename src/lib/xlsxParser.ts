@@ -112,7 +112,7 @@ export function guessReferenteDate(filename: string): string {
  * 9. NÃO TRATADOS (key 'nao_tratados') - ONLY for explicit untargeted / unprocessed rows
  * 10. OUTROS MOTIVOS (key 'outros') - Default fallback for other genuine statuses / reasons
  */
-export function classifyRow(rowNormalizedText: string): FpdStatusKey {
+export function classifyRow(rowNormalizedText: string, normalizedCells?: string[]): FpdStatusKey {
   // --- 1. ENVIADO FATURA(S) vs ENVIA FATURA(S) ---
   const isEnviadoFatura =
     rowNormalizedText.includes('enviado fatura') ||
@@ -198,6 +198,7 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
   }
 
   // --- 2. PROMESSA DE PAGTO. (key: promessa_pagto) ---
+  // Check individual cells for exact match (NOT the joined row text)
   const exactPromessaOptions = new Set([
     'promessa de pagto.',
     'promessa de pagto',
@@ -207,11 +208,23 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     'promessa pagamento',
   ])
 
-  const isStrictPromessaPagto =
-    exactPromessaOptions.has(rowNormalizedText) ||
-    /^promessa\s+de\s+pag(to|amento)\.?$/i.test(rowNormalizedText)
+  if (normalizedCells && normalizedCells.some((cell) => exactPromessaOptions.has(cell))) {
+    return 'promessa_pagto'
+  }
 
-  if (isStrictPromessaPagto) {
+  // Also check via regex on individual cells (without ^ and $ anchors)
+  if (
+    normalizedCells &&
+    normalizedCells.some((cell) => /\bpromessa\s+de\s+pag(to|amento)\.?\b/i.test(cell))
+  ) {
+    return 'promessa_pagto'
+  }
+
+  // Fallback: check joined text with includes (looser, for rows where promessa text is split across cells)
+  if (
+    rowNormalizedText.includes('promessa de pagto') ||
+    rowNormalizedText.includes('promessa de pagamento')
+  ) {
     return 'promessa_pagto'
   }
 
@@ -579,10 +592,11 @@ export function parseWorksheet(
     }
 
     // Join row cells into a normalized search string for classification
-    const rowText = row.map(normalizeText).join(' ')
+    const normalizedCells = row.map(normalizeText)
+    const rowText = normalizedCells.join(' ')
     if (!rowText.trim()) continue
 
-    const category = classifyRow(rowText)
+    const category = classifyRow(rowText, normalizedCells)
     const qty = Math.round(extractRowQuantity(row, qtyColIndex))
 
     counts[category] = Math.round((counts[category] || 0) + (Number.isFinite(qty) ? qty : 1))

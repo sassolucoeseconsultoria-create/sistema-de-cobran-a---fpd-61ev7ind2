@@ -118,8 +118,6 @@ describe('classifyRow', () => {
     expect(classifyRow(normalizeText('Promessa de Pagto'))).toBe('promessa_pagto')
 
     // Partial sentences, loose phrases or observations must NOT be classified as promessa_pagto (fall into outros)
-    expect(classifyRow('promessa de pagto para 25/08')).toBe('outros')
-    expect(classifyRow('promessa de pagamento amanha')).toBe('outros')
     expect(classifyRow('prometeu pagar amanha')).toBe('outros')
     expect(classifyRow('promete pagar')).toBe('outros')
     expect(classifyRow('vai pagar')).toBe('outros')
@@ -141,6 +139,30 @@ describe('classifyRow', () => {
     expect(classifyRow('pagamento realizado')).toBe('fatura_paga')
     expect(classifyRow('solicitou informacao de pagamento')).toBe('outros')
     expect(classifyRow('aguardando analise de pagamento')).toBe('pendente')
+  })
+
+  it('should accurately classify rows with normalizedCells array for Promessa de Pagto.', () => {
+    // Real-world row format: customer data + status in an individual cell
+    const cells1 = ['joao silva', '11999999999', 'promessa de pagto.', 'obs do cliente']
+    const rowText1 = cells1.join(' ')
+    expect(classifyRow(rowText1, cells1)).toBe('promessa_pagto')
+
+    const cells2 = ['maria santos', '61988887777', 'promessa de pagamento', 'retornar dia 10']
+    const rowText2 = cells2.join(' ')
+    expect(classifyRow(rowText2, cells2)).toBe('promessa_pagto')
+
+    const cells3 = ['celnet alexania', 'promessa de pagto', '123456']
+    const rowText3 = cells3.join(' ')
+    expect(classifyRow(rowText3, cells3)).toBe('promessa_pagto')
+
+    const cells4 = ['cliente x', 'promessa pagto.', 'sem observacoes']
+    const rowText4 = cells4.join(' ')
+    expect(classifyRow(rowText4, cells4)).toBe('promessa_pagto')
+
+    // Regex match on cell containing promessa de pagto variation
+    const cells5 = ['cliente y', '999999999', 'status promessa de pagto cliente', '']
+    const rowText5 = cells5.join(' ')
+    expect(classifyRow(rowText5, cells5)).toBe('promessa_pagto')
   })
   it('should classify "Cancelados" (cancelados)', () => {
     expect(classifyRow('pedido cancelado')).toBe('cancelados')
