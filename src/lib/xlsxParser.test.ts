@@ -524,4 +524,35 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     expect(counts.totalRows).toBe(25) // 10 + 7 + 8
     expect(counts.totalLinesCount).toBe(3)
   })
+
+  it('should verify FPD_STATUSES order matches exact 9 status specification from E to M', async () => {
+    const { FPD_STATUSES } = await import('@/types/fpd')
+    const expectedKeys = [
+      'fatura_paga',
+      'envio_fatura',
+      'promessa_pagto',
+      'sem_contato',
+      'cancelados',
+      'pendente',
+      'contato_realizado',
+      'outros',
+      'nao_tratados',
+    ]
+
+    const expectedLabels = [
+      'Fatura(s) Paga(s)',
+      'Enviado Fatura(s)',
+      'Promessa de Pagto.',
+      'Sem Contato',
+      'Cancelados',
+      'Pendente',
+      'Contato Realizado',
+      'Outros Motivos',
+      'Não Tratados',
+    ]
+
+    expect(FPD_STATUSES.map((s) => s.key)).toEqual(expectedKeys)
+    expect(FPD_STATUSES.map((s) => s.label)).toEqual(expectedLabels)
+    expect(FPD_STATUSES).toHaveLength(9)
+  })
 })

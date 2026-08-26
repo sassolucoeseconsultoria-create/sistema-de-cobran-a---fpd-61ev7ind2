@@ -882,41 +882,41 @@ export const Index: React.FC = () => {
                 <td className="px-3 py-3 text-right text-white tabular-nums border-r border-[#1e456f] bg-[#0E2A47]">
                   {animatedTotalLinhas.toLocaleString('pt-BR')}
                 </td>
-                {/* E: Enviado Fatura(s) */}
-                <td className="px-2.5 py-3 text-right text-[#4ade80] tabular-nums border-r border-[#1e456f]">
-                  {animatedEnvioFatura.toLocaleString('pt-BR')}
-                </td>
-                {/* F: Pendente */}
-                <td className="px-2.5 py-3 text-right text-[#93c5fd] tabular-nums border-r border-[#1e456f]">
-                  {animatedPendente.toLocaleString('pt-BR')}
-                </td>
-                {/* G: Fatura(s) Paga(s) */}
+                {/* E: 1. Fatura(s) Paga(s) */}
                 <td className="px-2.5 py-3 text-right text-[#67e8f9] tabular-nums border-r border-[#1e456f]">
                   {animatedFaturaPaga.toLocaleString('pt-BR')}
                 </td>
-                {/* H: Sem Contato */}
-                <td className="px-2.5 py-3 text-right text-[#cbd5e1] tabular-nums border-r border-[#1e456f]">
-                  {animatedSemContato.toLocaleString('pt-BR')}
+                {/* F: 2. Enviado Fatura(s) */}
+                <td className="px-2.5 py-3 text-right text-[#4ade80] tabular-nums border-r border-[#1e456f]">
+                  {animatedEnvioFatura.toLocaleString('pt-BR')}
                 </td>
-                {/* I: Promessa de Pagto. */}
+                {/* G: 3. Promessa de Pagto. */}
                 <td className="px-2.5 py-3 text-right text-[#d8b4fe] tabular-nums border-r border-[#1e456f]">
                   {animatedPromessaPagto.toLocaleString('pt-BR')}
                 </td>
-                {/* J: Cancelados */}
+                {/* H: 4. Sem Contato */}
+                <td className="px-2.5 py-3 text-right text-[#cbd5e1] tabular-nums border-r border-[#1e456f]">
+                  {animatedSemContato.toLocaleString('pt-BR')}
+                </td>
+                {/* I: 5. Cancelados */}
                 <td className="px-2.5 py-3 text-right text-[#fca5a5] tabular-nums border-r border-[#1e456f]">
                   {animatedCancelados.toLocaleString('pt-BR')}
                 </td>
-                {/* K: Não Tratados */}
-                <td className="px-2.5 py-3 text-right text-[#fdba74] tabular-nums border-r border-[#1e456f]">
-                  {animatedNaoTratados.toLocaleString('pt-BR')}
+                {/* J: 6. Pendente */}
+                <td className="px-2.5 py-3 text-right text-[#93c5fd] tabular-nums border-r border-[#1e456f]">
+                  {animatedPendente.toLocaleString('pt-BR')}
                 </td>
-                {/* L: Contato Realizado */}
+                {/* K: 7. Contato Realizado */}
                 <td className="px-2.5 py-3 text-right text-[#5eead4] tabular-nums border-r border-[#1e456f]">
                   {animatedContatoRealizado.toLocaleString('pt-BR')}
                 </td>
-                {/* M: Outros Motivos */}
+                {/* L: 8. Outros Motivos */}
                 <td className="px-2.5 py-3 text-right text-[#c4b5fd] tabular-nums border-r border-[#1e456f]">
                   {animatedOutros.toLocaleString('pt-BR')}
+                </td>
+                {/* M: 9. Não Tratados */}
+                <td className="px-2.5 py-3 text-right text-[#fdba74] tabular-nums border-r border-[#1e456f]">
+                  {animatedNaoTratados.toLocaleString('pt-BR')}
                 </td>
                 {/* N */}
                 <td className="px-3 py-3"></td>

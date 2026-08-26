@@ -312,9 +312,9 @@ export const Importar: React.FC = () => {
           <div className="p-3 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] space-y-1">
             <span className="font-bold text-[#12365A] block">2. Classificação Automática</span>
             <p>
-              As ocorrências são agrupadas nos status do consolidado: Enviado Fatura(s), Pendente,
-              Fatura(s) Paga(s), Sem Contato, Promessa de Pagto., Cancelados, Não Tratados, Contato
-              Realizado e Outros Motivos.
+              As ocorrências são agrupadas nos status do consolidado: Fatura(s) Paga(s), Enviado
+              Fatura(s), Promessa de Pagto., Sem Contato, Cancelados, Pendente, Contato Realizado,
+              Outros Motivos e Não Tratados.
             </p>
           </div>
           <div className="p-3 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] space-y-1">
@@ -496,12 +496,28 @@ export const Importar: React.FC = () => {
                               ocorrências
                             </span>
                             <span>•</span>
+                            <span className="text-[#0891B2] font-medium">
+                              Pagas: {item.parsedData.aggregated.fatura_paga}
+                            </span>
+                            <span>•</span>
                             <span className="text-[#16A34A] font-medium">
                               Enviado: {item.parsedData.aggregated.envio_fatura}
                             </span>
                             <span>•</span>
-                            <span className="text-[#0891B2] font-medium">
-                              Pagas: {item.parsedData.aggregated.fatura_paga}
+                            <span className="text-[#9333EA] font-medium">
+                              Promessa: {item.parsedData.aggregated.promessa_pagto}
+                            </span>
+                            <span>•</span>
+                            <span className="text-[#64748B] font-medium">
+                              Sem Contato: {item.parsedData.aggregated.sem_contato}
+                            </span>
+                            <span>•</span>
+                            <span className="text-[#DC2626] font-medium">
+                              Cancelados: {item.parsedData.aggregated.cancelados}
+                            </span>
+                            <span>•</span>
+                            <span className="text-[#2563EB] font-medium">
+                              Pendente: {item.parsedData.aggregated.pendente}
                             </span>
                             <span>•</span>
                             <span className="text-[#0D9488] font-medium">
@@ -510,6 +526,10 @@ export const Importar: React.FC = () => {
                             <span>•</span>
                             <span className="text-[#8B5CF6] font-medium">
                               Outros: {item.parsedData.aggregated.outros}
+                            </span>
+                            <span>•</span>
+                            <span className="text-[#EA580C] font-medium">
+                              Não Tratados: {item.parsedData.aggregated.nao_tratados}
                             </span>
                           </div>
                         )}

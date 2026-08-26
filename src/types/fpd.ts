@@ -60,15 +60,15 @@ export interface ConsolidatedRow {
   referente?: string
   importadoEm?: string
   totalLinhas: number
-  envioFatura: number
-  pendente: number
   faturaPaga: number
-  semContato: number
+  envioFatura: number
   promessaPagto: number
+  semContato: number
   cancelados: number
-  naoTratados: number
+  pendente: number
   contatoRealizado: number
   outros: number
+  naoTratados: number
 }
 
 export const DEFAULT_CONSOLIDATED_ROW: Omit<ConsolidatedRow, 'storeId' | 'storeName'> = {
@@ -77,27 +77,27 @@ export const DEFAULT_CONSOLIDATED_ROW: Omit<ConsolidatedRow, 'storeId' | 'storeN
   observacao: '',
   hasData: false,
   totalLinhas: 0,
-  envioFatura: 0,
-  pendente: 0,
   faturaPaga: 0,
-  semContato: 0,
+  envioFatura: 0,
   promessaPagto: 0,
+  semContato: 0,
   cancelados: 0,
-  naoTratados: 0,
+  pendente: 0,
   contatoRealizado: 0,
   outros: 0,
+  naoTratados: 0,
 }
 
 export type FpdStatusKey =
-  | 'envio_fatura'
-  | 'pendente'
   | 'fatura_paga'
-  | 'sem_contato'
+  | 'envio_fatura'
   | 'promessa_pagto'
+  | 'sem_contato'
   | 'cancelados'
-  | 'nao_tratados'
+  | 'pendente'
   | 'contato_realizado'
   | 'outros'
+  | 'nao_tratados'
 
 export interface FpdStatusConfig {
   key: FpdStatusKey
@@ -111,22 +111,6 @@ export interface FpdStatusConfig {
 
 export const FPD_STATUSES: FpdStatusConfig[] = [
   {
-    key: 'envio_fatura',
-    label: 'Enviado Fatura(s)',
-    color: '#16A34A',
-    textColor: '#15803D',
-    bgTint: 'rgba(22, 163, 74, 0.08)',
-    borderTint: 'rgba(22, 163, 74, 0.25)',
-  },
-  {
-    key: 'pendente',
-    label: 'Pendente',
-    color: '#2563EB',
-    textColor: '#1D4ED8',
-    bgTint: 'rgba(37, 99, 235, 0.08)',
-    borderTint: 'rgba(37, 99, 235, 0.25)',
-  },
-  {
     key: 'fatura_paga',
     label: 'Fatura(s) Paga(s)',
     color: '#0891B2',
@@ -135,12 +119,12 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
     borderTint: 'rgba(8, 145, 178, 0.25)',
   },
   {
-    key: 'sem_contato',
-    label: 'Sem Contato',
-    color: '#64748B',
-    textColor: '#475569',
-    bgTint: 'rgba(100, 116, 139, 0.08)',
-    borderTint: 'rgba(100, 116, 139, 0.25)',
+    key: 'envio_fatura',
+    label: 'Enviado Fatura(s)',
+    color: '#16A34A',
+    textColor: '#15803D',
+    bgTint: 'rgba(22, 163, 74, 0.08)',
+    borderTint: 'rgba(22, 163, 74, 0.25)',
   },
   {
     key: 'promessa_pagto',
@@ -151,6 +135,14 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
     borderTint: 'rgba(147, 51, 234, 0.25)',
   },
   {
+    key: 'sem_contato',
+    label: 'Sem Contato',
+    color: '#64748B',
+    textColor: '#475569',
+    bgTint: 'rgba(100, 116, 139, 0.08)',
+    borderTint: 'rgba(100, 116, 139, 0.25)',
+  },
+  {
     key: 'cancelados',
     label: 'Cancelados',
     color: '#DC2626',
@@ -159,12 +151,12 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
     borderTint: 'rgba(220, 38, 38, 0.25)',
   },
   {
-    key: 'nao_tratados',
-    label: 'Não Tratados',
-    color: '#EA580C',
-    textColor: '#C2410C',
-    bgTint: 'rgba(234, 88, 12, 0.08)',
-    borderTint: 'rgba(234, 88, 12, 0.25)',
+    key: 'pendente',
+    label: 'Pendente',
+    color: '#2563EB',
+    textColor: '#1D4ED8',
+    bgTint: 'rgba(37, 99, 235, 0.08)',
+    borderTint: 'rgba(37, 99, 235, 0.25)',
   },
   {
     key: 'contato_realizado',
@@ -181,5 +173,13 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
     textColor: '#7C3AED',
     bgTint: 'rgba(139, 92, 246, 0.08)',
     borderTint: 'rgba(139, 92, 246, 0.25)',
+  },
+  {
+    key: 'nao_tratados',
+    label: 'Não Tratados',
+    color: '#EA580C',
+    textColor: '#C2410C',
+    bgTint: 'rgba(234, 88, 12, 0.08)',
+    borderTint: 'rgba(234, 88, 12, 0.25)',
   },
 ]

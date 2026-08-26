@@ -5,15 +5,15 @@ export function exportConsolidatedToXlsx(
   rows: ConsolidatedRow[],
   totals: {
     totalLinhas: number
-    envioFatura: number
-    pendente: number
     faturaPaga: number
-    semContato: number
+    envioFatura: number
     promessaPagto: number
+    semContato: number
     cancelados: number
-    naoTratados: number
+    pendente: number
     contatoRealizado: number
     outros: number
+    naoTratados: number
   },
   referenteLabel?: string,
 ) {
@@ -23,15 +23,15 @@ export function exportConsolidatedToXlsx(
     'COORDENAÇÃO',
     'SUPERVISÃO',
     'TOTAL LINHAS',
-    'Enviado Fatura(s)',
-    'Pendente',
     'Fatura(s) Paga(s)',
-    'Sem Contato',
+    'Enviado Fatura(s)',
     'Promessa de Pagto.',
+    'Sem Contato',
     'Cancelados',
-    'Não Tratados',
+    'Pendente',
     'Contato Realizado',
     'Outros Motivos',
+    'Não Tratados',
     'OBSERVAÇÃO',
   ]
 
@@ -40,15 +40,15 @@ export function exportConsolidatedToXlsx(
     r.coordenacao || '',
     r.supervisao || '',
     r.hasData ? r.totalLinhas : '',
-    r.hasData ? r.envioFatura : '',
-    r.hasData ? r.pendente : '',
     r.hasData ? r.faturaPaga : '',
-    r.hasData ? r.semContato : '',
+    r.hasData ? r.envioFatura : '',
     r.hasData ? r.promessaPagto : '',
+    r.hasData ? r.semContato : '',
     r.hasData ? r.cancelados : '',
-    r.hasData ? r.naoTratados : '',
+    r.hasData ? r.pendente : '',
     r.hasData ? r.contatoRealizado : '',
     r.hasData ? r.outros : '',
+    r.hasData ? r.naoTratados : '',
     r.observacao || '',
   ])
 
@@ -58,15 +58,15 @@ export function exportConsolidatedToXlsx(
     '',
     '',
     totals.totalLinhas,
-    totals.envioFatura,
-    totals.pendente,
     totals.faturaPaga,
-    totals.semContato,
+    totals.envioFatura,
     totals.promessaPagto,
+    totals.semContato,
     totals.cancelados,
-    totals.naoTratados,
+    totals.pendente,
     totals.contatoRealizado,
     totals.outros,
+    totals.naoTratados,
     '',
   ]
 
@@ -80,15 +80,15 @@ export function exportConsolidatedToXlsx(
     { wch: 18 }, // COORDENACAO
     { wch: 18 }, // SUPERVISAO
     { wch: 15 }, // TOTAL LINHAS
-    { wch: 20 }, // Enviado Fatura(s)
-    { wch: 15 }, // Pendente
     { wch: 18 }, // Fatura(s) Paga(s)
-    { wch: 16 }, // Sem Contato
+    { wch: 20 }, // Enviado Fatura(s)
     { wch: 20 }, // Promessa de Pagto.
+    { wch: 16 }, // Sem Contato
     { wch: 15 }, // Cancelados
-    { wch: 16 }, // Não Tratados
+    { wch: 15 }, // Pendente
     { wch: 18 }, // Contato Realizado
     { wch: 18 }, // Outros Motivos
+    { wch: 16 }, // Não Tratados
     { wch: 30 }, // OBSERVACAO
   ]
 
@@ -107,15 +107,15 @@ export function exportImportedFilesToXlsx(
   files: ImportedFileRecord[],
   totals?: {
     totalLinhas: number
-    envioFatura: number
-    pendente: number
     faturaPaga: number
-    semContato: number
+    envioFatura: number
     promessaPagto: number
+    semContato: number
     cancelados: number
-    naoTratados: number
+    pendente: number
     contatoRealizado: number
     outros: number
+    naoTratados: number
   },
 ) {
   const headers = [
@@ -124,15 +124,15 @@ export function exportImportedFilesToXlsx(
     'NOME DO ARQUIVO',
     'DATA REF.',
     'TOTAL LINHAS',
-    'Enviado Fatura(s)',
-    'Pendente',
     'Fatura(s) Paga(s)',
-    'Sem Contato',
+    'Enviado Fatura(s)',
     'Promessa de Pagto.',
+    'Sem Contato',
     'Cancelados',
-    'Não Tratados',
+    'Pendente',
     'Contato Realizado',
     'Outros Motivos',
+    'Não Tratados',
   ]
 
   const dataRows = files.map((f) => {
@@ -147,15 +147,15 @@ export function exportImportedFilesToXlsx(
       f.file_name,
       f.reference_date || '',
       f.total_linhas || 0,
-      enviado,
-      f.pendente || 0,
       f.fatura_paga || 0,
-      f.sem_contato || 0,
+      enviado,
       f.promessa_pagto || 0,
+      f.sem_contato || 0,
       f.cancelados || 0,
-      f.nao_tratados || 0,
+      f.pendente || 0,
       f.contato_realizado || 0,
       f.outros || 0,
+      f.nao_tratados || 0,
     ]
   })
 
@@ -168,15 +168,15 @@ export function exportImportedFilesToXlsx(
       '',
       '',
       totals.totalLinhas,
-      totals.envioFatura,
-      totals.pendente,
       totals.faturaPaga,
-      totals.semContato,
+      totals.envioFatura,
       totals.promessaPagto,
+      totals.semContato,
       totals.cancelados,
-      totals.naoTratados,
+      totals.pendente,
       totals.contatoRealizado,
       totals.outros,
+      totals.naoTratados,
     ]
     wsData = [...wsData, totalsRow]
   }
@@ -189,15 +189,15 @@ export function exportImportedFilesToXlsx(
     { wch: 35 }, // NOME DO ARQUIVO
     { wch: 15 }, // DATA REF
     { wch: 15 }, // TOTAL LINHAS
-    { wch: 20 }, // Enviado Fatura(s)
-    { wch: 15 }, // Pendente
     { wch: 18 }, // Fatura(s) Paga(s)
-    { wch: 16 }, // Sem Contato
+    { wch: 20 }, // Enviado Fatura(s)
     { wch: 20 }, // Promessa de Pagto.
+    { wch: 16 }, // Sem Contato
     { wch: 15 }, // Cancelados
-    { wch: 16 }, // Não Tratados
+    { wch: 15 }, // Pendente
     { wch: 18 }, // Contato Realizado
     { wch: 18 }, // Outros Motivos
+    { wch: 16 }, // Não Tratados
   ]
 
   const wb = XLSX.utils.book_new()

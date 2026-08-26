@@ -469,7 +469,6 @@ export const Arquivos: React.FC = () => {
                 <th className="px-3 py-3.5 text-right min-w-[80px]">AÇÕES</th>
               </tr>
             </thead>
-
             {/* Body */}
             <tbody className="divide-y divide-[#E3E9F2]">
               {loading ? (
@@ -603,7 +602,6 @@ export const Arquivos: React.FC = () => {
                 })
               )}
             </tbody>
-
             {/* Totals Row (Pinned Footer) */}
             <tfoot className="sticky bottom-0 z-20 bg-[#12365A] text-white font-bold text-[13px] shadow-lg border-t-2 border-[#0E9F8A]">
               <tr>
@@ -622,37 +620,46 @@ export const Arquivos: React.FC = () => {
                   {totals.totalLinhas.toLocaleString('pt-BR')}
                 </th>
                 {/* Status totals */}
-                <td className="px-2.5 py-3 text-right text-[#4ade80] tabular-nums border-r border-[#1e456f]">
-                  {totals.envioFatura.toLocaleString('pt-BR')}
-                </td>
-                <td className="px-2.5 py-3 text-right text-[#93c5fd] tabular-nums border-r border-[#1e456f]">
-                  {totals.pendente.toLocaleString('pt-BR')}
-                </td>
+                {/* 1. Fatura(s) Paga(s) */}
                 <td className="px-2.5 py-3 text-right text-[#67e8f9] tabular-nums border-r border-[#1e456f]">
                   {totals.faturaPaga.toLocaleString('pt-BR')}
                 </td>
-                <td className="px-2.5 py-3 text-right text-[#cbd5e1] tabular-nums border-r border-[#1e456f]">
-                  {totals.semContato.toLocaleString('pt-BR')}
-                </td>{' '}
+                {/* 2. Enviado Fatura(s) */}
+                <td className="px-2.5 py-3 text-right text-[#4ade80] tabular-nums border-r border-[#1e456f]">
+                  {totals.envioFatura.toLocaleString('pt-BR')}
+                </td>
+                {/* 3. Promessa de Pagto. */}
                 <td className="px-2.5 py-3 text-right text-[#d8b4fe] tabular-nums border-r border-[#1e456f]">
                   {totals.promessaPagto.toLocaleString('pt-BR')}
                 </td>
+                {/* 4. Sem Contato */}
+                <td className="px-2.5 py-3 text-right text-[#cbd5e1] tabular-nums border-r border-[#1e456f]">
+                  {totals.semContato.toLocaleString('pt-BR')}
+                </td>
+                {/* 5. Cancelados */}
                 <td className="px-2.5 py-3 text-right text-[#fca5a5] tabular-nums border-r border-[#1e456f]">
                   {totals.cancelados.toLocaleString('pt-BR')}
                 </td>
-                <td className="px-2.5 py-3 text-right text-[#fdba74] tabular-nums border-r border-[#1e456f]">
-                  {totals.naoTratados.toLocaleString('pt-BR')}
+                {/* 6. Pendente */}
+                <td className="px-2.5 py-3 text-right text-[#93c5fd] tabular-nums border-r border-[#1e456f]">
+                  {totals.pendente.toLocaleString('pt-BR')}
                 </td>
+                {/* 7. Contato Realizado */}
                 <td className="px-2.5 py-3 text-right text-[#5eead4] tabular-nums border-r border-[#1e456f]">
                   {totals.contatoRealizado.toLocaleString('pt-BR')}
                 </td>
+                {/* 8. Outros Motivos */}
                 <td className="px-2.5 py-3 text-right text-[#c4b5fd] tabular-nums border-r border-[#1e456f]">
                   {totals.outros.toLocaleString('pt-BR')}
+                </td>
+                {/* 9. Não Tratados */}
+                <td className="px-2.5 py-3 text-right text-[#fdba74] tabular-nums border-r border-[#1e456f]">
+                  {totals.naoTratados.toLocaleString('pt-BR')}
                 </td>
                 {/* 16 */}
                 <td className="px-3 py-3"></td>
               </tr>
-            </tfoot>
+            </tfoot>{' '}
           </table>
         </div>
       </div>

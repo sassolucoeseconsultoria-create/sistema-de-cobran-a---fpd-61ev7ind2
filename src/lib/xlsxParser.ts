@@ -97,17 +97,17 @@ export function guessReferenteDate(filename: string): string {
 }
 
 /**
- * Classify a row's normalized text into one of the FPD categories:
+ * Classify a row's normalized text into one of the FPD categories in exact consolidado order:
  *
- * 1. ENVIADO FATURA(S) (key 'envio_fatura')
- * 2. PENDENTE (key 'pendente')
- * 3. FATURA(S) PAGA(S) (key 'fatura_paga')
+ * 1. FATURA(S) PAGA(S) (key 'fatura_paga')
+ * 2. ENVIADO FATURA(S) (key 'envio_fatura')
+ * 3. PROMESSA DE PAGTO. (key 'promessa_pagto')
  * 4. SEM CONTATO (key 'sem_contato')
- * 5. PROMESSA DE PAGTO. (key 'promessa_pagto')
- * 6. CANCELADOS (key 'cancelados')
+ * 5. CANCELADOS (key 'cancelados')
+ * 6. PENDENTE (key 'pendente')
  * 7. CONTATO REALIZADO (key 'contato_realizado')
- * 8. NÃO TRATADOS (key 'nao_tratados') - ONLY for explicit untargeted / unprocessed rows
- * 9. OUTROS MOTIVOS (key 'outros') - Default fallback for other genuine statuses / reasons
+ * 8. OUTROS MOTIVOS (key 'outros') - Default fallback for other genuine statuses / reasons
+ * 9. NÃO TRATADOS (key 'nao_tratados') - ONLY for explicit untargeted / unprocessed rows
  */
 export function classifyRow(rowNormalizedText: string, normalizedCells?: string[]): FpdStatusKey {
   // --- 1. ENVIADO FATURA(S) ---

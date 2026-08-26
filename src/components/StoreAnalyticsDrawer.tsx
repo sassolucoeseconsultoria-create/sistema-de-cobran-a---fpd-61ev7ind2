@@ -42,7 +42,7 @@ function getStatusCount(
   key: string,
 ): number {
   if (!source) return 0
-  // In ConsolidatedRow, camelCase is used: envioFatura, pendente, faturaPaga, semContato, promessaPagto, cancelados, naoTratados, contatoRealizado, outros
+  // In ConsolidatedRow, camelCase is used: faturaPaga, envioFatura, promessaPagto, semContato, cancelados, pendente, contatoRealizado, outros, naoTratados
   const camelKey = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase()) as keyof ConsolidatedRow
   if (camelKey in source) {
     const val = (source as unknown as Record<string, unknown>)[camelKey]
