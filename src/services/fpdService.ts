@@ -75,6 +75,7 @@ export async function saveFpdRecord(data: {
   promessa_pagto: number
   cancelados: number
   nao_tratados: number
+  contato_realizado?: number
 }): Promise<FpdRecord> {
   // Check if a record already exists for this store + referente (if referente provided)
   let existingId: string | null = null
@@ -103,6 +104,7 @@ export async function saveFpdRecord(data: {
     promessa_pagto: data.promessa_pagto,
     cancelados: data.cancelados,
     nao_tratados: data.nao_tratados,
+    contato_realizado: data.contato_realizado ?? 0,
   }
 
   if (existingId) {

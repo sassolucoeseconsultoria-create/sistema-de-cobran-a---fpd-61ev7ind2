@@ -176,6 +176,7 @@ export const Index: React.FC = () => {
           promessaPagto: 0,
           cancelados: 0,
           naoTratados: 0,
+          contatoRealizado: 0,
         }
       }
 
@@ -198,6 +199,7 @@ export const Index: React.FC = () => {
         promessaPagto: latest.promessa_pagto || 0,
         cancelados: latest.cancelados || 0,
         naoTratados: latest.nao_tratados || 0,
+        contatoRealizado: latest.contato_realizado || 0,
       }
     })
   }, [stores, records])
@@ -257,6 +259,7 @@ export const Index: React.FC = () => {
         acc.promessaPagto += r.promessaPagto
         acc.cancelados += r.cancelados
         acc.naoTratados += r.naoTratados
+        acc.contatoRealizado += r.contatoRealizado
         return acc
       },
       {
@@ -269,6 +272,7 @@ export const Index: React.FC = () => {
         promessaPagto: 0,
         cancelados: 0,
         naoTratados: 0,
+        contatoRealizado: 0,
       },
     )
   }, [filteredRows])
@@ -283,6 +287,7 @@ export const Index: React.FC = () => {
   const animatedPromessaPagto = useCountUp(totals.promessaPagto)
   const animatedCancelados = useCountUp(totals.cancelados)
   const animatedNaoTratados = useCountUp(totals.naoTratados)
+  const animatedContatoRealizado = useCountUp(totals.contatoRealizado)
 
   // Latest Referente date
   const latestReferente = useMemo(() => {
@@ -716,7 +721,7 @@ export const Index: React.FC = () => {
           </div>
         </div>
 
-        {/* 13-Column Consolidated Table */}
+        {/* 14-Column Consolidated Table */}
         <div className="relative overflow-x-auto max-h-[70vh] border-b border-[#E3E9F2]">
           <table className="w-full text-left border-collapse text-[13px]">
             {/* Header */}
@@ -734,7 +739,7 @@ export const Index: React.FC = () => {
                 <th className="px-3 py-3.5 min-w-[110px] text-right border-r border-[#1e456f] bg-[#0E2A47]">
                   TOTAL LINHAS
                 </th>
-                {/* E–L Status Columns with Colored Chips */}
+                {/* E–M Status Columns with Colored Chips */}
                 {FPD_STATUSES.map((status) => (
                   <th
                     key={status.key}
@@ -748,7 +753,7 @@ export const Index: React.FC = () => {
                     </div>
                   </th>
                 ))}
-                {/* M - OBSERVAÇÃO */}
+                {/* N - OBSERVAÇÃO */}
                 <th className="px-3 py-3.5 min-w-[180px]">OBSERVAÇÃO</th>
               </tr>
             </thead>
@@ -757,7 +762,7 @@ export const Index: React.FC = () => {
             <tbody className="divide-y divide-[#E3E9F2]">
               {loading ? (
                 <tr>
-                  <td colSpan={13} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={14} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-6 h-6 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
                       <span>Carregando dados consolidados...</span>
@@ -766,7 +771,7 @@ export const Index: React.FC = () => {
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={14} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
                       <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
                       <p className="font-medium text-[#12233A]">Nenhuma loja encontrada</p>
@@ -828,7 +833,7 @@ export const Index: React.FC = () => {
                         )}
                       </td>
 
-                      {/* E–L: 8 Status columns with faint background tint */}
+                      {/* E–M: 9 Status columns with faint background tint */}
                       {FPD_STATUSES.map((status) => {
                         const val = row.hasData
                           ? (row[
@@ -860,7 +865,7 @@ export const Index: React.FC = () => {
                         )
                       })}
 
-                      {/* M: OBSERVAÇÃO */}
+                      {/* N: OBSERVAÇÃO */}
                       <td className="px-3 py-2.5 text-[#5B6B82] truncate max-w-[200px]">
                         {row.observacao ? (
                           <Tooltip>
@@ -928,7 +933,11 @@ export const Index: React.FC = () => {
                 <td className="px-2.5 py-3 text-right text-[#fdba74] tabular-nums border-r border-[#1e456f]">
                   {animatedNaoTratados.toLocaleString('pt-BR')}
                 </td>
-                {/* M */}
+                {/* M: Contato Realizado */}
+                <td className="px-2.5 py-3 text-right text-[#5eead4] tabular-nums border-r border-[#1e456f]">
+                  {animatedContatoRealizado.toLocaleString('pt-BR')}
+                </td>
+                {/* N */}
                 <td className="px-3 py-3"></td>
               </tr>
             </tfoot>

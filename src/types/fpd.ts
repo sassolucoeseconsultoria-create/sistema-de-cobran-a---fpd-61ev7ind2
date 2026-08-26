@@ -46,6 +46,24 @@ export interface ConsolidatedRow {
   promessaPagto: number
   cancelados: number
   naoTratados: number
+  contatoRealizado: number
+}
+
+export const DEFAULT_CONSOLIDATED_ROW: Omit<ConsolidatedRow, 'storeId' | 'storeName'> = {
+  coordenacao: '',
+  supervisao: '',
+  observacao: '',
+  hasData: false,
+  totalLinhas: 0,
+  envioFatura: 0,
+  pendente: 0,
+  faturaPaga: 0,
+  enviaFatura: 0,
+  semContato: 0,
+  promessaPagto: 0,
+  cancelados: 0,
+  naoTratados: 0,
+  contatoRealizado: 0,
 }
 
 export type FpdStatusKey =
@@ -57,6 +75,7 @@ export type FpdStatusKey =
   | 'promessa_pagto'
   | 'cancelados'
   | 'nao_tratados'
+  | 'contato_realizado'
 
 export interface FpdStatusConfig {
   key: FpdStatusKey
@@ -132,5 +151,13 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
     textColor: '#C2410C',
     bgTint: 'rgba(234, 88, 12, 0.08)',
     borderTint: 'rgba(234, 88, 12, 0.25)',
+  },
+  {
+    key: 'contato_realizado',
+    label: 'Contato Realizado',
+    color: '#0D9488',
+    textColor: '#0F766E',
+    bgTint: 'rgba(13, 148, 136, 0.08)',
+    borderTint: 'rgba(13, 148, 136, 0.25)',
   },
 ]

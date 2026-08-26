@@ -13,6 +13,7 @@ export interface ParsedSheetCounts {
   promessa_pagto: number
   cancelados: number
   nao_tratados: number
+  contato_realizado: number
 }
 
 export interface ParsedFileData {
@@ -35,6 +36,7 @@ export interface ParsedFileData {
     promessa_pagto: number
     cancelados: number
     nao_tratados: number
+    contato_realizado: number
   }
 }
 
@@ -309,7 +311,30 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     return 'pendente'
   }
 
-  // --- 7. NÃO TRATADOS (key: nao_tratados) ---
+  // --- 7. CONTATO REALIZADO (key: contato_realizado) ---
+  if (
+    rowNormalizedText.includes('contato realizado') ||
+    rowNormalizedText.includes('contato efetuado') ||
+    rowNormalizedText.includes('contato feito') ||
+    rowNormalizedText.includes('fez contato') ||
+    rowNormalizedText.includes('contactado') ||
+    rowNormalizedText.includes('contactada') ||
+    rowNormalizedText.includes('contatado') ||
+    rowNormalizedText.includes('contatada') ||
+    rowNormalizedText.includes('cliente atendido') ||
+    rowNormalizedText.includes('cliente atendida') ||
+    rowNormalizedText.includes('atendido') ||
+    rowNormalizedText.includes('falou com cliente') ||
+    rowNormalizedText.includes('falou com o cliente') ||
+    rowNormalizedText.includes('falou com titular') ||
+    rowNormalizedText.includes('contato com sucesso') ||
+    rowNormalizedText.includes('contato ok') ||
+    rowNormalizedText.includes('atendimento realizado')
+  ) {
+    return 'contato_realizado'
+  }
+
+  // --- 8. NÃO TRATADOS (key: nao_tratados) ---
   if (
     rowNormalizedText.includes('nao tratad') ||
     rowNormalizedText.includes('naotratad') ||
@@ -438,8 +463,8 @@ export function parseWorksheet(
     promessa_pagto: 0,
     cancelados: 0,
     nao_tratados: 0,
+    contato_realizado: 0,
   }
-
   if (!jsonData || jsonData.length === 0) {
     return counts
   }
@@ -540,6 +565,8 @@ export async function parseXlsxFile(file: File): Promise<ParsedFileData> {
     promessa_pagto: (movelCounts?.promessa_pagto || 0) + (residencialCounts?.promessa_pagto || 0),
     cancelados: (movelCounts?.cancelados || 0) + (residencialCounts?.cancelados || 0),
     nao_tratados: (movelCounts?.nao_tratados || 0) + (residencialCounts?.nao_tratados || 0),
+    contato_realizado:
+      (movelCounts?.contato_realizado || 0) + (residencialCounts?.contato_realizado || 0),
   }
 
   return {

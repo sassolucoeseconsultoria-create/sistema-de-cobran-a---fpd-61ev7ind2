@@ -204,8 +204,8 @@ export const Importar: React.FC = () => {
         promessa_pagto: item.parsedData.aggregated.promessa_pagto,
         cancelados: item.parsedData.aggregated.cancelados,
         nao_tratados: item.parsedData.aggregated.nao_tratados,
+        contato_realizado: item.parsedData.aggregated.contato_realizado,
       })
-
       setFileQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: 'done' } : q)))
       return true
     } catch (err: unknown) {
@@ -275,9 +275,9 @@ export const Importar: React.FC = () => {
           <div className="p-3 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] space-y-1">
             <span className="font-bold text-[#12365A] block">2. Classificação Automática</span>
             <p>
-              As ocorrências são agrupadas nos 8 status do consolidado: Enviado Fatura(s), Pendente,
-              Fatura(s) Paga(s), Envia Fatura(s), Sem Contato, Promessa de Pagto., Cancelados e Não
-              Tratados.
+              As ocorrências são agrupadas nos status do consolidado: Enviado Fatura(s), Pendente,
+              Fatura(s) Paga(s), Envia Fatura(s), Sem Contato, Promessa de Pagto., Cancelados, Não
+              Tratados e Contato Realizado.
             </p>
           </div>
           <div className="p-3 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] space-y-1">
@@ -465,6 +465,10 @@ export const Importar: React.FC = () => {
                             <span>•</span>
                             <span className="text-[#0891B2] font-medium">
                               Pagas: {item.parsedData.aggregated.fatura_paga}
+                            </span>
+                            <span>•</span>
+                            <span className="text-[#0D9488] font-medium">
+                              Contato: {item.parsedData.aggregated.contato_realizado}
                             </span>
                           </div>
                         )}

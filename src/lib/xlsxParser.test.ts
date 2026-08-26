@@ -104,6 +104,17 @@ describe('classifyRow', () => {
     expect(classifyRow('portabilidade')).toBe('cancelados')
   })
 
+  it('should classify "Contato Realizado" (contato_realizado)', () => {
+    expect(classifyRow('contato realizado')).toBe('contato_realizado')
+    expect(classifyRow('contato efetuado')).toBe('contato_realizado')
+    expect(classifyRow('fez contato')).toBe('contato_realizado')
+    expect(classifyRow('contactado')).toBe('contato_realizado')
+    expect(classifyRow('contatado')).toBe('contato_realizado')
+    expect(classifyRow('cliente atendido')).toBe('contato_realizado')
+    expect(classifyRow('falou com cliente')).toBe('contato_realizado')
+    expect(classifyRow('contato ok')).toBe('contato_realizado')
+  })
+
   it('should classify "Não Tratados" (nao_tratados)', () => {
     expect(classifyRow('nao tratado')).toBe('nao_tratados')
     expect(classifyRow('naotratad')).toBe('nao_tratados')
