@@ -47,6 +47,7 @@ export interface ConsolidatedRow {
   cancelados: number
   naoTratados: number
   contatoRealizado: number
+  outros: number
 }
 
 export const DEFAULT_CONSOLIDATED_ROW: Omit<ConsolidatedRow, 'storeId' | 'storeName'> = {
@@ -64,6 +65,7 @@ export const DEFAULT_CONSOLIDATED_ROW: Omit<ConsolidatedRow, 'storeId' | 'storeN
   cancelados: 0,
   naoTratados: 0,
   contatoRealizado: 0,
+  outros: 0,
 }
 
 export type FpdStatusKey =
@@ -76,6 +78,7 @@ export type FpdStatusKey =
   | 'cancelados'
   | 'nao_tratados'
   | 'contato_realizado'
+  | 'outros'
 
 export interface FpdStatusConfig {
   key: FpdStatusKey
@@ -159,5 +162,13 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
     textColor: '#0F766E',
     bgTint: 'rgba(13, 148, 136, 0.08)',
     borderTint: 'rgba(13, 148, 136, 0.25)',
+  },
+  {
+    key: 'outros',
+    label: 'Outros Motivos',
+    color: '#8B5CF6',
+    textColor: '#7C3AED',
+    bgTint: 'rgba(139, 92, 246, 0.08)',
+    borderTint: 'rgba(139, 92, 246, 0.25)',
   },
 ]

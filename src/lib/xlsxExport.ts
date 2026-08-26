@@ -14,10 +14,11 @@ export function exportConsolidatedToXlsx(
     cancelados: number
     naoTratados: number
     contatoRealizado: number
+    outros: number
   },
   referenteLabel?: string,
 ) {
-  // Headers matching the 9 FPD columns in exact order
+  // Headers matching the 10 FPD columns in exact order
   const headers = [
     'LOJAS',
     'COORDENAÇÃO',
@@ -32,6 +33,7 @@ export function exportConsolidatedToXlsx(
     'Cancelados',
     'Não Tratados',
     'Contato Realizado',
+    'Outros Motivos',
     'OBSERVAÇÃO',
   ]
 
@@ -49,6 +51,7 @@ export function exportConsolidatedToXlsx(
     r.hasData ? r.cancelados : '',
     r.hasData ? r.naoTratados : '',
     r.hasData ? r.contatoRealizado : '',
+    r.hasData ? r.outros : '',
     r.observacao || '',
   ])
 
@@ -67,6 +70,7 @@ export function exportConsolidatedToXlsx(
     totals.cancelados,
     totals.naoTratados,
     totals.contatoRealizado,
+    totals.outros,
     '',
   ]
 
@@ -89,6 +93,7 @@ export function exportConsolidatedToXlsx(
     { wch: 15 }, // Cancelados
     { wch: 16 }, // Não Tratados
     { wch: 18 }, // Contato Realizado
+    { wch: 18 }, // Outros Motivos
     { wch: 30 }, // OBSERVACAO
   ]
 

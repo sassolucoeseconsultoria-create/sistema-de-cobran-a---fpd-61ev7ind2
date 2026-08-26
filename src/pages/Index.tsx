@@ -179,6 +179,7 @@ export const Index: React.FC = () => {
           cancelados: 0,
           naoTratados: 0,
           contatoRealizado: 0,
+          outros: 0,
         }
       }
 
@@ -202,6 +203,7 @@ export const Index: React.FC = () => {
         cancelados: latest.cancelados || 0,
         naoTratados: latest.nao_tratados || 0,
         contatoRealizado: latest.contato_realizado || 0,
+        outros: latest.outros || 0,
       }
     })
   }, [stores, records])
@@ -262,6 +264,7 @@ export const Index: React.FC = () => {
         acc.cancelados += r.cancelados
         acc.naoTratados += r.naoTratados
         acc.contatoRealizado += r.contatoRealizado
+        acc.outros += r.outros
         return acc
       },
       {
@@ -275,6 +278,7 @@ export const Index: React.FC = () => {
         cancelados: 0,
         naoTratados: 0,
         contatoRealizado: 0,
+        outros: 0,
       },
     )
   }, [filteredRows])
@@ -290,6 +294,7 @@ export const Index: React.FC = () => {
   const animatedCancelados = useCountUp(totals.cancelados)
   const animatedNaoTratados = useCountUp(totals.naoTratados)
   const animatedContatoRealizado = useCountUp(totals.contatoRealizado)
+  const animatedOutros = useCountUp(totals.outros)
 
   // Latest Referente date
   const latestReferente = useMemo(() => {
@@ -735,8 +740,7 @@ export const Index: React.FC = () => {
             </Button>
           </div>
         </div>
-
-        {/* 14-Column Consolidated Table */}
+        {/* 15-Column Consolidated Table */}
         <div className="relative overflow-x-auto max-h-[70vh] border-b border-[#E3E9F2]">
           <table className="w-full text-left border-collapse text-[13px]">
             {/* Header */}
@@ -754,7 +758,7 @@ export const Index: React.FC = () => {
                 <th className="px-3 py-3.5 min-w-[110px] text-right border-r border-[#1e456f] bg-[#0E2A47]">
                   TOTAL LINHAS
                 </th>
-                {/* E–M Status Columns with Colored Chips */}
+                {/* E–N Status Columns with Colored Chips */}
                 {FPD_STATUSES.map((status) => (
                   <th
                     key={status.key}
@@ -768,7 +772,7 @@ export const Index: React.FC = () => {
                     </div>
                   </th>
                 ))}
-                {/* N - OBSERVAÇÃO */}
+                {/* O - OBSERVAÇÃO */}
                 <th className="px-3 py-3.5 min-w-[180px]">OBSERVAÇÃO</th>
               </tr>
             </thead>
@@ -777,7 +781,7 @@ export const Index: React.FC = () => {
             <tbody className="divide-y divide-[#E3E9F2]">
               {loading ? (
                 <tr>
-                  <td colSpan={14} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={15} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-6 h-6 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
                       <span>Carregando dados consolidados...</span>
@@ -786,10 +790,10 @@ export const Index: React.FC = () => {
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={15} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
                       <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
-                      <p className="font-medium text-[#12233A]">Nenhuma loja encontrada</p>
+                      <p className="font-medium text-[#12365A]">Nenhuma loja encontrada</p>
                       <p className="text-xs text-[#5B6B82]">
                         {stores.length === 0
                           ? 'Cadastre lojas na aba Lojas ou faça o upload de arquivos .xlsx para preencher a tabela.'
@@ -814,7 +818,7 @@ export const Index: React.FC = () => {
                       {/* A: LOJAS (Sticky left) */}
                       <td
                         className={cn(
-                          'sticky left-0 z-10 px-3.5 py-2.5 font-semibold text-[#12233A] border-r border-[#E3E9F2] truncate max-w-[240px]',
+                          'sticky left-0 z-10 px-3.5 py-2.5 font-semibold text-[#12365A] border-r border-[#E3E9F2] truncate max-w-[240px]',
                           idx % 2 === 1 ? 'bg-[#FAFCFF]' : 'bg-white',
                           'group-hover:bg-[#F0F5FC]',
                         )}
@@ -848,7 +852,7 @@ export const Index: React.FC = () => {
                         )}
                       </td>
 
-                      {/* E–M: 9 Status columns with faint background tint */}
+                      {/* E–N: 10 Status columns with faint background tint */}
                       {FPD_STATUSES.map((status) => {
                         const val = row.hasData
                           ? (row[
@@ -880,7 +884,7 @@ export const Index: React.FC = () => {
                         )
                       })}
 
-                      {/* N: OBSERVAÇÃO */}
+                      {/* O: OBSERVAÇÃO */}
                       <td className="px-3 py-2.5 text-[#5B6B82] truncate max-w-[200px]">
                         {row.observacao ? (
                           <Tooltip>
@@ -952,12 +956,16 @@ export const Index: React.FC = () => {
                 <td className="px-2.5 py-3 text-right text-[#5eead4] tabular-nums border-r border-[#1e456f]">
                   {animatedContatoRealizado.toLocaleString('pt-BR')}
                 </td>
-                {/* N */}
+                {/* N: Outros Motivos */}
+                <td className="px-2.5 py-3 text-right text-[#c4b5fd] tabular-nums border-r border-[#1e456f]">
+                  {animatedOutros.toLocaleString('pt-BR')}
+                </td>
+                {/* O */}
                 <td className="px-3 py-3"></td>
               </tr>
             </tfoot>
           </table>
-        </div>
+        </div>{' '}
       </div>
 
       {/* Detail Drawer (Sheet) */}

@@ -60,11 +60,11 @@ describe('classifyRow', () => {
     expect(classifyRow('debito pago')).toBe('fatura_paga')
     expect(classifyRow('ja pago')).toBe('fatura_paga')
 
-    // Bug 1: Standalone 'pg', 'pga', 'pgo' should NOT match fatura_paga
-    expect(classifyRow('pg')).toBe('nao_tratados')
-    expect(classifyRow('codigo pg 123')).toBe('nao_tratados')
-    expect(classifyRow('pga')).toBe('nao_tratados')
-    expect(classifyRow('pgo')).toBe('nao_tratados')
+    // Standalone 'pg', 'pga', 'pgo' should NOT match fatura_paga (falls into outros)
+    expect(classifyRow('pg')).toBe('outros')
+    expect(classifyRow('codigo pg 123')).toBe('outros')
+    expect(classifyRow('pga')).toBe('outros')
+    expect(classifyRow('pgo')).toBe('outros')
   })
 
   it('should distinguish "Envia Fatura(s)" (envia_fatura) from "Enviado Fatura(s)" (envio_fatura) without overlap', () => {
@@ -117,29 +117,29 @@ describe('classifyRow', () => {
     expect(classifyRow(normalizeText('PROMESSA DE PAGAMENTO'))).toBe('promessa_pagto')
     expect(classifyRow(normalizeText('Promessa de Pagto'))).toBe('promessa_pagto')
 
-    // Partial sentences, loose phrases or observations must NOT be classified as promessa_pagto
-    expect(classifyRow('promessa de pagto para 25/08')).toBe('nao_tratados')
-    expect(classifyRow('promessa de pagamento amanha')).toBe('nao_tratados')
-    expect(classifyRow('prometeu pagar amanha')).toBe('nao_tratados')
-    expect(classifyRow('promete pagar')).toBe('nao_tratados')
-    expect(classifyRow('vai pagar')).toBe('nao_tratados')
-    expect(classifyRow('vai pagar amanha')).toBe('nao_tratados')
-    expect(classifyRow('ira pagar na sexta')).toBe('nao_tratados')
-    expect(classifyRow('combinou pagamento')).toBe('nao_tratados')
-    expect(classifyRow('combinou pagto')).toBe('nao_tratados')
-    expect(classifyRow('nao vai pagar')).toBe('nao_tratados')
-    expect(classifyRow('nao ira pagar')).toBe('nao_tratados')
-    expect(classifyRow('nunca vai pagar')).toBe('nao_tratados')
-    expect(classifyRow('disse que nao vai pagar')).toBe('nao_tratados')
-    expect(classifyRow(normalizeText('não vai pagar'))).toBe('nao_tratados')
+    // Partial sentences, loose phrases or observations must NOT be classified as promessa_pagto (fall into outros)
+    expect(classifyRow('promessa de pagto para 25/08')).toBe('outros')
+    expect(classifyRow('promessa de pagamento amanha')).toBe('outros')
+    expect(classifyRow('prometeu pagar amanha')).toBe('outros')
+    expect(classifyRow('promete pagar')).toBe('outros')
+    expect(classifyRow('vai pagar')).toBe('outros')
+    expect(classifyRow('vai pagar amanha')).toBe('outros')
+    expect(classifyRow('ira pagar na sexta')).toBe('outros')
+    expect(classifyRow('combinou pagamento')).toBe('outros')
+    expect(classifyRow('combinou pagto')).toBe('outros')
+    expect(classifyRow('nao vai pagar')).toBe('outros')
+    expect(classifyRow('nao ira pagar')).toBe('outros')
+    expect(classifyRow('nunca vai pagar')).toBe('outros')
+    expect(classifyRow('disse que nao vai pagar')).toBe('outros')
+    expect(classifyRow(normalizeText('não vai pagar'))).toBe('outros')
 
-    // 'pp' isolated should NOT be classified as promessa_pagto (falls into nao_tratados)
-    expect(classifyRow('pp')).toBe('nao_tratados')
+    // 'pp' isolated should NOT be classified as promessa_pagto (falls into outros)
+    expect(classifyRow('pp')).toBe('outros')
 
     // Words that should NOT trigger promessa_pagto:
     expect(classifyRow('pagamento efetuado')).toBe('fatura_paga')
     expect(classifyRow('pagamento realizado')).toBe('fatura_paga')
-    expect(classifyRow('solicitou informacao de pagamento')).toBe('nao_tratados')
+    expect(classifyRow('solicitou informacao de pagamento')).toBe('outros')
     expect(classifyRow('aguardando analise de pagamento')).toBe('pendente')
   })
   it('should classify "Cancelados" (cancelados)', () => {
@@ -185,15 +185,25 @@ describe('classifyRow', () => {
     expect(classifyRow(normalizeText('não foi atendido'))).not.toBe('contato_realizado')
   })
 
-  it('should classify "Não Tratados" (nao_tratados)', () => {
+  it('should classify "Não Tratados" (nao_tratados) only for explicit untargeted markers', () => {
     expect(classifyRow('nao tratado')).toBe('nao_tratados')
-    expect(classifyRow('naotratad')).toBe('nao_tratados')
+    expect(classifyRow('naotratado')).toBe('nao_tratados')
     expect(classifyRow('nao trabalhad')).toBe('nao_tratados')
     expect(classifyRow('a tratar')).toBe('nao_tratados')
     expect(classifyRow('aguardando')).toBe('nao_tratados')
     expect(classifyRow('sem status')).toBe('nao_tratados')
+    expect(classifyRow('sem tratamento')).toBe('nao_tratados')
     expect(classifyRow('em branco')).toBe('nao_tratados')
-    expect(classifyRow('algum texto desconhecido')).toBe('nao_tratados')
+  })
+
+  it('should classify genuinely unclassified/other statuses as "Outros Motivos" (outros)', () => {
+    expect(classifyRow('algum texto desconhecido')).toBe('outros')
+    expect(classifyRow('reclamacao anatel')).toBe('outros')
+    expect(classifyRow('contestacao de valores')).toBe('outros')
+    expect(classifyRow('duvida de cobertura')).toBe('outros')
+    expect(classifyRow('cliente em viagem')).toBe('outros')
+    expect(classifyRow('solicitou estorno parcial')).toBe('cancelados') // estorno goes to cancelados
+    expect(classifyRow('negociacao com a gerencia')).toBe('outros')
   })
 })
 

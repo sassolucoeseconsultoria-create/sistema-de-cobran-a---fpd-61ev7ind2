@@ -15,6 +15,7 @@ export interface ParsedSheetCounts {
   cancelados: number
   nao_tratados: number
   contato_realizado: number
+  outros: number
 }
 
 export interface ParsedFileData {
@@ -38,6 +39,7 @@ export interface ParsedFileData {
     cancelados: number
     nao_tratados: number
     contato_realizado: number
+    outros: number
   }
 }
 
@@ -97,35 +99,18 @@ export function guessReferenteDate(filename: string): string {
 }
 
 /**
- * Classify a row's normalized text into exactly one of 8 FPD categories:
+ * Classify a row's normalized text into one of the FPD categories:
  *
- * 1. ENVIADO FATURA(S) (key 'envio_fatura'):
- *    Past tense / invoice already sent. Captures: "envio", "enviad", "reencaminh", "2 via",
- *    "segunda via", "fatura enviada", "reenvio", "envio fatura", "enviado fatura", etc.
- *
- * 2. PENDENTE (key 'pendente'):
- *    Pending treatment / status: "pendente", "aguardando retorno", "em analise", "em tratativa", etc.
- *    (when not payment paid, not invoice sending).
- *
- * 3. FATURA(S) PAGA(S) (key 'fatura_paga'):
- *    Payment confirmed / paid invoice: "fatura paga", "boleto pago", "liquidado", "pago", "paga", "quitado",
- *    "pagamento realizado", "ja pago", etc.
- *
- * 4. ENVIA FATURA(S) (key 'envia_fatura'):
- *    Action / intention / pending sending: "envia fatura", "enviar fatura", "precisa enviar", "a enviar",
- *    "mandar fatura", "solicitou envio", etc.
- *
- * 5. SEM CONTATO (key 'sem_contato'):
- *    "sem contato", "caixa postal", "nao atende", "ocupado", "desligado", "invalido", "numero errado", etc.
- *
- * 6. PROMESSA DE PAGTO. (key 'promessa_pagto'):
- *    "promessa de pagamento", "promessa de pagto", "promessa pgto", "prometeu pagar", "promete pagar", "vai pagar", "irá pagar", "combinou pagamento", etc.
- *
- * 7. CANCELADOS (key 'cancelados'):
- *    "cancelado", "cancelamento", "devolucao", "fraude", "inversao", "desistencia", "estorno", etc.
- *
- * 8. NÃO TRATADOS (key 'nao_tratados'):
- *    "nao tratad", "naotratad", "nao trabalhad", "a tratar", "aguardando", "sem status", "em branco", "virgem", fallback.
+ * 1. ENVIADO FATURA(S) (key 'envio_fatura')
+ * 2. PENDENTE (key 'pendente')
+ * 3. FATURA(S) PAGA(S) (key 'fatura_paga')
+ * 4. ENVIA FATURA(S) (key 'envia_fatura')
+ * 5. SEM CONTATO (key 'sem_contato')
+ * 6. PROMESSA DE PAGTO. (key 'promessa_pagto')
+ * 7. CANCELADOS (key 'cancelados')
+ * 8. CONTATO REALIZADO (key 'contato_realizado')
+ * 9. NÃO TRATADOS (key 'nao_tratados') - ONLY for explicit untargeted / unprocessed rows
+ * 10. OUTROS MOTIVOS (key 'outros') - Default fallback for other genuine statuses / reasons
  */
 export function classifyRow(rowNormalizedText: string): FpdStatusKey {
   // --- 1. ENVIADO FATURA(S) vs ENVIA FATURA(S) ---
@@ -213,9 +198,6 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
   }
 
   // --- 2. PROMESSA DE PAGTO. (key: promessa_pagto) ---
-  // A classificação como "promessa_pagto" é extremamente restrita (correspondência exata ou quase idêntica do status).
-  // Não usa regex frouxas, frases genéricas ou substrings abrangentes.
-  // Variações estritas aceitas: "promessa de pagto.", "promessa de pagto", "promessa de pagamento", "promessa pagto", "promessa pagamento".
   const exactPromessaOptions = new Set([
     'promessa de pagto.',
     'promessa de pagto',
@@ -225,7 +207,9 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     'promessa pagamento',
   ])
 
-  const isStrictPromessaPagto = exactPromessaOptions.has(rowNormalizedText)
+  const isStrictPromessaPagto =
+    exactPromessaOptions.has(rowNormalizedText) ||
+    /^promessa\s+de\s+pag(to|amento)\.?$/i.test(rowNormalizedText)
 
   if (isStrictPromessaPagto) {
     return 'promessa_pagto'
@@ -236,10 +220,13 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('fatura paga') ||
     rowNormalizedText.includes('faturas pagas') ||
     rowNormalizedText.includes('fatura pg') ||
+    rowNormalizedText.includes('fatura quitada') ||
+    rowNormalizedText.includes('fatura liquidada') ||
     rowNormalizedText.includes('boleto pago') ||
     rowNormalizedText.includes('ja pago') ||
     rowNormalizedText.includes('ja paga') ||
     rowNormalizedText.includes('ja quitad') ||
+    rowNormalizedText.includes('ja liquidad') ||
     rowNormalizedText.includes('comprovante') ||
     rowNormalizedText.includes('liquidado') ||
     rowNormalizedText.includes('liquidada') ||
@@ -250,6 +237,14 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('pagamento confirmado') ||
     rowNormalizedText.includes('debito pago') ||
     rowNormalizedText.includes('pix pago') ||
+    rowNormalizedText.includes('pago pelo cliente') ||
+    rowNormalizedText.includes('pago via') ||
+    rowNormalizedText.includes('pago no banco') ||
+    rowNormalizedText.includes('pago na loterica') ||
+    rowNormalizedText.includes('pago app') ||
+    rowNormalizedText.includes('pago internet') ||
+    rowNormalizedText.includes('pagamento ok') ||
+    rowNormalizedText.includes('pagamento identificado') ||
     /\b(pago|paga|pagos|pagas|quitou|liquidou)\b/.test(rowNormalizedText)
   ) {
     return 'fatura_paga'
@@ -264,14 +259,22 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('ocupado') ||
     rowNormalizedText.includes('desligado') ||
     rowNormalizedText.includes('fora de area') ||
+    rowNormalizedText.includes('fora de servico') ||
     rowNormalizedText.includes('nao existe') ||
     rowNormalizedText.includes('telefone incorreto') ||
     rowNormalizedText.includes('numero incorreto') ||
     rowNormalizedText.includes('numero errado') ||
+    rowNormalizedText.includes('telefone errado') ||
+    rowNormalizedText.includes('numero invalido') ||
+    rowNormalizedText.includes('telefone invalido') ||
     rowNormalizedText.includes('invalido') ||
     rowNormalizedText.includes('incorreto') ||
     rowNormalizedText.includes('mudo') ||
-    rowNormalizedText.includes('mensagem gravada')
+    rowNormalizedText.includes('mensagem gravada') ||
+    rowNormalizedText.includes('chamada recusada') ||
+    rowNormalizedText.includes('recusou chamada') ||
+    rowNormalizedText.includes('ligacao caiu') ||
+    rowNormalizedText.includes('impossibilitado de receber')
   ) {
     return 'sem_contato'
   }
@@ -293,7 +296,10 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('estorno') ||
     rowNormalizedText.includes('portabilidade') ||
     rowNormalizedText.includes('obito') ||
-    rowNormalizedText.includes('falecido')
+    rowNormalizedText.includes('falecido') ||
+    rowNormalizedText.includes('sinistro') ||
+    rowNormalizedText.includes('desativad') ||
+    rowNormalizedText.includes('desabilitad')
   ) {
     return 'cancelados'
   }
@@ -304,6 +310,11 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('em analise') ||
     rowNormalizedText.includes('em andamento') ||
     rowNormalizedText.includes('em tratativa') ||
+    rowNormalizedText.includes('aguardando retorno') ||
+    rowNormalizedText.includes('aguardando resposta') ||
+    rowNormalizedText.includes('aguardando cliente') ||
+    rowNormalizedText.includes('retorno agendado') ||
+    rowNormalizedText.includes('retornar') ||
     rowNormalizedText.includes('retorno')
   ) {
     return 'pendente'
@@ -311,13 +322,10 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
 
   // --- 7. CONTATO REALIZADO (key: contato_realizado) ---
   const hasPositiveAtendido = () => {
-    // Regex matches "atendido" / "atendida" when NOT preceded by negative words within 10 characters
-    // Check all occurrences of atendido/atendida
     const regex = /\b(atendido|atendida|atendidos|atendidas)\b/g
     let match: RegExpExecArray | null
     while ((match = regex.exec(rowNormalizedText)) !== null) {
       const preceding = rowNormalizedText.slice(Math.max(0, match.index - 30), match.index)
-      // Check if preceding text ends with or contains a negative modifier right before atendido
       const isNegated =
         /\b(nao|não|nunca|jamais|mal|pessimo|péssimo|sem)\s+(foi\s+|ser\s+|sendo\s+|estar\s+|esta\s+|estava\s+|ter\s+|tinha\s+)?$/i.test(
           preceding.trim(),
@@ -344,6 +352,13 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('falou com cliente') ||
     rowNormalizedText.includes('falou com o cliente') ||
     rowNormalizedText.includes('falou com titular') ||
+    rowNormalizedText.includes('falou com terceiro') ||
+    rowNormalizedText.includes('falou com a mae') ||
+    rowNormalizedText.includes('falou com o pai') ||
+    rowNormalizedText.includes('falou com esposo') ||
+    rowNormalizedText.includes('falou com esposa') ||
+    rowNormalizedText.includes('recado') ||
+    rowNormalizedText.includes('deixou recado') ||
     rowNormalizedText.includes('contato com sucesso') ||
     rowNormalizedText.includes('contato ok') ||
     rowNormalizedText.includes('atendimento realizado')
@@ -352,21 +367,28 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
   }
 
   // --- 8. NÃO TRATADOS (key: nao_tratados) ---
+  // ONLY explicitly marked as untargeted / unprocessed / blank
   if (
-    rowNormalizedText.includes('nao tratad') ||
-    rowNormalizedText.includes('naotratad') ||
+    rowNormalizedText.includes('nao tratado') ||
+    rowNormalizedText.includes('nao tratada') ||
+    rowNormalizedText.includes('naotratado') ||
+    rowNormalizedText.includes('naotratada') ||
     rowNormalizedText.includes('nao trabalhad') ||
     rowNormalizedText.includes('a tratar') ||
-    rowNormalizedText.includes('aguardando') ||
+    rowNormalizedText.includes('sem tratamento') ||
     rowNormalizedText.includes('sem status') ||
     rowNormalizedText.includes('em branco') ||
+    rowNormalizedText.includes('nao abordado') ||
     rowNormalizedText.includes('novo') ||
-    rowNormalizedText.includes('virgem')
+    rowNormalizedText.includes('virgem') ||
+    rowNormalizedText === 'aguardando'
   ) {
     return 'nao_tratados'
   }
 
-  return 'nao_tratados'
+  // --- 9. OUTROS MOTIVOS (key: outros) ---
+  // Fallback for any other valid status or observation that does not match the 8 categories above
+  return 'outros'
 }
 
 /**
@@ -525,6 +547,7 @@ export function parseWorksheet(
     cancelados: 0,
     nao_tratados: 0,
     contato_realizado: 0,
+    outros: 0,
   }
   if (!jsonData || jsonData.length === 0) {
     return counts
@@ -579,6 +602,7 @@ export function parseWorksheet(
   counts.cancelados = Math.round(counts.cancelados || 0)
   counts.nao_tratados = Math.round(counts.nao_tratados || 0)
   counts.contato_realizado = Math.round(counts.contato_realizado || 0)
+  counts.outros = Math.round(counts.outros || 0)
   counts.totalRows = Math.round(counts.totalRows || 0)
 
   return counts
@@ -674,6 +698,7 @@ export async function parseXlsxFile(file: File): Promise<ParsedFileData> {
     contato_realizado: safeInt(
       (movelCounts?.contato_realizado || 0) + (residencialCounts?.contato_realizado || 0),
     ),
+    outros: safeInt((movelCounts?.outros || 0) + (residencialCounts?.outros || 0)),
   }
 
   return {
