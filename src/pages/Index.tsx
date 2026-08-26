@@ -694,25 +694,29 @@ export const Index: React.FC = () => {
             <thead className="sticky top-0 z-20 bg-[#12365A] text-white shadow-sm font-semibold tracking-wider uppercase text-[11px]">
               <tr>
                 {/* A - LOJAS (Sticky left) */}
-                <th className="sticky left-0 z-30 bg-[#12365A] px-3.5 py-3.5 min-w-[200px] border-r border-[#1e456f]">
+                <th className="sticky left-0 z-30 bg-[#12365A] px-3.5 py-3.5 min-w-[200px] text-center border-r border-[#1e456f]">
                   LOJAS
                 </th>
                 {/* B - COORDENAÇÃO */}
-                <th className="px-3 py-3.5 min-w-[130px] border-r border-[#1e456f]">COORDENAÇÃO</th>
+                <th className="px-3 py-3.5 min-w-[130px] text-center border-r border-[#1e456f]">
+                  COORDENAÇÃO
+                </th>
                 {/* C - SUPERVISÃO */}
-                <th className="px-3 py-3.5 min-w-[130px] border-r border-[#1e456f]">SUPERVISÃO</th>
+                <th className="px-3 py-3.5 min-w-[130px] text-center border-r border-[#1e456f]">
+                  SUPERVISÃO
+                </th>
                 {/* D - TOTAL LINHAS */}
-                <th className="px-3 py-3.5 min-w-[110px] text-right border-r border-[#1e456f] bg-[#0E2A47]">
+                <th className="px-3 py-3.5 min-w-[110px] text-center border-r border-[#1e456f] bg-[#0E2A47]">
                   TOTAL LINHAS
                 </th>
                 {/* E–M Status Columns with Colored Chips */}
                 {FPD_STATUSES.map((status) => (
                   <th
                     key={status.key}
-                    className="px-2.5 py-2.5 min-w-[120px] text-right border-r border-[#1e456f]"
+                    className="px-2 py-2.5 w-[130px] min-w-[130px] text-center border-r border-[#1e456f]"
                   >
                     <div
-                      className="inline-block px-2 py-0.5 rounded text-[10px] font-bold text-white shadow-xs"
+                      className="w-full flex items-center justify-center min-h-[34px] px-2 py-1 rounded text-[10px] font-bold text-white text-center leading-tight shadow-xs whitespace-normal"
                       style={{ backgroundColor: status.color }}
                     >
                       {status.label}
@@ -720,7 +724,7 @@ export const Index: React.FC = () => {
                   </th>
                 ))}
                 {/* N - OBSERVAÇÃO */}
-                <th className="px-3 py-3.5 min-w-[180px]">OBSERVAÇÃO</th>
+                <th className="px-3 py-3.5 min-w-[180px] text-center">OBSERVAÇÃO</th>
               </tr>
             </thead>
 
