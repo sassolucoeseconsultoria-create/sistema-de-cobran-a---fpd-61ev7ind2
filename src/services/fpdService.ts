@@ -11,13 +11,11 @@ export async function createStore(data: {
   name: string
   coordenacao?: string
   supervisao?: string
-  observacao?: string
 }): Promise<StoreRecord> {
   return await pb.collection('stores').create<StoreRecord>({
     name: data.name.trim(),
     coordenacao: data.coordenacao?.trim() || '',
     supervisao: data.supervisao?.trim() || '',
-    observacao: data.observacao?.trim() || '',
   })
 }
 
@@ -27,7 +25,6 @@ export async function updateStore(
     name: string
     coordenacao: string
     supervisao: string
-    observacao: string
   }>,
 ): Promise<StoreRecord> {
   return await pb.collection('stores').update<StoreRecord>(id, data)

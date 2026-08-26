@@ -32,7 +32,6 @@ export function exportConsolidatedToXlsx(
     'Contato Realizado',
     'Outros Motivos',
     'Não Tratados',
-    'OBSERVAÇÃO',
   ]
 
   const dataRows = rows.map((r) => [
@@ -49,7 +48,6 @@ export function exportConsolidatedToXlsx(
     r.hasData ? r.contatoRealizado : '',
     r.hasData ? r.outros : '',
     r.hasData ? r.naoTratados : '',
-    r.observacao || '',
   ])
 
   // Summary totals row
@@ -67,7 +65,6 @@ export function exportConsolidatedToXlsx(
     totals.contatoRealizado,
     totals.outros,
     totals.naoTratados,
-    '',
   ]
 
   const wsData = [headers, ...dataRows, totalsRow]
@@ -89,7 +86,6 @@ export function exportConsolidatedToXlsx(
     { wch: 18 }, // Contato Realizado
     { wch: 18 }, // Outros Motivos
     { wch: 16 }, // Não Tratados
-    { wch: 30 }, // OBSERVACAO
   ]
 
   const wb = XLSX.utils.book_new()

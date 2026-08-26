@@ -119,7 +119,7 @@ export const StoreAnalyticsDrawer: React.FC<StoreAnalyticsDrawerProps> = ({
             </SheetDescription>
           </SheetHeader>
 
-          {/* 1. Header Metadata Section (Coordenação, Supervisão, Observação) */}
+          {/* 1. Header Metadata Section (Coordenação, Supervisão) */}
           <div className="mt-4 pt-4 border-t border-[#E3E9F2] grid grid-cols-2 gap-2.5 text-xs">
             <div className="bg-[#F8FAFC] border border-[#E3E9F2] rounded-lg p-2.5">
               <span className="text-[10px] font-semibold uppercase tracking-wider text-[#8A97AC] block">
@@ -142,17 +142,6 @@ export const StoreAnalyticsDrawer: React.FC<StoreAnalyticsDrawerProps> = ({
                 )}
               </span>
             </div>
-
-            {store.observacao && (
-              <div className="col-span-2 bg-[#F8FAFC] border border-[#E3E9F2] rounded-lg p-2.5">
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-[#8A97AC] block">
-                  Observação
-                </span>
-                <p className="text-xs text-[#12365A] mt-0.5 leading-relaxed font-normal">
-                  {store.observacao}
-                </p>
-              </div>
-            )}
           </div>
         </div>
 

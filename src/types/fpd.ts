@@ -4,7 +4,6 @@ export interface StoreRecord extends RecordModel {
   name: string
   coordenacao?: string
   supervisao?: string
-  observacao?: string
 }
 
 export interface FpdRecord extends RecordModel {
@@ -54,7 +53,6 @@ export interface ConsolidatedRow {
   storeName: string
   coordenacao: string
   supervisao: string
-  observacao: string
   hasData: boolean
   latestRecordId?: string
   referente?: string
@@ -74,7 +72,6 @@ export interface ConsolidatedRow {
 export const DEFAULT_CONSOLIDATED_ROW: Omit<ConsolidatedRow, 'storeId' | 'storeName'> = {
   coordenacao: '',
   supervisao: '',
-  observacao: '',
   hasData: false,
   totalLinhas: 0,
   faturaPaga: 0,

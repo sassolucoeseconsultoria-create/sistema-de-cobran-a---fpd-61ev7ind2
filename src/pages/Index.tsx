@@ -119,7 +119,6 @@ export const Index: React.FC = () => {
               storeName: e.record.name,
               coordenacao: e.record.coordenacao || '',
               supervisao: e.record.supervisao || '',
-              observacao: e.record.observacao || '',
             }
           : prev,
       )
@@ -154,7 +153,6 @@ export const Index: React.FC = () => {
           storeName: store.name,
           coordenacao: store.coordenacao || '',
           supervisao: store.supervisao || '',
-          observacao: store.observacao || '',
           hasData: false,
           totalLinhas: 0,
           envioFatura: 0,
@@ -174,7 +172,6 @@ export const Index: React.FC = () => {
         storeName: store.name,
         coordenacao: store.coordenacao || '',
         supervisao: store.supervisao || '',
-        observacao: store.observacao || '',
         hasData: true,
         latestRecordId: latest.id,
         referente: latest.referente,
@@ -687,7 +684,7 @@ export const Index: React.FC = () => {
             </Button>
           </div>
         </div>
-        {/* 14-Column Consolidated Table */}
+        {/* 13-Column Consolidated Table */}
         <div className="relative overflow-x-auto max-h-[70vh] border-b border-[#E3E9F2]">
           <table className="w-full text-left border-collapse text-[13px]">
             {/* Header */}
@@ -723,8 +720,6 @@ export const Index: React.FC = () => {
                     </div>
                   </th>
                 ))}
-                {/* N - OBSERVAÇÃO */}
-                <th className="px-3 py-3.5 min-w-[180px] text-center">OBSERVAÇÃO</th>
               </tr>
             </thead>
 
@@ -732,7 +727,7 @@ export const Index: React.FC = () => {
             <tbody className="divide-y divide-[#E3E9F2]">
               {loading ? (
                 <tr>
-                  <td colSpan={14} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={13} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-6 h-6 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
                       <span>Carregando dados consolidados...</span>
@@ -741,7 +736,7 @@ export const Index: React.FC = () => {
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={13} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
                       <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
                       <p className="font-medium text-[#12365A]">Nenhuma loja encontrada</p>
@@ -849,22 +844,6 @@ export const Index: React.FC = () => {
                           </td>
                         )
                       })}
-
-                      {/* N: OBSERVAÇÃO */}
-                      <td className="px-3 py-2.5 text-[#5B6B82] truncate max-w-[200px]">
-                        {row.observacao ? (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="truncate block cursor-help">{row.observacao}</span>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs bg-[#12365A] text-white">
-                              {row.observacao}
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
                     </tr>
                   )
                 })
@@ -922,8 +901,6 @@ export const Index: React.FC = () => {
                 <td className="px-2.5 py-3 text-right text-[#fdba74] tabular-nums border-r border-[#1e456f]">
                   {animatedNaoTratados.toLocaleString('pt-BR')}
                 </td>
-                {/* N */}
-                <td className="px-3 py-3"></td>
               </tr>
             </tfoot>
           </table>

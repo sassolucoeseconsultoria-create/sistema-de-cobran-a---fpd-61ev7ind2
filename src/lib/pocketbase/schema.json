@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-26T18:31:29.843Z",
+  "generatedAt": "2026-08-26T18:35:27.957Z",
   "collections": [
     {
       "name": "users",
@@ -69,12 +69,6 @@
         },
         {
           "name": "supervisao",
-          "type": "text",
-          "required": false,
-          "system": false
-        },
-        {
-          "name": "observacao",
           "type": "text",
           "required": false,
           "system": false

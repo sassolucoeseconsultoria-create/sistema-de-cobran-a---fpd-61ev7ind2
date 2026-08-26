@@ -77,7 +77,7 @@ export const Layout: React.FC = () => {
       case '/lojas':
         return {
           title: 'Gestão de Lojas e Estrutura',
-          subtitle: 'Coordenações, supervisões e observações operacionais',
+          subtitle: 'Coordenações e supervisões operacionais',
         }
       default:
         return {

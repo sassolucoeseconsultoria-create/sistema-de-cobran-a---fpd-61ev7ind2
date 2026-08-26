@@ -53,14 +53,13 @@ export const Lojas: React.FC = () => {
   const [newName, setNewName] = useState('')
   const [newCoordenacao, setNewCoordenacao] = useState('')
   const [newSupervisao, setNewSupervisao] = useState('')
-  const [newObservacao, setNewObservacao] = useState('')
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
 
   // Inline editing state
   const [editingCell, setEditingCell] = useState<{
     storeId: string
-    field: 'coordenacao' | 'supervisao' | 'observacao'
+    field: 'coordenacao' | 'supervisao'
   } | null>(null)
   const [editValue, setEditValue] = useState('')
 
@@ -133,7 +132,6 @@ export const Lojas: React.FC = () => {
         name: newName.trim().toUpperCase(),
         coordenacao: newCoordenacao.trim(),
         supervisao: newSupervisao.trim(),
-        observacao: newObservacao.trim(),
       })
 
       toast({
@@ -144,7 +142,6 @@ export const Lojas: React.FC = () => {
       setNewName('')
       setNewCoordenacao('')
       setNewSupervisao('')
-      setNewObservacao('')
       setCreateModalOpen(false)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -159,10 +156,7 @@ export const Lojas: React.FC = () => {
   }
 
   // Start inline edit
-  const startInlineEdit = (
-    store: StoreRecord,
-    field: 'coordenacao' | 'supervisao' | 'observacao',
-  ) => {
+  const startInlineEdit = (store: StoreRecord, field: 'coordenacao' | 'supervisao') => {
     setEditingCell({ storeId: store.id, field })
     setEditValue(store[field] || '')
   }
@@ -268,7 +262,7 @@ export const Lojas: React.FC = () => {
             Gerenciamento de Lojas ({stores.length})
           </h2>
           <p className="text-xs text-[#5B6B82]">
-            Cadastre novas lojas ou edite inline Coordenação, Supervisão e Observações.
+            Cadastre novas lojas ou edite inline Coordenação e Supervisão.
           </p>
         </div>
 
@@ -357,7 +351,6 @@ export const Lojas: React.FC = () => {
                 <th className="px-4 py-3.5 min-w-[220px]">LOJA</th>
                 <th className="px-3 py-3.5 min-w-[150px]">COORDENAÇÃO</th>
                 <th className="px-3 py-3.5 min-w-[150px]">SUPERVISÃO</th>
-                <th className="px-3 py-3.5 min-w-[220px]">OBSERVAÇÃO</th>
                 <th className="px-3 py-3.5 min-w-[120px]">STATUS FPD</th>
                 <th className="px-3 py-3.5 min-w-[150px]">ÚLTIMA IMPORTAÇÃO</th>
                 <th className="px-3 py-3.5 text-right min-w-[80px]">AÇÕES</th>
@@ -366,7 +359,7 @@ export const Lojas: React.FC = () => {
             <tbody className="divide-y divide-[#E3E9F2]">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={6} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-6 h-6 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
                       <span>Carregando lojas cadastradas...</span>
@@ -375,7 +368,7 @@ export const Lojas: React.FC = () => {
                 </tr>
               ) : filteredStores.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={6} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
                       <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
                       <p className="font-semibold text-[#12365A]">Nenhuma loja encontrada</p>
@@ -474,45 +467,6 @@ export const Lojas: React.FC = () => {
                               {store.supervisao || 'Adicionar...'}
                             </span>
                             <Edit2 className="w-3 h-3 text-[#8A97AC] opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </div>
-                        )}
-                      </td>
-
-                      {/* OBSERVAÇÃO (Inline editable) */}
-                      <td className="px-3 py-2 text-[#5B6B82] max-w-[240px]">
-                        {editingCell?.storeId === store.id && editingCell.field === 'observacao' ? (
-                          <div className="flex items-center gap-1">
-                            <Input
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              onBlur={saveInlineEdit}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') saveInlineEdit()
-                                if (e.key === 'Escape') setEditingCell(null)
-                              }}
-                              autoFocus
-                              className="h-7 text-xs bg-white"
-                            />
-                            <Button
-                              onClick={saveInlineEdit}
-                              size="sm"
-                              className="h-7 w-7 p-0 bg-[#0E9F8A] text-white"
-                            >
-                              <Check className="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <div
-                            onClick={() => startInlineEdit(store, 'observacao')}
-                            className="group flex items-center justify-between cursor-pointer py-1 px-1.5 rounded hover:bg-slate-100/80 -mx-1.5 truncate"
-                            title="Clique para editar"
-                          >
-                            <span
-                              className={cn('truncate', !store.observacao ? 'text-slate-300' : '')}
-                            >
-                              {store.observacao || 'Adicionar nota...'}
-                            </span>
-                            <Edit2 className="w-3 h-3 text-[#8A97AC] opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-1" />
                           </div>
                         )}
                       </td>
@@ -628,17 +582,6 @@ export const Lojas: React.FC = () => {
                   className="text-xs uppercase bg-[#F8FAFC]"
                 />
               </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase text-[#12365A]">Observação</label>
-              <textarea
-                value={newObservacao}
-                onChange={(e) => setNewObservacao(e.target.value)}
-                placeholder="Observações operacionais sobre a loja"
-                rows={3}
-                className="w-full p-2.5 text-xs rounded-md border border-[#E3E9F2] bg-[#F8FAFC] focus:outline-none focus:border-[#0E9F8A]"
-              />
             </div>
 
             <DialogFooter className="pt-2">
