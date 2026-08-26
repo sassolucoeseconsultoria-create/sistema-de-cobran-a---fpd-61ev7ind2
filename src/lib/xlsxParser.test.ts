@@ -104,7 +104,9 @@ describe('classifyRow', () => {
     expect(classifyRow('ira pagar na sexta')).toBe('promessa_pagto')
     expect(classifyRow('combinou pagamento')).toBe('promessa_pagto')
     expect(classifyRow('combinou pagto')).toBe('promessa_pagto')
-    expect(classifyRow('pp')).toBe('promessa_pagto')
+
+    // 'pp' isolated should NOT be classified as promessa_pagto (falls into nao_tratados)
+    expect(classifyRow('pp')).toBe('nao_tratados')
 
     // Words that should NOT trigger promessa_pagto on their own:
     expect(classifyRow('pagamento efetuado')).toBe('fatura_paga')

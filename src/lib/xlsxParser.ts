@@ -231,8 +231,7 @@ export function classifyRow(rowNormalizedText: string): FpdStatusKey {
     rowNormalizedText.includes('combinou pagamento') ||
     rowNormalizedText.includes('combinou pagto') ||
     rowNormalizedText.includes('combinado pagamento') ||
-    rowNormalizedText.includes('combinado pagto') ||
-    /\bpp\b/.test(rowNormalizedText)
+    rowNormalizedText.includes('combinado pagto')
 
   if (isPromessaPagto) {
     // Check if it's explicitly already paid with receipt/confirmation despite mentioning promise
