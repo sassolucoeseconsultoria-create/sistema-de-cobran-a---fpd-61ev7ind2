@@ -171,14 +171,6 @@ export function classifyRow(rowNormalizedText: string, normalizedCells?: string[
     return 'promessa_pagto'
   }
 
-  // Also check via regex on individual cells (without ^ and $ anchors)
-  if (
-    normalizedCells &&
-    normalizedCells.some((cell) => /\bpromessa\s+de\s+pag(to|amento)\.?\b/i.test(cell))
-  ) {
-    return 'promessa_pagto'
-  }
-
   // --- 3. FATURA(S) PAGA(S) (key: fatura_paga) ---
   if (
     rowNormalizedText.includes('fatura paga') ||

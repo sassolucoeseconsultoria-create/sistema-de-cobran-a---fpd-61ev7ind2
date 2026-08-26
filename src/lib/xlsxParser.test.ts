@@ -159,10 +159,15 @@ describe('classifyRow', () => {
     const rowText4 = cells4.join(' ')
     expect(classifyRow(rowText4, cells4)).toBe('promessa_pagto')
 
-    // Regex match on cell containing promessa de pagto variation
+    // Regression test: cells with extra text (not exact match) should NOT match promessa_pagto
     const cells5 = ['cliente y', '999999999', 'status promessa de pagto cliente', '']
     const rowText5 = cells5.join(' ')
-    expect(classifyRow(rowText5, cells5)).toBe('promessa_pagto')
+    expect(classifyRow(rowText5, cells5)).toBe('outros')
+
+    // Regression test: a cell with "fatura paga - promessa de pagto quitada" should NOT be classified as promessa_pagto
+    const cellsRegression = ['loja teste', 'cliente a', 'fatura paga - promessa de pagto quitada']
+    const rowTextRegression = cellsRegression.join(' ')
+    expect(classifyRow(rowTextRegression, cellsRegression)).toBe('fatura_paga')
 
     // False positive prevention: "promessa de pagto" inside observation cell when status is "fatura paga"
     const cellsFaturaPaga = [
