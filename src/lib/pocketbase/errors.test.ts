@@ -142,6 +142,21 @@ describe('extractFieldErrors', () => {
     expect(result.passwordConfirm).toBe('As senhas digitadas não coincidem.')
   })
 
+  it('handles PocketBase 0.26.x validation response where password and passwordConfirm validation_values_mismatch are in err.response root with err.data empty', () => {
+    const error = {
+      status: 400,
+      data: {},
+      response: {
+        password: { code: 'validation_values_mismatch', message: 'Values must match.' },
+        passwordConfirm: { code: 'validation_values_mismatch', message: 'Values must match.' },
+      },
+    }
+
+    const result = extractFieldErrors(error)
+    expect(result.passwordConfirm).toBe('As senhas digitadas não coincidem.')
+    expect(result.password).toBeUndefined()
+  })
+
   it('extracts errors from originalError.data and cause.data fallbacks', () => {
     const errorOriginal = {
       status: 400,

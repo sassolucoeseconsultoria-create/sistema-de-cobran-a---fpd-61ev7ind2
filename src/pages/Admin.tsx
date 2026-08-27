@@ -306,6 +306,8 @@ export const Admin: React.FC = () => {
         typeofResponse: typeof anyErr?.response,
         responseIsResponseInstance:
           typeof Response !== 'undefined' && anyErr?.response instanceof Response ? 'SIM' : 'NÃO',
+        responseKeys: Object.keys(anyErr?.response || {}),
+        responseJson: JSON.stringify(anyErr?.response),
         dataKeys: Object.keys(anyErr?.data || {}),
         responseDataKeys: Object.keys(anyErr?.response?.data || {}),
         originalError: JSON.stringify(anyErr?.originalError, null, 2),
