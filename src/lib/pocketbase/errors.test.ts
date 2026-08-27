@@ -176,6 +176,46 @@ describe('extractFieldErrors', () => {
     })
   })
 
+  it('extracts errors when err.response is a native Response instance and validation data is lost across error properties (new fallback)', () => {
+    const nativeResponse = new Response(JSON.stringify({ error: 'bad request' }), { status: 400 })
+    const error = {
+      name: 'ClientResponseError',
+      status: 400,
+      response: nativeResponse,
+      data: {},
+      customFieldBucket: {
+        password: {
+          code: 'validation_length_out_of_range',
+          message: 'Password too short',
+        },
+        email: {
+          code: 'validation_invalid_email',
+          message: 'Invalid format',
+        },
+      },
+    }
+
+    const result = extractFieldErrors(error)
+    expect(result.password).toBe('A senha deve ter no mínimo 8 caracteres.')
+    expect(result.email).toBe('Formato de e-mail inválido.')
+  })
+
+  it('maps validation_values_mismatch on password to passwordConfirm with correct message', () => {
+    const error = {
+      status: 400,
+      data: {
+        password: {
+          code: 'validation_values_mismatch',
+          message: 'Values must match.',
+        },
+      },
+    }
+
+    const result = extractFieldErrors(error)
+    expect(result.passwordConfirm).toBe('As senhas digitadas não coincidem.')
+    expect(result.password).toBeUndefined()
+  })
+
   it('returns empty object for null or non-object errors', () => {
     expect(extractFieldErrors(null)).toEqual({})
     expect(extractFieldErrors(undefined)).toEqual({})
@@ -199,7 +239,17 @@ describe('getErrorMessage', () => {
     expect(msg).toContain('Nome obrigatório.')
   })
 
-  it('falls back to generic error message when no field errors exist', () => {
+  it('returns friendly message instead of generic PocketBase message when field errors are empty', () => {
+    const error = {
+      status: 400,
+      message: 'Failed to create record.',
+      data: {},
+    }
+
+    expect(getErrorMessage(error)).toBe('Erro de validação. Verifique os campos e tente novamente.')
+  })
+
+  it('falls back to custom error message when no field errors exist', () => {
     const error = new Error('Falha de conexão')
     expect(getErrorMessage(error)).toBe('Falha de conexão')
   })

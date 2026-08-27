@@ -277,6 +277,8 @@ export const Admin: React.FC = () => {
         const errorObj = err as any
         console.log('[PocketBase Error Debug]', {
           keys: err && typeof err === 'object' ? Object.keys(err) : [],
+          ownPropertyNames: err && typeof err === 'object' ? Object.getOwnPropertyNames(err) : [],
+          jsonStringified: JSON.stringify(err),
           data: errorObj?.data,
           response: errorObj?.response,
           originalError: errorObj?.originalError,
@@ -291,8 +293,28 @@ export const Admin: React.FC = () => {
       }
 
       // Extrai erros específicos por campo
-      const fieldErrors = extractFieldErrors(err)
-      const errorMsg = getErrorMessage(err)
+      let fieldErrors = extractFieldErrors(err)
+      let errorMsg = getErrorMessage(err)
+
+      // Se extractFieldErrors retornou vazio mas getErrorMessage ou err tem dados,
+      // inspeciona diretamente err.data ou chaves de err.response (se não for Response nativo)
+      if (Object.keys(fieldErrors).length === 0 && err && typeof err === 'object') {
+        const errorRecord = err as Record<string, any>
+        if (errorRecord.data && typeof errorRecord.data === 'object') {
+          fieldErrors = extractFieldErrors(errorRecord.data)
+        }
+        if (
+          Object.keys(fieldErrors).length === 0 &&
+          errorRecord.response &&
+          typeof errorRecord.response === 'object' &&
+          !(typeof Response !== 'undefined' && errorRecord.response instanceof Response)
+        ) {
+          fieldErrors = extractFieldErrors(errorRecord.response)
+        }
+        if (Object.keys(fieldErrors).length > 0) {
+          errorMsg = getErrorMessage(fieldErrors)
+        }
+      }
 
       if (Object.keys(fieldErrors).length > 0) {
         setFormErrors(fieldErrors)
