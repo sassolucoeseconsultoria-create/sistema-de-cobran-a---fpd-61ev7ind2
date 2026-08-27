@@ -314,8 +314,45 @@ export const Admin: React.FC = () => {
       })
       console.dir(err, { depth: 5 })
 
-      // Extrai erros específicos por campo
-      const fieldErrors = extractFieldErrors(err)
+      // Extrai erros específicos por campo via extractFieldErrors
+      let fieldErrors = extractFieldErrors(err)
+
+      // Fallback direto adicional caso err.response seja objeto plano no Admin.tsx
+      if (Object.keys(fieldErrors).length === 0) {
+        const rawResponse = (err as any)?.response
+        if (rawResponse && typeof rawResponse === 'object' && !Array.isArray(rawResponse)) {
+          const directErrors: Record<string, string> = {}
+          for (const [key, val] of Object.entries(rawResponse)) {
+            if (
+              val &&
+              typeof val === 'object' &&
+              ('code' in (val as any) || 'message' in (val as any))
+            ) {
+              const code = (val as any).code
+              const message = (val as any).message || ''
+              if (
+                code === 'validation_values_mismatch' ||
+                String(message).toLowerCase().includes('match')
+              ) {
+                directErrors.passwordConfirm = 'As senhas digitadas não coincidem.'
+              } else if (code === 'validation_length_out_of_range') {
+                directErrors[key] = 'A senha deve ter no mínimo 8 caracteres.'
+              } else if (code === 'validation_not_unique' || code === 'validation_is_not_unique') {
+                directErrors[key === 'username' ? 'email' : key] =
+                  'Este e-mail já está sendo utilizado por outro usuário.'
+              } else {
+                directErrors[key] = message || 'Campo inválido.'
+              }
+            } else if (typeof val === 'string' && val.trim().length > 0) {
+              directErrors[key] = val
+            }
+          }
+          if (Object.keys(directErrors).length > 0) {
+            fieldErrors = directErrors
+          }
+        }
+      }
+
       const hasFieldErrors = Object.keys(fieldErrors).length > 0
 
       if (hasFieldErrors) {
@@ -778,10 +815,13 @@ export const Admin: React.FC = () => {
                   if (formErrors.name) setFormErrors({ ...formErrors, name: '' })
                 }}
                 placeholder="Ex: Carlos Eduardo Silva"
-                className={cn('text-xs bg-[#F8FAFC]', formErrors.name && 'border-red-500')}
+                className={cn(
+                  'text-xs bg-[#F8FAFC]',
+                  Boolean(formErrors.name) && 'border-red-500 focus-visible:ring-red-400',
+                )}
                 required
               />
-              {formErrors.name && (
+              {Boolean(formErrors.name) && (
                 <p className="text-[11px] text-red-600 font-medium">{formErrors.name}</p>
               )}
             </div>
@@ -801,9 +841,12 @@ export const Admin: React.FC = () => {
                   if (formErrors.fone) setFormErrors({ ...formErrors, fone: '' })
                 }}
                 placeholder="Ex: (61) 98765-4321"
-                className={cn('text-xs bg-[#F8FAFC]', formErrors.fone && 'border-red-500')}
+                className={cn(
+                  'text-xs bg-[#F8FAFC]',
+                  Boolean(formErrors.fone) && 'border-red-500 focus-visible:ring-red-400',
+                )}
               />
-              {formErrors.fone && (
+              {Boolean(formErrors.fone) && (
                 <p className="text-[11px] text-red-600 font-medium">{formErrors.fone}</p>
               )}
             </div>
@@ -822,10 +865,13 @@ export const Admin: React.FC = () => {
                   if (formErrors.email) setFormErrors({ ...formErrors, email: '' })
                 }}
                 placeholder="Ex: carlos.silva@celnet.com.br"
-                className={cn('text-xs bg-[#F8FAFC]', formErrors.email && 'border-red-500')}
+                className={cn(
+                  'text-xs bg-[#F8FAFC]',
+                  Boolean(formErrors.email) && 'border-red-500 focus-visible:ring-red-400',
+                )}
                 required
               />
-              {formErrors.email && (
+              {Boolean(formErrors.email) && (
                 <p className="text-[11px] text-red-600 font-medium">{formErrors.email}</p>
               )}
             </div>
@@ -846,7 +892,7 @@ export const Admin: React.FC = () => {
                 <SelectTrigger
                   className={cn(
                     'w-full text-xs bg-[#F8FAFC] h-9',
-                    formErrors.role && 'border-red-500',
+                    Boolean(formErrors.role) && 'border-red-500 focus:ring-red-400',
                   )}
                 >
                   <SelectValue placeholder="Selecione o perfil" />
@@ -877,7 +923,7 @@ export const Admin: React.FC = () => {
                   </SelectItem>
                 </SelectContent>
               </Select>
-              {formErrors.role && (
+              {Boolean(formErrors.role) && (
                 <p className="text-[11px] text-red-600 font-medium">{formErrors.role}</p>
               )}
             </div>
@@ -908,7 +954,7 @@ export const Admin: React.FC = () => {
                   }
                   className={cn(
                     'text-xs bg-[#F8FAFC] pr-10',
-                    formErrors.password && 'border-red-500',
+                    Boolean(formErrors.password) && 'border-red-500 focus-visible:ring-red-400',
                   )}
                 />
                 <button
@@ -921,7 +967,7 @@ export const Admin: React.FC = () => {
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              {formErrors.password && (
+              {Boolean(formErrors.password) && (
                 <p className="text-[11px] text-red-600 font-medium">{formErrors.password}</p>
               )}
             </div>
@@ -950,7 +996,8 @@ export const Admin: React.FC = () => {
                   }
                   className={cn(
                     'text-xs bg-[#F8FAFC] pr-10',
-                    formErrors.passwordConfirm && 'border-red-500',
+                    Boolean(formErrors.passwordConfirm) &&
+                      'border-red-500 focus-visible:ring-red-400',
                   )}
                 />
                 <button
@@ -971,7 +1018,7 @@ export const Admin: React.FC = () => {
                   )}
                 </button>
               </div>
-              {formErrors.passwordConfirm && (
+              {Boolean(formErrors.passwordConfirm) && (
                 <p className="text-[11px] text-red-600 font-medium">{formErrors.passwordConfirm}</p>
               )}
             </div>

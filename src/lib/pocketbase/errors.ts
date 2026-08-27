@@ -1,274 +1,254 @@
-import { ClientResponseError } from 'pocketbase'
-
 export type FieldErrors = Record<string, string>
 
-/**
- * Mapeia mensagens ou códigos de erro comuns do PocketBase para português
- */
-function translateValidationMessage(
-  code: string | undefined,
-  rawMsg: string | undefined,
-  field: string,
-): string {
-  // Código de erro direto
-  if (code === 'validation_length_out_of_range') {
-    if (field === 'password' || field === 'passwordConfirm') {
-      return 'A senha deve ter no mínimo 8 caracteres.'
-    }
-    return 'O comprimento do campo está fora do limite permitido.'
-  }
-  if (code === 'validation_values_mismatch') {
-    if (field === 'password' || field === 'passwordConfirm') {
-      return 'As senhas digitadas não coincidem.'
-    }
-    return 'Os valores não coincidem.'
-  }
-  if (code === 'validation_not_unique' || code === 'validation_is_not_unique') {
+// Map standard PocketBase validation error codes or English messages to clear Portuguese messages
+export function translateErrorMessage(field: string, code?: string, rawMessage?: string): string {
+  const codeStr = String(code || '').toLowerCase()
+  const msgStr = String(rawMessage || '').toLowerCase()
+
+  if (
+    codeStr === 'validation_not_unique' ||
+    codeStr === 'validation_is_not_unique' ||
+    msgStr.includes('unique') ||
+    msgStr.includes('already in use')
+  ) {
     if (field === 'email' || field === 'username') {
       return 'Este e-mail já está sendo utilizado por outro usuário.'
     }
     return 'Já existe um registro com este valor.'
   }
-  if (code === 'validation_invalid_email') {
-    return 'Formato de e-mail inválido.'
-  }
-  if (code === 'validation_required') {
-    return 'Este campo é obrigatório.'
-  }
 
-  // Mensagem textual em inglês do PocketBase
-  const msg = rawMsg || ''
-  if (/email.*unique/i.test(msg) || /username.*unique/i.test(msg)) {
-    return 'Este e-mail já está sendo utilizado por outro usuário.'
-  }
-  if (/unique/i.test(msg)) {
-    return 'Já existe um registro com este valor.'
-  }
-  if (/match/i.test(msg) && (field === 'password' || field === 'passwordConfirm')) {
+  if (
+    codeStr === 'validation_values_mismatch' ||
+    msgStr.includes('values must match') ||
+    msgStr.includes("values don't match") ||
+    msgStr.includes('mismatch')
+  ) {
     return 'As senhas digitadas não coincidem.'
   }
-  if (/match/i.test(msg)) {
-    return 'Os valores não coincidem.'
-  }
-  if (/length must be between/i.test(msg) || /at least 8/i.test(msg) || /too short/i.test(msg)) {
+
+  if (
+    codeStr === 'validation_length_out_of_range' ||
+    codeStr === 'validation_min_text_constraint' ||
+    msgStr.includes('length must be') ||
+    msgStr.includes('at least 8')
+  ) {
     if (field === 'password' || field === 'passwordConfirm') {
       return 'A senha deve ter no mínimo 8 caracteres.'
     }
+    return rawMessage || 'Tamanho de campo inválido.'
   }
-  if (/invalid email/i.test(msg)) {
+
+  if (
+    codeStr === 'validation_invalid_email' ||
+    msgStr.includes('invalid email') ||
+    msgStr.includes('valid email')
+  ) {
     return 'Formato de e-mail inválido.'
   }
-  if (/required/i.test(msg)) {
+
+  if (
+    codeStr === 'validation_required' ||
+    msgStr.includes('required') ||
+    msgStr.includes('cannot be blank')
+  ) {
+    if (field === 'name') return 'O nome é obrigatório'
+    if (field === 'email') return 'O e-mail é obrigatório'
+    if (field === 'password') return 'A senha é obrigatória'
     return 'Este campo é obrigatório.'
   }
 
-  return rawMsg || 'Campo inválido.'
+  return rawMessage || 'Campo inválido.'
 }
 
-/**
- * Função auxiliar para verificar se um objeto tem formato de item de erro de validação
- */
-function isErrorDetail(val: unknown): val is { code?: string; message?: string } {
-  if (!val || typeof val !== 'object') return false
-  return 'message' in val || 'code' in val
+function isPlainObject(val: unknown): val is Record<string, any> {
+  return typeof val === 'object' && val !== null && !Array.isArray(val)
 }
 
-/**
- * Extrai recursivamente ou por iteração os erros de validação por campo.
- * Tenta:
- * 1. err.data (PocketBase SDK mapeia errData?.data || {})
- * 2. err.response?.data (quando response é objeto com .data ou Response parseado)
- * 3. err.response diretamente (quando PocketBase SDK 0.26.x retorna objeto plano com os campos na raiz)
- * 4. Fallbacks em originalError.data ou cause.data ou outras propriedades do erro
- */
+function isNativeResponse(val: unknown): boolean {
+  if (typeof Response !== 'undefined' && val instanceof Response) return true
+  // Duck typing for Response instances
+  if (
+    isPlainObject(val) &&
+    'ok' in val &&
+    'status' in val &&
+    typeof (val as any).json === 'function'
+  ) {
+    return true
+  }
+  return false
+}
+
+// Recursive helper to extract field errors from any raw dictionary
+function collectErrorsFromObject(obj: Record<string, any>, collected: FieldErrors, depth = 0) {
+  if (depth > 4 || !obj || typeof obj !== 'object') return
+
+  for (const [key, val] of Object.entries(obj)) {
+    // Skip internal transport or metadata keys
+    if (
+      ['status', 'message', 'code', 'url', 'headers', 'stack', 'name'].includes(key) &&
+      depth === 0
+    ) {
+      continue
+    }
+
+    if (val === null || val === undefined) continue
+
+    // Case 1: Value is a string error message
+    if (typeof val === 'string' && val.trim().length > 0) {
+      if (key === 'password' && val.toLowerCase().includes('match')) {
+        collected.passwordConfirm = 'As senhas digitadas não coincidem.'
+        delete collected.password
+      } else {
+        collected[key] = translateErrorMessage(key, undefined, val)
+      }
+      continue
+    }
+
+    // Case 2: Value is an object with { code, message }
+    if (isPlainObject(val) && ('message' in val || 'code' in val)) {
+      const code = typeof val.code === 'string' ? val.code : undefined
+      const message = typeof val.message === 'string' ? val.message : ''
+
+      if (code === 'validation_values_mismatch' || message.toLowerCase().includes('match')) {
+        // Special mapping: password / passwordConfirm mismatch always maps to passwordConfirm
+        collected.passwordConfirm = 'As senhas digitadas não coincidem.'
+        delete collected.password
+      } else {
+        collected[key] = translateErrorMessage(key, code, message)
+      }
+
+      // If val also has nested data (e.g. val.data), inspect it
+      if (isPlainObject(val.data)) {
+        collectErrorsFromObject(val.data, collected, depth + 1)
+      }
+      continue
+    }
+
+    // Case 3: Nested container object (e.g. nested: { data: { role: ... } } or val.data)
+    if (isPlainObject(val) && !isNativeResponse(val)) {
+      collectErrorsFromObject(val, collected, depth + 1)
+    }
+  }
+}
+
 export function extractFieldErrors(error: unknown): FieldErrors {
-  if (!error || typeof error !== 'object') return {}
+  if (!error || (typeof error !== 'object' && typeof error !== 'function')) {
+    return {}
+  }
 
-  const anyErr = error as Record<string, unknown>
+  const anyErr = error as Record<string, any>
   const errors: FieldErrors = {}
 
-  // Coleção de possíveis fontes de dicionários de validação
-  const candidateSources: unknown[] = []
+  // List candidate error sources to inspect
+  const candidateSources: { name: string; value: any }[] = []
 
-  // 1. err.data
-  if (anyErr.data && typeof anyErr.data === 'object') {
-    candidateSources.push(anyErr.data)
+  // 1. err.response?.data
+  if (isPlainObject(anyErr.response?.data)) {
+    candidateSources.push({ name: 'err.response.data', value: anyErr.response.data })
   }
 
-  // 2. err.response?.data
-  if (
-    anyErr.response &&
-    typeof anyErr.response === 'object' &&
-    !(typeof Response !== 'undefined' && anyErr.response instanceof Response)
-  ) {
-    const respObj = anyErr.response as Record<string, unknown>
-    if (respObj.data && typeof respObj.data === 'object') {
-      candidateSources.push(respObj.data)
-    }
-    // 3. err.response diretamente (se for um objeto plano e não uma Response)
-    candidateSources.push(respObj)
+  // 2. err.data
+  if (isPlainObject(anyErr.data)) {
+    candidateSources.push({ name: 'err.data', value: anyErr.data })
   }
 
-  // 4. Fallbacks: originalError.data, cause.data, etc.
-  if (anyErr.originalError && typeof anyErr.originalError === 'object') {
-    const orig = anyErr.originalError as Record<string, unknown>
-    if (orig.data && typeof orig.data === 'object') candidateSources.push(orig.data)
-    if (orig.response && typeof orig.response === 'object') candidateSources.push(orig.response)
-  }
-  if (anyErr.cause && typeof anyErr.cause === 'object') {
-    const c = anyErr.cause as Record<string, unknown>
-    if (c.data && typeof c.data === 'object') candidateSources.push(c.data)
+  // 3. err.response (if not a native Response with .ok)
+  if (isPlainObject(anyErr.response) && !isNativeResponse(anyErr.response)) {
+    candidateSources.push({ name: 'err.response', value: anyErr.response })
   }
 
-  // Percorre todas as propriedades de anyErr para achar buckets de campos com erros
+  // 4. err.originalError?.data or err.originalError
+  if (isPlainObject(anyErr.originalError?.data)) {
+    candidateSources.push({ name: 'err.originalError.data', value: anyErr.originalError.data })
+  } else if (isPlainObject(anyErr.originalError)) {
+    candidateSources.push({ name: 'err.originalError', value: anyErr.originalError })
+  }
+
+  // 5. err.cause?.data or err.cause
+  if (isPlainObject(anyErr.cause?.data)) {
+    candidateSources.push({ name: 'err.cause.data', value: anyErr.cause.data })
+  } else if (isPlainObject(anyErr.cause)) {
+    candidateSources.push({ name: 'err.cause', value: anyErr.cause })
+  }
+
+  // 6. Any other object properties on anyErr (excluding standard error fields and native Response)
   for (const [k, v] of Object.entries(anyErr)) {
     if (
-      ![
+      [
         'status',
         'message',
-        'name',
+        'code',
+        'url',
+        'headers',
         'stack',
-        'originalError',
-        'cause',
+        'name',
         'response',
         'data',
-      ].includes(k) &&
-      v &&
-      typeof v === 'object' &&
-      !(typeof Response !== 'undefined' && v instanceof Response)
+        'originalError',
+        'cause',
+      ].includes(k)
     ) {
-      candidateSources.push(v)
+      continue
+    }
+    if (isPlainObject(v) && !isNativeResponse(v)) {
+      candidateSources.push({ name: `err.${k}`, value: v })
     }
   }
 
-  // Processa as fontes encontradas
-  for (const src of candidateSources) {
-    if (!src || typeof src !== 'object' || Array.isArray(src)) continue
-
-    for (const [key, val] of Object.entries(src as Record<string, unknown>)) {
-      // Ignora chaves reservadas ou de metadados como 'message', 'code', 'status' caso seja a raiz de response
-      if (['message', 'code', 'status'].includes(key) && typeof val === 'string') {
-        continue
-      }
-
-      // Se for uma string direta
-      if (typeof val === 'string' && val.trim().length > 0) {
-        if (!errors[key]) {
-          errors[key] = translateValidationMessage(undefined, val, key)
-        }
-        continue
-      }
-
-      // Se for um objeto com message ou code
-      if (isErrorDetail(val)) {
-        const detail = val as { code?: string; message?: string }
-        const code = detail.code
-        const rawMsg = typeof detail.message === 'string' ? detail.message : undefined
-
-        // Mapeamento especial: quando o campo for `password` com código `validation_values_mismatch`,
-        // ou mensagem de mismatch, redirecione para `passwordConfirm`
-        if (
-          key === 'password' &&
-          (code === 'validation_values_mismatch' || (rawMsg && /match/i.test(rawMsg)))
-        ) {
-          errors.passwordConfirm = 'As senhas digitadas não coincidem.'
-          continue
-        }
-
-        if (
-          key === 'passwordConfirm' &&
-          (code === 'validation_values_mismatch' || (rawMsg && /match/i.test(rawMsg)))
-        ) {
-          errors.passwordConfirm = 'As senhas digitadas não coincidem.'
-          continue
-        }
-
-        const translated = translateValidationMessage(code, rawMsg, key)
-        if (!errors[key]) {
-          errors[key] = translated
-        }
-        continue
-      }
-
-      // Se for aninhado (ex: nested.data.role)
-      if (val && typeof val === 'object' && !Array.isArray(val)) {
-        const nested = val as Record<string, unknown>
-        if (nested.data && typeof nested.data === 'object') {
-          for (const [nKey, nVal] of Object.entries(nested.data as Record<string, unknown>)) {
-            if (isErrorDetail(nVal)) {
-              const d = nVal as { code?: string; message?: string }
-              if (!errors[nKey]) {
-                errors[nKey] = translateValidationMessage(d.code, d.message, nKey)
-              }
-            }
-          }
-        }
-      }
-    }
+  try {
+    console.log(
+      '[extractFieldErrors] sources encontradas:',
+      candidateSources.map((s) => s.name),
+    )
+  } catch {
+    // Ignore logging errors in environments without console
   }
 
-  // Tratamento de username para email se username existir nos erros e email não
-  if (errors.username && !errors.email) {
-    errors.email = errors.username
+  // Process all candidate sources
+  for (const source of candidateSources) {
+    collectErrorsFromObject(source.value, errors, 0)
+  }
+
+  // Map username error to email if email does not have an error
+  if (errors.username) {
+    if (!errors.email) {
+      errors.email = errors.username
+    }
     delete errors.username
-  } else if (errors.username && errors.email) {
-    delete errors.username
+  }
+
+  try {
+    console.log('[extractFieldErrors] resultado:', errors)
+  } catch {
+    // Ignore logging errors
   }
 
   return errors
 }
 
-/**
- * Retorna mensagem de erro formatada em português para exibição ao usuário
- */
 export function getErrorMessage(error: unknown): string {
   if (!error) return 'Ocorreu um erro inesperado.'
 
-  // Se houver erros por campo, combina mensagens únicas
   const fieldErrors = extractFieldErrors(error)
-  const msgs = Array.from(new Set(Object.values(fieldErrors))).filter(Boolean)
+  const msgs = Object.values(fieldErrors)
 
   if (msgs.length > 0) {
-    return msgs.join(' ')
+    // Remove duplicates while maintaining order
+    const uniqueMsgs = Array.from(new Set(msgs))
+    return uniqueMsgs.join(' ')
   }
 
-  if (error instanceof ClientResponseError) {
-    const rawMsg = error.message || ''
-    if (/Failed to create record/i.test(rawMsg) || /Failed to authenticate/i.test(rawMsg)) {
-      if (error.status === 400) {
-        return 'Erro de validação. Verifique os campos e tente novamente.'
-      }
-      if (error.status === 403 || error.status === 401) {
-        return 'Acesso não autorizado ou credenciais inválidas.'
-      }
-      if (error.status === 404) {
-        return 'Registro não encontrado.'
-      }
-    }
-    return translateValidationMessage(undefined, rawMsg, 'general')
+  const anyErr = error as Record<string, any>
+  const rawMsg = anyErr?.message || (error instanceof Error ? error.message : '')
+
+  if (
+    anyErr?.status === 400 &&
+    (!rawMsg ||
+      rawMsg.toLowerCase().includes('failed to') ||
+      rawMsg.toLowerCase().includes('something went wrong'))
+  ) {
+    return 'Erro de validação. Verifique os campos e tente novamente.'
   }
 
-  if (typeof error === 'object' && error !== null && 'status' in error) {
-    const anyErr = error as Record<string, unknown>
-    const rawMsg = typeof anyErr.message === 'string' ? anyErr.message : ''
-    if (
-      anyErr.status === 400 &&
-      (!rawMsg || /Failed to create record/i.test(rawMsg) || /Something went wrong/i.test(rawMsg))
-    ) {
-      return 'Erro de validação. Verifique os campos e tente novamente.'
-    }
-    if (rawMsg) {
-      return rawMsg
-    }
-  }
-
-  if (error instanceof Error) {
-    const msg = error.message
-    if (/Failed to create record/i.test(msg)) {
-      return 'Erro de validação. Verifique os campos e tente novamente.'
-    }
-    return msg
-  }
-
-  return 'Ocorreu um erro inesperado.'
+  return rawMsg || 'Ocorreu um erro inesperado.'
 }
