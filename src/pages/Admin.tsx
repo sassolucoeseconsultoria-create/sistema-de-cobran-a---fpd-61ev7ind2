@@ -197,7 +197,11 @@ export const Admin: React.FC = () => {
 
       if (!formData.passwordConfirm) {
         errors.passwordConfirm = 'Confirme a senha.'
-      } else if (formData.password !== formData.passwordConfirm) {
+      } else if (
+        formData.password &&
+        formData.passwordConfirm &&
+        formData.password !== formData.passwordConfirm
+      ) {
         errors.passwordConfirm = 'As senhas digitadas não coincidem.'
       }
     } else {
@@ -206,8 +210,10 @@ export const Admin: React.FC = () => {
         if (formData.password.length < 8) {
           errors.password = 'A nova senha deve ter no mínimo 8 caracteres.'
         }
-        if (formData.password !== formData.passwordConfirm) {
+        if (formData.passwordConfirm && formData.password !== formData.passwordConfirm) {
           errors.passwordConfirm = 'As senhas digitadas não coincidem.'
+        } else if (!formData.passwordConfirm) {
+          errors.passwordConfirm = 'Confirme a nova senha.'
         }
       }
     }
@@ -236,9 +242,9 @@ export const Admin: React.FC = () => {
           role: formData.role,
         }
 
-        if (formData.password.trim()) {
-          payload.password = formData.password.trim()
-          payload.passwordConfirm = (formData.passwordConfirm || formData.password).trim()
+        if (formData.password) {
+          payload.password = formData.password
+          payload.passwordConfirm = formData.passwordConfirm
         }
 
         const updated = await pb.collection('users').update<User>(editingUser.id, payload)
@@ -255,8 +261,8 @@ export const Admin: React.FC = () => {
           email: formData.email.trim().toLowerCase(),
           fone: formData.fone.trim(),
           role: formData.role,
-          password: formData.password.trim(),
-          passwordConfirm: formData.passwordConfirm.trim() || formData.password.trim(),
+          password: formData.password,
+          passwordConfirm: formData.passwordConfirm,
           emailVisibility: true,
           verified: true,
         }
@@ -273,60 +279,25 @@ export const Admin: React.FC = () => {
       setModalOpen(false)
     } catch (err: unknown) {
       console.error('Erro ao salvar usuário:', err)
-      try {
-        const errorObj = err as any
-        console.log('[PocketBase Error Debug]', {
-          keys: err && typeof err === 'object' ? Object.keys(err) : [],
-          ownPropertyNames: err && typeof err === 'object' ? Object.getOwnPropertyNames(err) : [],
-          jsonStringified: JSON.stringify(err),
-          data: errorObj?.data,
-          response: errorObj?.response,
-          originalError: errorObj?.originalError,
-          cause: errorObj?.cause,
-          status: errorObj?.status,
-          message: errorObj?.message,
-          raw: err,
-        })
-        console.error('Erro detalhado do PocketBase:', JSON.stringify(err, null, 2))
-      } catch {
-        console.error('Erro detalhado do PocketBase:', err)
-      }
 
       // Extrai erros específicos por campo
-      let fieldErrors = extractFieldErrors(err)
-      let errorMsg = getErrorMessage(err)
+      const fieldErrors = extractFieldErrors(err)
+      const hasFieldErrors = Object.keys(fieldErrors).length > 0
 
-      // Se extractFieldErrors retornou vazio mas getErrorMessage ou err tem dados,
-      // inspeciona diretamente err.data ou chaves de err.response (se não for Response nativo)
-      if (Object.keys(fieldErrors).length === 0 && err && typeof err === 'object') {
-        const errorRecord = err as Record<string, any>
-        if (errorRecord.data && typeof errorRecord.data === 'object') {
-          fieldErrors = extractFieldErrors(errorRecord.data)
-        }
-        if (
-          Object.keys(fieldErrors).length === 0 &&
-          errorRecord.response &&
-          typeof errorRecord.response === 'object' &&
-          !(typeof Response !== 'undefined' && errorRecord.response instanceof Response)
-        ) {
-          fieldErrors = extractFieldErrors(errorRecord.response)
-        }
-        if (Object.keys(fieldErrors).length > 0) {
-          errorMsg = getErrorMessage(fieldErrors)
-        }
-      }
-
-      if (Object.keys(fieldErrors).length > 0) {
+      if (hasFieldErrors) {
         setFormErrors(fieldErrors)
-        setGeneralError('Por favor, corrija os campos destacados abaixo.')
+        setGeneralError('Erro de validação. Verifique os campos destacados abaixo.')
       } else {
+        const fallbackMsg = getErrorMessage(err)
         setFormErrors({})
-        setGeneralError(errorMsg || 'Falha ao salvar dados no servidor.')
+        setGeneralError(fallbackMsg || 'Falha ao salvar dados no servidor.')
       }
 
       toast({
         title: editingUser ? 'Erro ao atualizar usuário' : 'Erro ao cadastrar usuário',
-        description: errorMsg,
+        description: hasFieldErrors
+          ? 'Erro de validação. Verifique os campos destacados abaixo.'
+          : getErrorMessage(err),
         variant: 'destructive',
       })
     } finally {
@@ -754,7 +725,7 @@ export const Admin: React.FC = () => {
               <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2.5 text-red-700 text-xs">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
                 <div className="flex-1">
-                  <p className="font-semibold text-red-800">Falha ao salvar</p>
+                  <p className="font-semibold text-red-800">Erro ao salvar usuário</p>
                   <p className="mt-0.5 leading-relaxed">{generalError}</p>
                 </div>
               </div>
