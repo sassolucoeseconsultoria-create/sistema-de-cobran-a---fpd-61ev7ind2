@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import pb from '@/lib/pocketbase/client'
 import { useAuth, type UserRole, type User } from '@/contexts/AuthContext'
-import { extractFieldErrors, getErrorMessage } from '@/lib/pocketbase/errors'
+
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -160,66 +160,115 @@ export const Admin: React.FC = () => {
     setModalOpen(true)
   }
 
-  // Validation
+  // Validation 100% client-side before sending to PocketBase
   const validateForm = () => {
     const errors: Record<string, string> = {}
 
+    // Nome: obrigatório, não vazio
     if (!formData.name.trim()) {
       errors.name = 'O nome completo é obrigatório.'
     }
 
-    if (!formData.email.trim()) {
+    // E-mail: formato válido com regex simples
+    const emailValue = formData.email.trim()
+    if (!emailValue) {
       errors.email = 'O e-mail é obrigatório.'
     } else {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(formData.email.trim())) {
+      if (!emailRegex.test(emailValue)) {
         errors.email = 'Insira um e-mail válido.'
       }
     }
 
-    // Check email uniqueness locally
-    const existingWithEmail = users.find(
-      (u) =>
-        u.email.toLowerCase() === formData.email.trim().toLowerCase() && u.id !== editingUser?.id,
-    )
-    if (existingWithEmail) {
-      errors.email = 'Este e-mail já está sendo utilizado por outro usuário.'
+    // Checagem local de unicidade do e-mail na lista carregada
+    if (emailValue) {
+      const existingWithEmail = users.find(
+        (u) => u.email.toLowerCase() === emailValue.toLowerCase() && u.id !== editingUser?.id,
+      )
+      if (existingWithEmail) {
+        errors.email = 'Este e-mail já está sendo utilizado por outro usuário.'
+      }
     }
 
-    // Password validation: PocketBase auth requires min 8 chars
+    // Senhas
     if (!editingUser) {
-      // Create mode: password is required, min 8 chars
+      // Cadastro novo: senha obrigatória, mín 8 chars
       if (!formData.password) {
-        errors.password = 'A senha é obrigatória para novos usuários.'
+        errors.password = 'A senha deve ter no mínimo 8 caracteres.'
       } else if (formData.password.length < 8) {
         errors.password = 'A senha deve ter no mínimo 8 caracteres.'
       }
 
+      // Confirmar senha: deve coincidir exatamente
       if (!formData.passwordConfirm) {
-        errors.passwordConfirm = 'Confirme a senha.'
-      } else if (
-        formData.password &&
-        formData.passwordConfirm &&
-        formData.password !== formData.passwordConfirm
-      ) {
+        errors.passwordConfirm = 'Confirme a senha digitada.'
+      } else if (formData.password !== formData.passwordConfirm) {
         errors.passwordConfirm = 'As senhas digitadas não coincidem.'
       }
     } else {
-      // Edit mode: password optional, if provided min 8 chars
-      if (formData.password) {
-        if (formData.password.length < 8) {
-          errors.password = 'A nova senha deve ter no mínimo 8 caracteres.'
+      // Edição: senha opcional. Se preenchida, mín 8 chars e confirmação idêntica
+      if (formData.password || formData.passwordConfirm) {
+        if (!formData.password || formData.password.length < 8) {
+          errors.password = 'A senha deve ter no mínimo 8 caracteres.'
         }
-        if (formData.passwordConfirm && formData.password !== formData.passwordConfirm) {
+        if (formData.password !== formData.passwordConfirm) {
           errors.passwordConfirm = 'As senhas digitadas não coincidem.'
-        } else if (!formData.passwordConfirm) {
-          errors.passwordConfirm = 'Confirme a nova senha.'
         }
       }
     }
 
     setFormErrors(errors)
-    return Object.keys(errors).length === 0
+    if (Object.keys(errors).length > 0) {
+      setGeneralError('Verifique os campos destacados abaixo.')
+      return false
+    }
+
+    setGeneralError(null)
+    return true
+  }
+
+  // Helper para traduzir mensagens de erro conhecidas do PocketBase
+  const translateErrorMessage = (codeOrMsg: string, field?: string): string => {
+    const text = String(codeOrMsg).toLowerCase()
+    if (
+      text.includes('unique') ||
+      text.includes('not_unique') ||
+      text.includes('validation_not_unique')
+    ) {
+      return 'Este e-mail já está cadastrado.'
+    }
+    if (
+      text.includes('mismatch') ||
+      text.includes('match') ||
+      text.includes('validation_values_mismatch')
+    ) {
+      return 'As senhas digitadas não coincidem.'
+    }
+    if (
+      text.includes('length') ||
+      text.includes('out_of_range') ||
+      text.includes('min 8') ||
+      text.includes('min_length')
+    ) {
+      return field === 'password' || field === 'passwordConfirm'
+        ? 'A senha deve ter no mínimo 8 caracteres.'
+        : 'Tamanho inválido para este campo.'
+    }
+    if (
+      text.includes('required') ||
+      text.includes('validation_required') ||
+      text.includes('missing')
+    ) {
+      return 'Este campo é obrigatório.'
+    }
+    if (
+      text.includes('email') ||
+      text.includes('validation_is_email') ||
+      text.includes('invalid_email')
+    ) {
+      return 'Insira um e-mail válido.'
+    }
+    return codeOrMsg
   }
 
   // Handle Form Submit
@@ -242,20 +291,11 @@ export const Admin: React.FC = () => {
           role: formData.role,
         }
 
-        if (formData.password) {
-          payload.password = formData.password.trim()
-          payload.passwordConfirm = formData.passwordConfirm.trim()
+        // Só enviar password e passwordConfirm se forem preenchidas
+        if (formData.password.trim().length > 0) {
+          payload.password = formData.password
+          payload.passwordConfirm = formData.passwordConfirm
         }
-
-        // Diagnóstico: log do payload mascarando senhas
-        const maskedPayload = { ...payload }
-        if (maskedPayload.password !== undefined) {
-          maskedPayload.password = `*** (${maskedPayload.password.length} chars)`
-        }
-        if (maskedPayload.passwordConfirm !== undefined) {
-          maskedPayload.passwordConfirm = `*** (${maskedPayload.passwordConfirm.length} chars)`
-        }
-        console.log('[Admin] Payload sendo enviado:', maskedPayload)
 
         const updated = await pb.collection('users').update<User>(editingUser.id, payload)
         setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)))
@@ -271,19 +311,11 @@ export const Admin: React.FC = () => {
           email: formData.email.trim().toLowerCase(),
           fone: formData.fone.trim(),
           role: formData.role,
-          password: formData.password.trim(),
-          passwordConfirm: formData.passwordConfirm.trim(),
+          password: formData.password,
+          passwordConfirm: formData.passwordConfirm,
           emailVisibility: true,
           verified: true,
         }
-
-        // Diagnóstico: log do payload mascarando senhas
-        const maskedPayload = {
-          ...payload,
-          password: `*** (${payload.password.length} chars)`,
-          passwordConfirm: `*** (${payload.passwordConfirm.length} chars)`,
-        }
-        console.log('[Admin] Payload sendo enviado:', maskedPayload)
 
         const created = await pb.collection('users').create<User>(payload)
         setUsers((prev) => [created, ...prev])
@@ -295,80 +327,47 @@ export const Admin: React.FC = () => {
       }
 
       setModalOpen(false)
-    } catch (err: unknown) {
-      console.error('Erro ao salvar usuário:', err)
+    } catch (err: any) {
+      console.error('Erro ao salvar usuário no PocketBase:', err)
 
-      // Diagnóstico detalhado do erro do PocketBase
-      const anyErr = err as any
-      console.log('[Admin] Erro bruto do PocketBase:', {
-        status: anyErr?.status,
-        message: anyErr?.message,
-        typeofResponse: typeof anyErr?.response,
-        responseIsResponseInstance:
-          typeof Response !== 'undefined' && anyErr?.response instanceof Response ? 'SIM' : 'NÃO',
-        responseKeys: Object.keys(anyErr?.response || {}),
-        responseJson: JSON.stringify(anyErr?.response),
-        dataKeys: Object.keys(anyErr?.data || {}),
-        responseDataKeys: Object.keys(anyErr?.response?.data || {}),
-        originalError: JSON.stringify(anyErr?.originalError, null, 2),
-      })
-      console.dir(err, { depth: 5 })
+      // Extrair mensagens de erro de forma simples e robusta (sem instanceof)
+      const responseData = err?.data || err?.response?.data || err?.response || {}
+      const fieldErrors: Record<string, string> = {}
 
-      // Extrai erros específicos por campo via extractFieldErrors
-      let fieldErrors = extractFieldErrors(err)
-
-      // Fallback direto adicional caso err.response seja objeto plano no Admin.tsx
-      if (Object.keys(fieldErrors).length === 0) {
-        const rawResponse = (err as any)?.response
-        if (rawResponse && typeof rawResponse === 'object' && !Array.isArray(rawResponse)) {
-          const directErrors: Record<string, string> = {}
-          for (const [key, val] of Object.entries(rawResponse)) {
-            if (
-              val &&
-              typeof val === 'object' &&
-              ('code' in (val as any) || 'message' in (val as any))
-            ) {
-              const code = (val as any).code
-              const message = (val as any).message || ''
-              if (
-                code === 'validation_values_mismatch' ||
-                String(message).toLowerCase().includes('match')
-              ) {
-                directErrors.passwordConfirm = 'As senhas digitadas não coincidem.'
-              } else if (code === 'validation_length_out_of_range') {
-                directErrors[key] = 'A senha deve ter no mínimo 8 caracteres.'
-              } else if (code === 'validation_not_unique' || code === 'validation_is_not_unique') {
-                directErrors[key === 'username' ? 'email' : key] =
-                  'Este e-mail já está sendo utilizado por outro usuário.'
-              } else {
-                directErrors[key] = message || 'Campo inválido.'
-              }
-            } else if (typeof val === 'string' && val.trim().length > 0) {
-              directErrors[key] = val
+      if (responseData && typeof responseData === 'object' && !Array.isArray(responseData)) {
+        for (const key of Object.keys(responseData)) {
+          const item = responseData[key]
+          if (item && typeof item === 'object') {
+            const rawMsg = item.message || item.code || ''
+            if (rawMsg) {
+              const mappedKey = key === 'username' ? 'email' : key
+              fieldErrors[mappedKey] = translateErrorMessage(rawMsg, mappedKey)
             }
-          }
-          if (Object.keys(directErrors).length > 0) {
-            fieldErrors = directErrors
+          } else if (typeof item === 'string' && item.trim().length > 0) {
+            const mappedKey = key === 'username' ? 'email' : key
+            fieldErrors[mappedKey] = translateErrorMessage(item, mappedKey)
           }
         }
       }
 
-      const hasFieldErrors = Object.keys(fieldErrors).length > 0
+      setFormErrors(fieldErrors)
 
+      const hasFieldErrors = Object.keys(fieldErrors).length > 0
       if (hasFieldErrors) {
-        setFormErrors(fieldErrors)
-        setGeneralError('Erro de validação. Verifique os campos destacados abaixo.')
+        setGeneralError('Verifique os campos destacados abaixo.')
       } else {
-        const fallbackMsg = getErrorMessage(err)
-        setFormErrors({})
-        setGeneralError(fallbackMsg || 'Falha ao salvar dados no servidor.')
+        const fallbackMsg =
+          typeof err?.message === 'string' && err.message.trim().length > 0
+            ? translateErrorMessage(err.message)
+            : 'Erro ao salvar usuário. Tente novamente.'
+        setGeneralError(fallbackMsg)
       }
 
       toast({
         title: editingUser ? 'Erro ao atualizar usuário' : 'Erro ao cadastrar usuário',
         description: hasFieldErrors
-          ? 'Erro de validação. Verifique os campos destacados abaixo.'
-          : getErrorMessage(err),
+          ? 'Verifique os campos destacados abaixo.'
+          : 'Erro ao salvar usuário. Tente novamente.',
         variant: 'destructive',
       })
     } finally {
