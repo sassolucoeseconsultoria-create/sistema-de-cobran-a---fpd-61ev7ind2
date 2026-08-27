@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-26T18:45:46.880Z",
+  "generatedAt": "2026-08-27T18:33:29.160Z",
   "collections": [
     {
       "name": "users",
@@ -332,6 +332,122 @@
       "indexes": [
         "CREATE INDEX idx_imported_files_store ON imported_files (store)",
         "CREATE INDEX idx_imported_files_created ON imported_files (created DESC)"
+      ]
+    },
+    {
+      "name": "vendor_consolidations",
+      "type": "base",
+      "apiRules": {
+        "list": "",
+        "view": "",
+        "create": "",
+        "update": "",
+        "delete": ""
+      },
+      "fields": [
+        {
+          "name": "vendedor",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "loja",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "supervisao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_referencia",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_linhas",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fatura_paga",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "envio_fatura",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "promessa_pagto",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "sem_contato",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cancelados",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pendente",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "contato_realizado",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "outros",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nao_tratados",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_vendor_consolidations_vendedor ON vendor_consolidations (vendedor)",
+        "CREATE INDEX idx_vendor_consolidations_loja ON vendor_consolidations (loja)",
+        "CREATE INDEX idx_vendor_consolidations_data_ref ON vendor_consolidations (data_referencia)"
       ]
     }
   ]

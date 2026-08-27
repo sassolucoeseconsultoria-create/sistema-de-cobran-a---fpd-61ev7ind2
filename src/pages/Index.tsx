@@ -38,6 +38,7 @@ import {
   deleteFpdRecord,
   clearAllFpdRecords,
   clearAllStores,
+  clearAllVendorConsolidations,
   fetchFpdRecordsByStore,
 } from '@/services/fpdService'
 import { exportConsolidatedToXlsx } from '@/lib/xlsxExport'
@@ -336,12 +337,13 @@ export const Index: React.FC = () => {
         })
       } else {
         await clearAllFpdRecords()
+        await clearAllVendorConsolidations()
         setRecords([])
         setClearDialogOpen(false)
         toast({
           title: 'Dados limpos com sucesso!',
           description:
-            'Todos os registros do consolidado foram removidos. As lojas foram mantidas.',
+            'Todos os registros consolidados de lojas e vendedores foram removidos. As lojas cadastradas foram mantidas.',
         })
       }
     } catch (err: unknown) {

@@ -12,6 +12,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
+  UserCheck,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
@@ -35,6 +36,12 @@ export const Layout: React.FC = () => {
       label: 'Consolidado',
       icon: Table2,
       description: 'Painel geral consolidado',
+    },
+    {
+      to: '/vendedores',
+      label: 'Ranking por Vendedor',
+      icon: UserCheck,
+      description: 'Ranking agrupado por vendedor',
     },
     {
       to: '/importar',
@@ -63,6 +70,11 @@ export const Layout: React.FC = () => {
         return {
           title: 'Consolidado de Acompanhamento de FPD',
           subtitle: 'Acompanhamento integrado de resultados Móvel + Residencial',
+        }
+      case '/vendedores':
+        return {
+          title: 'Ranking por Vendedor',
+          subtitle: 'Acompanhamento de inadimplência e status agrupado por vendedor',
         }
       case '/importar':
         return {

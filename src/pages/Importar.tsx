@@ -25,6 +25,7 @@ import {
   saveFpdRecord,
   saveImportedFile,
   findStoreByName,
+  saveVendorConsolidationsFromLines,
 } from '@/services/fpdService'
 import { parseXlsxFile, type ParsedFileData } from '@/lib/xlsxParser'
 import { FPD_STATUSES, type StoreRecord } from '@/types/fpd'
@@ -242,6 +243,17 @@ export const Importar: React.FC = () => {
         contato_realizado: item.parsedData.aggregated.contato_realizado,
         outros: item.parsedData.aggregated.outros,
       })
+
+      // 3. Save/update Vendor Consolidations from vendor lines
+      if (item.parsedData.vendorLines && item.parsedData.vendorLines.length > 0) {
+        // If a line does not have a loja name or was blank, fallback to the store name of this file
+        const linesToSave = item.parsedData.vendorLines.map((vl) => ({
+          ...vl,
+          loja: vl.loja || finalStoreName,
+        }))
+        await saveVendorConsolidationsFromLines(linesToSave, item.referenteDate, stores)
+      }
+
       setFileQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: 'done' } : q)))
       return true
     } catch (err: unknown) {
@@ -661,10 +673,10 @@ export const Importar: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => navigate('/arquivos')}
+                  onClick={() => navigate('/vendedores')}
                   className="bg-white hover:bg-slate-50 text-[#12365A] text-xs font-semibold gap-2 border-[#0E9F8A]/40"
                 >
-                  <span>Ver Arquivos Importados</span>
+                  <span>Ver Ranking por Vendedor</span>
                 </Button>
                 <Button
                   onClick={() => navigate('/')}

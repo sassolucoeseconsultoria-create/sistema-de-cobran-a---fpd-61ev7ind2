@@ -1,6 +1,114 @@
 import * as XLSX from 'xlsx'
 import type { ConsolidatedRow, ImportedFileRecord } from '@/types/fpd'
 
+export function exportVendorsToXlsx(
+  rows: Array<{
+    vendedor: string
+    loja: string
+    supervisao: string
+    totalLinhas: number
+    faturaPaga: number
+    envioFatura: number
+    promessaPagto: number
+    semContato: number
+    cancelados: number
+    pendente: number
+    contatoRealizado: number
+    outros: number
+    naoTratados: number
+  }>,
+  totals: {
+    totalLinhas: number
+    faturaPaga: number
+    envioFatura: number
+    promessaPagto: number
+    semContato: number
+    cancelados: number
+    pendente: number
+    contatoRealizado: number
+    outros: number
+    naoTratados: number
+  },
+  referenteLabel?: string,
+) {
+  const headers = [
+    'VENDEDOR',
+    'LOJA',
+    'SUPERVISÃO',
+    'TOTAL LINHAS',
+    'Fatura(s) Paga(s)',
+    'Enviado Fatura(s)',
+    'Promessa de Pagto.',
+    'Sem Contato',
+    'Cancelados',
+    'Pendente',
+    'Contato Realizado',
+    'Outros Motivos',
+    'Não Tratados',
+  ]
+
+  const dataRows = rows.map((r) => [
+    r.vendedor,
+    r.loja || '',
+    r.supervisao || '',
+    r.totalLinhas,
+    r.faturaPaga,
+    r.envioFatura,
+    r.promessaPagto,
+    r.semContato,
+    r.cancelados,
+    r.pendente,
+    r.contatoRealizado,
+    r.outros,
+    r.naoTratados,
+  ])
+
+  const totalsRow = [
+    'Totais',
+    '',
+    '',
+    totals.totalLinhas,
+    totals.faturaPaga,
+    totals.envioFatura,
+    totals.promessaPagto,
+    totals.semContato,
+    totals.cancelados,
+    totals.pendente,
+    totals.contatoRealizado,
+    totals.outros,
+    totals.naoTratados,
+  ]
+
+  const wsData = [headers, ...dataRows, totalsRow]
+  const ws = XLSX.utils.aoa_to_sheet(wsData)
+
+  ws['!cols'] = [
+    { wch: 30 }, // VENDEDOR
+    { wch: 25 }, // LOJA
+    { wch: 20 }, // SUPERVISAO
+    { wch: 15 }, // TOTAL LINHAS
+    { wch: 18 }, // Fatura(s) Paga(s)
+    { wch: 20 }, // Enviado Fatura(s)
+    { wch: 20 }, // Promessa de Pagto.
+    { wch: 16 }, // Sem Contato
+    { wch: 15 }, // Cancelados
+    { wch: 15 }, // Pendente
+    { wch: 18 }, // Contato Realizado
+    { wch: 18 }, // Outros Motivos
+    { wch: 16 }, // Não Tratados
+  ]
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Ranking_Vendedores')
+
+  const dateSlug = (referenteLabel || 'Consolidado')
+    .replace(/[/\\?%*:|"<>]/g, '-')
+    .replace(/\s+/g, '_')
+  const filename = `Ranking_Vendedores_FPD_${dateSlug}.xlsx`
+
+  XLSX.writeFile(wb, filename)
+}
+
 export function exportConsolidatedToXlsx(
   rows: ConsolidatedRow[],
   totals: {

@@ -655,6 +655,73 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     expect(counts.totalLinesCount).toBe(3)
   })
 
+  it('should extract vendor and store per line for Móvel (Col D index 3, Col E index 4) and Residencial (Col AV index 47, Col AU index 46)', () => {
+    // Móvel:
+    const movelHeader = Array(35).fill('')
+    movelHeader[0] = 'LOJA_HEADER'
+    movelHeader[1] = 'STATUS_HEADER'
+    movelHeader[3] = 'VENDEDOR' // D
+    movelHeader[4] = 'LOJA' // E
+    movelHeader[30] = 'QUANTIDADE' // AE
+
+    const movelRow1 = Array(35).fill('')
+    movelRow1[0] = 'LOJA CENTRO'
+    movelRow1[1] = 'FATURA PAGA'
+    movelRow1[3] = 'CARLOS SILVA' // Col D
+    movelRow1[4] = 'CELNET AGUAS CLARAS' // Col E
+    movelRow1[30] = 2
+
+    const movelRow2 = Array(35).fill('')
+    movelRow2[0] = 'LOJA CENTRO'
+    movelRow2[1] = 'ENVIADO FATURA'
+    movelRow2[3] = 'ANA PAULA' // Col D
+    movelRow2[4] = 'CELNET TAGUATINGA' // Col E
+    movelRow2[30] = 1
+
+    const movelWs = XLSX.utils.aoa_to_sheet([movelHeader, movelRow1, movelRow2])
+    const movelCounts = parseWorksheet(movelWs, 'Móvel', 'movel')
+
+    expect(movelCounts.vendorLines).toHaveLength(2)
+    expect(movelCounts.vendorLines[0]).toEqual({
+      vendedor: 'CARLOS SILVA',
+      loja: 'CELNET AGUAS CLARAS',
+      status: 'fatura_paga',
+      quantidade: 2,
+    })
+    expect(movelCounts.vendorLines[1]).toEqual({
+      vendedor: 'ANA PAULA',
+      loja: 'CELNET TAGUATINGA',
+      status: 'envio_fatura',
+      quantidade: 1,
+    })
+
+    // Residencial:
+    const resHeader = Array(55).fill('')
+    resHeader[0] = 'LOJA_HEADER'
+    resHeader[1] = 'STATUS_HEADER'
+    resHeader[46] = 'LOJA' // AU
+    resHeader[47] = 'VENDEDOR' // AV
+    resHeader[48] = 'QTD' // AW
+
+    const resRow1 = Array(55).fill('')
+    resRow1[0] = 'LOJA NORTE'
+    resRow1[1] = 'CANCELADO'
+    resRow1[46] = 'CELNET BRASILIA' // AU
+    resRow1[47] = 'MARCOS SOUZA' // AV
+    resRow1[48] = 3
+
+    const resWs = XLSX.utils.aoa_to_sheet([resHeader, resRow1])
+    const resCounts = parseWorksheet(resWs, 'Residencial', 'residencial')
+
+    expect(resCounts.vendorLines).toHaveLength(1)
+    expect(resCounts.vendorLines[0]).toEqual({
+      vendedor: 'MARCOS SOUZA',
+      loja: 'CELNET BRASILIA',
+      status: 'cancelados',
+      quantidade: 3,
+    })
+  })
+
   it('should verify FPD_STATUSES order matches exact 9 status specification from E to M', async () => {
     const { FPD_STATUSES } = await import('@/types/fpd')
     const expectedKeys = [

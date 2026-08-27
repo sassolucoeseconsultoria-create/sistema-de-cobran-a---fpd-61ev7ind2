@@ -85,6 +85,48 @@ export const DEFAULT_CONSOLIDATED_ROW: Omit<ConsolidatedRow, 'storeId' | 'storeN
   naoTratados: 0,
 }
 
+export interface VendorConsolidationRecord extends RecordModel {
+  vendedor: string
+  loja?: string
+  supervisao?: string
+  data_referencia?: string
+  total_linhas: number
+  fatura_paga: number
+  envio_fatura: number
+  promessa_pagto: number
+  sem_contato: number
+  cancelados: number
+  pendente: number
+  contato_realizado: number
+  outros: number
+  nao_tratados: number
+}
+
+export interface VendorRow {
+  id?: string
+  vendedor: string
+  loja: string
+  supervisao: string
+  dataReferencia?: string
+  totalLinhas: number
+  faturaPaga: number
+  envioFatura: number
+  promessaPagto: number
+  semContato: number
+  cancelados: number
+  pendente: number
+  contatoRealizado: number
+  outros: number
+  naoTratados: number
+}
+
+export interface ParsedVendorLine {
+  vendedor: string
+  loja: string
+  status: FpdStatusKey
+  quantidade: number
+}
+
 export type FpdStatusKey =
   | 'fatura_paga'
   | 'envio_fatura'

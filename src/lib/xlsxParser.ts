@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import type { FpdStatusKey } from '@/types/fpd'
+import type { FpdStatusKey, ParsedVendorLine } from '@/types/fpd'
 
 export interface ParsedSheetCounts {
   sheetName: string
@@ -15,6 +15,7 @@ export interface ParsedSheetCounts {
   nao_tratados: number
   contato_realizado: number
   outros: number
+  vendorLines: ParsedVendorLine[]
 }
 
 export interface ParsedFileData {
@@ -27,6 +28,7 @@ export interface ParsedFileData {
   }
   movelCounts?: ParsedSheetCounts
   residencialCounts?: ParsedSheetCounts
+  vendorLines: ParsedVendorLine[]
   aggregated: {
     total_linhas: number
     envio_fatura: number
@@ -536,8 +538,11 @@ export function parseWorksheet(
   sheetName: string,
   sheetType: 'movel' | 'residencial' | 'outro',
   qtyColIndexOverride?: number,
+  colMappingOverride?: { vendorColIndex?: number; storeColIndex?: number },
 ): ParsedSheetCounts {
   const jsonData = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, blankrows: false })
+
+  const vendorLines: ParsedVendorLine[] = []
 
   const counts: ParsedSheetCounts = {
     sheetName,
@@ -553,6 +558,7 @@ export function parseWorksheet(
     nao_tratados: 0,
     contato_realizado: 0,
     outros: 0,
+    vendorLines,
   }
   if (!jsonData || jsonData.length === 0) {
     return counts
@@ -568,6 +574,27 @@ export function parseWorksheet(
         ? columnLetterToIndex('AE') // 30
         : sheetType === 'residencial'
           ? columnLetterToIndex('AW') // 48
+          : -1
+
+  // Determine Vendor & Store column indices:
+  // Aba Móvel: Vendedor está na coluna D (index 3), Loja está na coluna E (index 4)
+  // Aba Residencial: Vendedor está na coluna AV (index 47), Loja está na coluna AU (index 46)
+  const vendorColIndex =
+    colMappingOverride?.vendorColIndex !== undefined
+      ? colMappingOverride.vendorColIndex
+      : sheetType === 'movel'
+        ? columnLetterToIndex('D') // 3
+        : sheetType === 'residencial'
+          ? columnLetterToIndex('AV') // 47
+          : -1
+
+  const storeColIndex =
+    colMappingOverride?.storeColIndex !== undefined
+      ? colMappingOverride.storeColIndex
+      : sheetType === 'movel'
+        ? columnLetterToIndex('E') // 4
+        : sheetType === 'residencial'
+          ? columnLetterToIndex('AU') // 46
           : -1
 
   // Iterate rows (skip empty and headers/totals)
@@ -598,6 +625,30 @@ export function parseWorksheet(
     if (counts.totalLinesCount !== undefined) {
       counts.totalLinesCount++
     }
+
+    // Extract vendor and store for this line
+    let vendorName = ''
+    if (vendorColIndex >= 0 && vendorColIndex < row.length) {
+      const vVal = row[vendorColIndex]
+      if (vVal !== null && vVal !== undefined) {
+        vendorName = String(vVal).trim()
+      }
+    }
+
+    let storeName = ''
+    if (storeColIndex >= 0 && storeColIndex < row.length) {
+      const sVal = row[storeColIndex]
+      if (sVal !== null && sVal !== undefined) {
+        storeName = String(sVal).trim()
+      }
+    }
+
+    vendorLines.push({
+      vendedor: vendorName || 'NÃO INFORMADO',
+      loja: storeName,
+      status: category,
+      quantidade: validQty,
+    })
   }
 
   // Ensure every status counter is a guaranteed finite integer (>= 0)
@@ -611,6 +662,7 @@ export function parseWorksheet(
   counts.contato_realizado = Math.round(counts.contato_realizado || 0)
   counts.outros = Math.round(counts.outros || 0)
   counts.totalRows = Math.round(counts.totalRows || 0)
+  counts.vendorLines = vendorLines
 
   return counts
 }
@@ -684,6 +736,11 @@ export async function parseXlsxFile(file: File): Promise<ParsedFileData> {
     return Number.isFinite(parsed) ? Math.round(parsed) : 0
   }
 
+  const combinedVendorLines: ParsedVendorLine[] = [
+    ...(movelCounts?.vendorLines || []),
+    ...(residencialCounts?.vendorLines || []),
+  ]
+
   const aggregated = {
     total_linhas: safeInt((movelCounts?.totalRows || 0) + (residencialCounts?.totalRows || 0)),
     envio_fatura: safeInt(
@@ -715,6 +772,7 @@ export async function parseXlsxFile(file: File): Promise<ParsedFileData> {
     },
     movelCounts,
     residencialCounts,
+    vendorLines: combinedVendorLines,
     aggregated,
   }
 }

@@ -1,5 +1,11 @@
 import pb from '@/lib/pocketbase/client'
-import type { StoreRecord, FpdRecord, ImportedFileRecord } from '@/types/fpd'
+import type {
+  StoreRecord,
+  FpdRecord,
+  ImportedFileRecord,
+  VendorConsolidationRecord,
+  ParsedVendorLine,
+} from '@/types/fpd'
 
 export async function fetchStores(): Promise<StoreRecord[]> {
   return await pb.collection('stores').getFullList<StoreRecord>({
@@ -208,10 +214,156 @@ export async function clearAllImportedFiles(): Promise<number> {
   return files.length
 }
 
+export async function fetchVendorConsolidations(): Promise<VendorConsolidationRecord[]> {
+  return await pb.collection('vendor_consolidations').getFullList<VendorConsolidationRecord>({
+    sort: '-total_linhas,vendedor',
+  })
+}
+
+export async function clearAllVendorConsolidations(): Promise<number> {
+  const records = await pb
+    .collection('vendor_consolidations')
+    .getFullList<VendorConsolidationRecord>({
+      fields: 'id',
+    })
+
+  const batchSize = 10
+  for (let i = 0; i < records.length; i += batchSize) {
+    const batch = records.slice(i, i + batchSize)
+    await Promise.all(batch.map((r) => pb.collection('vendor_consolidations').delete(r.id)))
+  }
+
+  return records.length
+}
+
+export async function saveVendorConsolidationsFromLines(
+  vendorLines: ParsedVendorLine[],
+  referenceDate?: string,
+  storesCache?: StoreRecord[],
+): Promise<number> {
+  if (!vendorLines || vendorLines.length === 0) return 0
+
+  const storesList = storesCache || (await fetchStores())
+  const storeMap = new Map<string, StoreRecord>()
+  for (const s of storesList) {
+    storeMap.set(s.name.trim().toUpperCase(), s)
+  }
+
+  // Aggregate by key: `${vendedor.trim().toUpperCase()}__${loja.trim().toUpperCase()}`
+  type AggregatedVendor = {
+    vendedor: string
+    loja: string
+    supervisao: string
+    data_referencia: string
+    total_linhas: number
+    fatura_paga: number
+    envio_fatura: number
+    promessa_pagto: number
+    sem_contato: number
+    cancelados: number
+    pendente: number
+    contato_realizado: number
+    outros: number
+    nao_tratados: number
+  }
+
+  const map = new Map<string, AggregatedVendor>()
+
+  for (const line of vendorLines) {
+    const rawVendedor = (line.vendedor || '').trim()
+    const vendedor = rawVendedor.toUpperCase() || 'NÃO INFORMADO'
+    const loja = (line.loja || '').trim().toUpperCase()
+    const key = `${vendedor}__${loja}`
+
+    let existing = map.get(key)
+    if (!existing) {
+      // Find supervision from store
+      let supervisao = ''
+      if (loja) {
+        const matchedStore =
+          storeMap.get(loja) ||
+          Array.from(storeMap.values()).find(
+            (s) =>
+              s.name.trim().toUpperCase() === loja ||
+              loja.includes(s.name.trim().toUpperCase()) ||
+              s.name.trim().toUpperCase().includes(loja),
+          )
+        if (matchedStore && matchedStore.supervisao) {
+          supervisao = matchedStore.supervisao
+        }
+      }
+
+      existing = {
+        vendedor: rawVendedor.toUpperCase() || 'NÃO INFORMADO',
+        loja: (line.loja || '').trim().toUpperCase(),
+        supervisao,
+        data_referencia: referenceDate?.trim() || '',
+        total_linhas: 0,
+        fatura_paga: 0,
+        envio_fatura: 0,
+        promessa_pagto: 0,
+        sem_contato: 0,
+        cancelados: 0,
+        pendente: 0,
+        contato_realizado: 0,
+        outros: 0,
+        nao_tratados: 0,
+      }
+      map.set(key, existing)
+    }
+
+    const qty = Math.max(0, Math.round(line.quantidade || 1))
+    existing.total_linhas += qty
+    if (line.status in existing) {
+      ;(existing as Record<string, unknown>)[line.status] =
+        (((existing as Record<string, unknown>)[line.status] as number) || 0) + qty
+    }
+  }
+
+  // Now for each aggregated vendor, check if a record with same vendedor + loja (+ referenceDate if present) exists
+  const existingRecords = await fetchVendorConsolidations()
+  const existingMap = new Map<string, VendorConsolidationRecord>()
+  for (const r of existingRecords) {
+    const k = `${r.vendedor.trim().toUpperCase()}__${(r.loja || '').trim().toUpperCase()}`
+    existingMap.set(k, r)
+  }
+
+  let savedCount = 0
+  for (const [key, item] of map.entries()) {
+    const existing = existingMap.get(key)
+    const payload = {
+      vendedor: item.vendedor,
+      loja: item.loja,
+      supervisao: item.supervisao,
+      data_referencia: item.data_referencia,
+      total_linhas: item.total_linhas,
+      fatura_paga: item.fatura_paga,
+      envio_fatura: item.envio_fatura,
+      promessa_pagto: item.promessa_pagto,
+      sem_contato: item.sem_contato,
+      cancelados: item.cancelados,
+      pendente: item.pendente,
+      contato_realizado: item.contato_realizado,
+      outros: item.outros,
+      nao_tratados: item.nao_tratados,
+    }
+
+    if (existing) {
+      await pb.collection('vendor_consolidations').update(existing.id, payload)
+    } else {
+      await pb.collection('vendor_consolidations').create(payload)
+    }
+    savedCount++
+  }
+
+  return savedCount
+}
+
 export async function clearAllStores(): Promise<number> {
-  // First, remove all FPD records and imported files associated with stores
+  // First, remove all FPD records, imported files, and vendor consolidations
   await clearAllFpdRecords()
   await clearAllImportedFiles()
+  await clearAllVendorConsolidations()
 
   const stores = await pb.collection('stores').getFullList<StoreRecord>({
     fields: 'id',
