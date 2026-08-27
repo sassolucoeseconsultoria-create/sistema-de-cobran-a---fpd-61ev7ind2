@@ -34,6 +34,7 @@ import {
   fetchVendorConsolidations,
   clearAllVendorConsolidations,
   fetchStores,
+  matchStore,
 } from '@/services/fpdService'
 import { exportVendorsToXlsx } from '@/lib/xlsxExport'
 import {
@@ -110,11 +111,7 @@ export const Vendedores: React.FC = () => {
       // Find supervision if missing
       let sup = r.supervisao || ''
       if (!sup && r.loja) {
-        const matched = stores.find(
-          (s) =>
-            s.name.trim().toUpperCase() === r.loja?.trim().toUpperCase() ||
-            (r.loja && r.loja.toUpperCase().includes(s.name.trim().toUpperCase())),
-        )
+        const matched = matchStore(r.loja, stores)
         if (matched?.supervisao) sup = matched.supervisao
       }
 

@@ -40,16 +40,12 @@ export async function deleteStore(id: string): Promise<boolean> {
   return await pb.collection('stores').delete(id)
 }
 
-export async function findStoreByName(name: string): Promise<StoreRecord | null> {
-  const normalized = name.trim()
-  try {
-    const list = await pb.collection('stores').getList<StoreRecord>(1, 1, {
-      filter: `name = "${normalized.replace(/"/g, '\\"')}"`,
-    })
-    return list.items[0] || null
-  } catch {
-    return null
-  }
+export async function findStoreByName(
+  name: string,
+  storesCache?: StoreRecord[],
+): Promise<StoreRecord | null> {
+  const storesList = storesCache || (await fetchStores())
+  return matchStore(name, storesList)
 }
 
 export async function fetchFpdRecords(): Promise<FpdRecord[]> {
@@ -236,6 +232,142 @@ export async function clearAllVendorConsolidations(): Promise<number> {
   return records.length
 }
 
+/**
+ * Normalizes text by stripping accents, lowering case, removing punctuation,
+ * and collapsing whitespace.
+ */
+export function normalizeStoreString(str: unknown): string {
+  if (str === null || str === undefined) return ''
+  return String(str)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // remove accents
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ') // replace punctuation with spaces
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * Simplifies a store name token by removing common noise/filler terms
+ * and unifying variations like "boullevard" <-> "boulevard", etc.
+ */
+export function simplifyStoreTokens(str: string): string[] {
+  const norm = normalizeStoreString(str)
+  if (!norm) return []
+
+  const tokens = norm
+    .split(' ')
+    .map((t) => {
+      // Unify known typos / variations
+      if (t === 'boullevard' || t === 'boulevard') return 'boulevard'
+      if (t === 'shopping') return '' // strip shopping for fuzzy token comparisons
+      if (t === 'goiania' || t === 'gyn') return '' // strip goiania / city name variations
+      return t
+    })
+    .filter((t) => t.length > 0)
+
+  return tokens
+}
+
+/**
+ * Robust store matcher that handles:
+ * 1. Accents removal
+ * 2. Case insensitivity
+ * 3. Permutations / extra keywords like "SHOPPING", "GOIANIA", "BOULLEVARD"/"BOULEVARD", "JK SHOPPING" / "SHOPPING JK"
+ */
+export function matchStore(inputStoreName: string, storesList: StoreRecord[]): StoreRecord | null {
+  if (!inputStoreName || !storesList || storesList.length === 0) return null
+
+  const inputNorm = normalizeStoreString(inputStoreName)
+  if (!inputNorm) return null
+
+  // Pass 1: Exact normalized match
+  for (const s of storesList) {
+    if (normalizeStoreString(s.name) === inputNorm) {
+      return s
+    }
+  }
+
+  // Pass 2: Normalized contains (one contains the other)
+  for (const s of storesList) {
+    const sNorm = normalizeStoreString(s.name)
+    if (inputNorm.includes(sNorm) || sNorm.includes(inputNorm)) {
+      return s
+    }
+  }
+
+  // Pass 3: Match with noise stripped ("shopping", "goiania", "celnet", "boullevard" -> "boulevard")
+  const inputSimplified = normalizeStoreString(
+    inputNorm
+      .replace(/\bboullevard\b/g, 'boulevard')
+      .replace(/\bshopping\b/g, '')
+      .replace(/\bgoiania\b/g, '')
+      .replace(/\bcelnet\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  )
+
+  if (inputSimplified.length >= 2) {
+    for (const s of storesList) {
+      const sSimplified = normalizeStoreString(
+        normalizeStoreString(s.name)
+          .replace(/\bboullevard\b/g, 'boulevard')
+          .replace(/\bshopping\b/g, '')
+          .replace(/\bgoiania\b/g, '')
+          .replace(/\bcelnet\b/g, '')
+          .replace(/\s+/g, ' ')
+          .trim(),
+      )
+
+      if (sSimplified === inputSimplified) {
+        return s
+      }
+      if (
+        sSimplified.length >= 3 &&
+        (inputSimplified.includes(sSimplified) || sSimplified.includes(inputSimplified))
+      ) {
+        return s
+      }
+    }
+  }
+
+  // Pass 4: Token-set overlap (e.g. "CELNET SHOPPING JK" tokens ["celnet", "jk"] vs "CELNET JK SHOPPING" ["celnet", "jk"])
+  const inputTokens = simplifyStoreTokens(inputStoreName)
+  if (inputTokens.length > 0) {
+    let bestMatch: StoreRecord | null = null
+    let bestScore = 0
+
+    for (const s of storesList) {
+      const sTokens = simplifyStoreTokens(s.name)
+      if (sTokens.length === 0) continue
+
+      // Count intersection
+      const intersection = inputTokens.filter((t) => sTokens.includes(t))
+      const score = (intersection.length * 2) / (inputTokens.length + sTokens.length)
+
+      // If all meaningful tokens in the smaller set match the larger set
+      const allInputInStore = inputTokens.every((t) => sTokens.includes(t))
+      const allStoreInInput = sTokens.every((t) => inputTokens.includes(t))
+
+      if ((allInputInStore || allStoreInInput) && intersection.length >= 1) {
+        if (score > bestScore) {
+          bestScore = score
+          bestMatch = s
+        }
+      } else if (score > bestScore && score >= 0.5) {
+        bestScore = score
+        bestMatch = s
+      }
+    }
+
+    if (bestMatch) {
+      return bestMatch
+    }
+  }
+
+  return null
+}
+
 export async function saveVendorConsolidationsFromLines(
   vendorLines: ParsedVendorLine[],
   referenceDate?: string,
@@ -244,10 +376,6 @@ export async function saveVendorConsolidationsFromLines(
   if (!vendorLines || vendorLines.length === 0) return 0
 
   const storesList = storesCache || (await fetchStores())
-  const storeMap = new Map<string, StoreRecord>()
-  for (const s of storesList) {
-    storeMap.set(s.name.trim().toUpperCase(), s)
-  }
 
   // Aggregate by key: `${vendedor.trim().toUpperCase()}__${loja.trim().toUpperCase()}`
   type AggregatedVendor = {
@@ -271,31 +399,48 @@ export async function saveVendorConsolidationsFromLines(
 
   for (const line of vendorLines) {
     const rawVendedor = (line.vendedor || '').trim()
+    const rawLoja = (line.loja || '').trim()
+
+    // 4. Remover linha dummy de cabeçalho da planilha (vendedor = "VENDEDOR" e loja = "LOJA")
+    const normVendedor = normalizeStoreString(rawVendedor)
+    const normLoja = normalizeStoreString(rawLoja)
+    if (
+      (normVendedor === 'vendedor' && normLoja === 'loja') ||
+      (normVendedor === 'vendedor' && !rawLoja) ||
+      (normVendedor === 'vendedor' && normLoja === 'vendedor')
+    ) {
+      console.log('[saveVendorConsolidationsFromLines] Descartando linha de cabeçalho dummy:', {
+        vendedor: rawVendedor,
+        loja: rawLoja,
+      })
+      continue
+    }
+
     const vendedor = rawVendedor.toUpperCase() || 'NÃO INFORMADO'
-    const loja = (line.loja || '').trim().toUpperCase()
+    const loja = rawLoja.toUpperCase()
     const key = `${vendedor}__${loja}`
 
     let existing = map.get(key)
     if (!existing) {
-      // Find supervision from store
+      // Find supervision from store using fuzzy normalized matching
       let supervisao = ''
-      if (loja) {
-        const matchedStore =
-          storeMap.get(loja) ||
-          Array.from(storeMap.values()).find(
-            (s) =>
-              s.name.trim().toUpperCase() === loja ||
-              loja.includes(s.name.trim().toUpperCase()) ||
-              s.name.trim().toUpperCase().includes(loja),
+      if (rawLoja) {
+        const matchedStore = matchStore(rawLoja, storesList)
+        if (matchedStore) {
+          supervisao = matchedStore.supervisao || ''
+          console.log(
+            `[saveVendorConsolidationsFromLines] Matched Loja "${rawLoja}" -> Cadastrada: "${matchedStore.name}", Supervisão: "${supervisao || 'SEM SUPERVISÃO'}"`,
           )
-        if (matchedStore && matchedStore.supervisao) {
-          supervisao = matchedStore.supervisao
+        } else {
+          console.warn(
+            `[saveVendorConsolidationsFromLines] Loja não encontrada no cadastro para "${rawLoja}". Supervisão ficará vazia.`,
+          )
         }
       }
 
       existing = {
         vendedor: rawVendedor.toUpperCase() || 'NÃO INFORMADO',
-        loja: (line.loja || '').trim().toUpperCase(),
+        loja: rawLoja.toUpperCase(),
         supervisao,
         data_referencia: referenceDate?.trim() || '',
         total_linhas: 0,

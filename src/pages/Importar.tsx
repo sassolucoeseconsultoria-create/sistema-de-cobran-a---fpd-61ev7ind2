@@ -26,6 +26,7 @@ import {
   saveImportedFile,
   findStoreByName,
   saveVendorConsolidationsFromLines,
+  matchStore,
 } from '@/services/fpdService'
 import { parseXlsxFile, type ParsedFileData } from '@/lib/xlsxParser'
 import { FPD_STATUSES, type StoreRecord } from '@/types/fpd'
@@ -119,12 +120,8 @@ export const Importar: React.FC = () => {
     try {
       const parsed = await parseXlsxFile(file)
 
-      // Try to match with existing stores
-      const guessed = parsed.guessedStoreName.toUpperCase()
-      const existingMatch = stores.find(
-        (s) => s.name.toUpperCase() === guessed || guessed.includes(s.name.toUpperCase()),
-      )
-
+      // Try to match with existing stores using robust matchStore
+      const existingMatch = matchStore(parsed.guessedStoreName, stores)
       setFileQueue((prev) =>
         prev.map((item) => {
           if (item.id !== itemId) return item
