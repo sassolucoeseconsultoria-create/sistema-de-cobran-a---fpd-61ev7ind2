@@ -41,6 +41,19 @@ import { useToast } from '@/hooks/use-toast'
 import useRealtime from '@/hooks/use-realtime'
 import { cn } from '@/lib/utils'
 
+// Helper to format Brazilian phone numbers: (99) 9999-9999 or (99) 99999-9999
+export const formatPhoneNumber = (value: string): string => {
+  if (!value) return ''
+  const digits = value.replace(/\D/g, '').slice(0, 11)
+  if (digits.length === 0) return ''
+  if (digits.length <= 2) return `(${digits}`
+  if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`
+  if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`
+}
+
 export const Admin: React.FC = () => {
   const { user: currentUser } = useAuth()
   const { toast } = useToast()
@@ -129,7 +142,7 @@ export const Admin: React.FC = () => {
     setFormData({
       name: user.name || '',
       email: user.email || '',
-      fone: user.fone || '',
+      fone: formatPhoneNumber(user.fone || ''),
       password: '',
       passwordConfirm: '',
       role: (user.role as UserRole) || 'ANALISTA',
@@ -203,6 +216,7 @@ export const Admin: React.FC = () => {
 
     setSubmitting(true)
     setGeneralError(null)
+    setFormErrors({})
 
     try {
       if (editingUser) {
@@ -257,12 +271,10 @@ export const Admin: React.FC = () => {
       const errorMsg = getErrorMessage(err)
 
       if (Object.keys(fieldErrors).length > 0) {
-        setFormErrors((prev) => ({
-          ...prev,
-          ...fieldErrors,
-        }))
+        setFormErrors(fieldErrors)
         setGeneralError('Por favor, corrija os campos destacados abaixo.')
       } else {
+        setFormErrors({})
         setGeneralError(errorMsg)
       }
 
@@ -733,11 +745,16 @@ export const Admin: React.FC = () => {
                 type="tel"
                 value={formData.fone}
                 onChange={(e) => {
-                  setFormData({ ...formData, fone: e.target.value })
+                  const masked = formatPhoneNumber(e.target.value)
+                  setFormData({ ...formData, fone: masked })
+                  if (formErrors.fone) setFormErrors({ ...formErrors, fone: '' })
                 }}
                 placeholder="Ex: (61) 98765-4321"
-                className="text-xs bg-[#F8FAFC]"
+                className={cn('text-xs bg-[#F8FAFC]', formErrors.fone && 'border-red-500')}
               />
+              {formErrors.fone && (
+                <p className="text-[11px] text-red-600 font-medium">{formErrors.fone}</p>
+              )}
             </div>
 
             {/* E-mail */}
@@ -770,9 +787,17 @@ export const Admin: React.FC = () => {
               </label>
               <Select
                 value={formData.role}
-                onValueChange={(val: UserRole) => setFormData({ ...formData, role: val })}
+                onValueChange={(val: UserRole) => {
+                  setFormData({ ...formData, role: val })
+                  if (formErrors.role) setFormErrors({ ...formErrors, role: '' })
+                }}
               >
-                <SelectTrigger className="w-full text-xs bg-[#F8FAFC] h-9">
+                <SelectTrigger
+                  className={cn(
+                    'w-full text-xs bg-[#F8FAFC] h-9',
+                    formErrors.role && 'border-red-500',
+                  )}
+                >
                   <SelectValue placeholder="Selecione o perfil" />
                 </SelectTrigger>
                 <SelectContent className="bg-white">
@@ -801,6 +826,9 @@ export const Admin: React.FC = () => {
                   </SelectItem>
                 </SelectContent>
               </Select>
+              {formErrors.role && (
+                <p className="text-[11px] text-red-600 font-medium">{formErrors.role}</p>
+              )}
             </div>
 
             {/* Senha */}
