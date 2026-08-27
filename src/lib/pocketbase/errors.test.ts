@@ -121,6 +121,61 @@ describe('extractFieldErrors', () => {
     expect(result.custom_code).toBe('Já existe um registro com este valor.')
   })
 
+  it('extracts errors when err.data is empty object but err.response contains validation errors directly', () => {
+    const error = {
+      status: 400,
+      data: {},
+      response: {
+        password: {
+          code: 'validation_length_out_of_range',
+          message: 'Must be at least 8 chars',
+        },
+        passwordConfirm: {
+          code: 'validation_values_mismatch',
+          message: "Values don't match",
+        },
+      },
+    }
+
+    const result = extractFieldErrors(error)
+    expect(result.password).toBe('A senha deve ter no mínimo 8 caracteres.')
+    expect(result.passwordConfirm).toBe('As senhas digitadas não coincidem.')
+  })
+
+  it('extracts errors from originalError.data and cause.data fallbacks', () => {
+    const errorOriginal = {
+      status: 400,
+      data: {},
+      response: {},
+      originalError: {
+        data: {
+          email: {
+            code: 'validation_invalid_email',
+            message: 'Invalid email',
+          },
+        },
+      },
+    }
+    expect(extractFieldErrors(errorOriginal)).toEqual({
+      email: 'Formato de e-mail inválido.',
+    })
+
+    const errorCause = {
+      status: 400,
+      data: {},
+      cause: {
+        data: {
+          fone: {
+            message: 'Telefone inválido',
+          },
+        },
+      },
+    }
+    expect(extractFieldErrors(errorCause)).toEqual({
+      fone: 'Telefone inválido',
+    })
+  })
+
   it('returns empty object for null or non-object errors', () => {
     expect(extractFieldErrors(null)).toEqual({})
     expect(extractFieldErrors(undefined)).toEqual({})

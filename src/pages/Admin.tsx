@@ -274,6 +274,17 @@ export const Admin: React.FC = () => {
     } catch (err: unknown) {
       console.error('Erro ao salvar usuário:', err)
       try {
+        const errorObj = err as any
+        console.log('[PocketBase Error Debug]', {
+          keys: err && typeof err === 'object' ? Object.keys(err) : [],
+          data: errorObj?.data,
+          response: errorObj?.response,
+          originalError: errorObj?.originalError,
+          cause: errorObj?.cause,
+          status: errorObj?.status,
+          message: errorObj?.message,
+          raw: err,
+        })
         console.error('Erro detalhado do PocketBase:', JSON.stringify(err, null, 2))
       } catch {
         console.error('Erro detalhado do PocketBase:', err)

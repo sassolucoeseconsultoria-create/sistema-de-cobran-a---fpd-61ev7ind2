@@ -2,135 +2,125 @@ import { ClientResponseError } from 'pocketbase'
 
 export type FieldErrors = Record<string, string>
 
-/**
- * Maps PocketBase validation codes and field contexts to friendly Portuguese messages.
- */
-function translatePocketBaseError(field: string, code?: string, originalMessage?: string): string {
+// Map friendly message translations for known PB validation codes / strings
+const translateMessage = (field: string, code?: string, rawMsg?: string): string => {
+  if (
+    code === 'validation_not_unique' ||
+    code === 'validation_is_not_unique' ||
+    (rawMsg && /unique/i.test(rawMsg))
+  ) {
+    if (field === 'email' || field === 'username') {
+      return 'Este e-mail já está sendo utilizado por outro usuário.'
+    }
+    return 'Já existe um registro com este valor.'
+  }
   if (code === 'validation_length_out_of_range') {
     if (field === 'password') {
       return 'A senha deve ter no mínimo 8 caracteres.'
     }
-    return 'O comprimento do campo está fora do limite permitido.'
+    return 'Tamanho do campo fora do intervalo permitido.'
   }
-
   if (code === 'validation_values_mismatch') {
     if (field === 'passwordConfirm') {
       return 'As senhas digitadas não coincidem.'
     }
     return 'Os valores não coincidem.'
   }
-
-  if (
-    code === 'validation_invalid_email' ||
-    (field === 'email' && code === 'validation_invalid_format')
-  ) {
+  if (code === 'validation_invalid_email') {
     return 'Formato de e-mail inválido.'
   }
-
-  if (
-    code === 'validation_is_not_unique' ||
-    code === 'validation_not_unique' ||
-    (originalMessage && /must be unique/i.test(originalMessage))
-  ) {
-    if (field === 'email') {
-      return 'Este e-mail já está sendo utilizado por outro usuário.'
-    }
-    return 'Já existe um registro com este valor.'
-  }
-
-  if (
-    code === 'validation_required' ||
-    (originalMessage && /required|cannot be blank/i.test(originalMessage))
-  ) {
+  if (code === 'validation_required') {
     return 'Este campo é obrigatório.'
   }
-
-  // Fallback to original PocketBase message or generic fallback
-  if (originalMessage && typeof originalMessage === 'string' && originalMessage.trim().length > 0) {
-    return originalMessage
+  if (rawMsg) {
+    if (/email must be unique/i.test(rawMsg) || /username must be unique/i.test(rawMsg)) {
+      return 'Este e-mail já está sendo utilizado por outro usuário.'
+    }
+    if (/values (must|don't) match/i.test(rawMsg)) {
+      return 'As senhas digitadas não coincidem.'
+    }
+    if (/length must be between/i.test(rawMsg) && field === 'password') {
+      return 'A senha deve ter no mínimo 8 caracteres.'
+    }
+    return rawMsg
   }
-
-  return 'Valor inválido.'
+  return 'Campo inválido.'
 }
 
-/**
- * Extracts and maps field-specific validation errors from PocketBase errors.
- * Handles ClientResponseError, nested error.data.data, error.data, and error.response.data structures.
- */
+const isPlainObject = (val: unknown): val is Record<string, any> => {
+  return (
+    typeof val === 'object' && val !== null && !(val instanceof Response) && !Array.isArray(val)
+  )
+}
+
 export function extractFieldErrors(error: unknown): FieldErrors {
   if (!error || typeof error !== 'object') return {}
 
   const err = error as Record<string, any>
-  let rawData: unknown = null
 
-  // Priority order:
-  // 1. err.data.data (nested PB structure)
-  // 2. err.response?.data?.data
-  // 3. err.data
-  // 4. err.response?.data
-  if (
-    err.data &&
-    typeof err.data === 'object' &&
-    'data' in err.data &&
-    err.data.data &&
-    typeof err.data.data === 'object'
-  ) {
+  // Look for validation errors container in various possible locations in PocketBase errors:
+  // 1. err.data.data (nested data container)
+  // 2. err.data (standard ClientResponseError.data)
+  // 3. err.response?.data (standard ClientResponseError response.data)
+  // 4. err.response (raw response object when data is empty or response itself contains the fields)
+  // 5. err.originalError?.data
+  // 6. err.cause?.data
+  let rawData: Record<string, any> | null = null
+
+  if (isPlainObject(err.data?.data) && Object.keys(err.data.data).length > 0) {
     rawData = err.data.data
-  } else if (
-    err.response?.data &&
-    typeof err.response.data === 'object' &&
-    'data' in err.response.data &&
-    err.response.data.data &&
-    typeof err.response.data.data === 'object'
-  ) {
-    rawData = err.response.data.data
-  } else if (err.data && typeof err.data === 'object') {
+  } else if (isPlainObject(err.data) && Object.keys(err.data).length > 0) {
     rawData = err.data
-  } else if (err.response?.data && typeof err.response.data === 'object') {
+  } else if (isPlainObject(err.response?.data) && Object.keys(err.response.data).length > 0) {
     rawData = err.response.data
+  } else if (
+    isPlainObject(err.originalError?.data) &&
+    Object.keys(err.originalError.data).length > 0
+  ) {
+    rawData = err.originalError.data
+  } else if (isPlainObject(err.cause?.data) && Object.keys(err.cause.data).length > 0) {
+    rawData = err.cause.data
+  } else if (isPlainObject(err.response) && Object.keys(err.response).length > 0) {
+    // Check if response contains validation keys directly
+    rawData = err.response
   }
 
   if (!rawData || typeof rawData !== 'object') return {}
 
   const errors: FieldErrors = {}
-  for (const [field, detail] of Object.entries(rawData as Record<string, any>)) {
-    if (detail === null || detail === undefined) continue
+
+  // Known metadata keys in response that are not field validation items
+  const ignoreKeys = new Set(['code', 'message', 'status', 'data'])
+
+  const parseItem = (field: string, detail: unknown) => {
+    if (!detail || ignoreKeys.has(field)) return
 
     if (typeof detail === 'string') {
-      errors[field] = detail
-      continue
-    }
-
-    if (Array.isArray(detail)) {
-      if (detail.length > 0 && typeof detail[0] === 'string') {
-        errors[field] = detail[0]
+      errors[field] = translateMessage(field, undefined, detail)
+    } else if (Array.isArray(detail)) {
+      const first = detail[0]
+      if (typeof first === 'string') {
+        errors[field] = translateMessage(field, undefined, first)
+      } else if (isPlainObject(first)) {
+        errors[field] = translateMessage(field, first.code, first.message)
       }
-      continue
-    }
-
-    if (typeof detail === 'object') {
-      // Check if nested further like { data: { role: { message: '...' } } }
-      if ('data' in detail && detail.data && typeof detail.data === 'object') {
-        for (const [subField, subDetail] of Object.entries(detail.data as Record<string, any>)) {
-          if (subDetail && typeof subDetail === 'object' && 'message' in subDetail) {
-            const subMsg = (subDetail as any).message
-            const subCode = (subDetail as any).code
-            errors[field] = translatePocketBaseError(subField, subCode, subMsg)
-          }
+    } else if (isPlainObject(detail)) {
+      // Check if nested detail has a 'data' property (nested validation structure)
+      if (isPlainObject(detail.data)) {
+        for (const [subField, subDetail] of Object.entries(detail.data)) {
+          parseItem(subField, subDetail)
         }
-        if (errors[field]) continue
-      }
-
-      const code = typeof detail.code === 'string' ? detail.code : undefined
-      const message = typeof detail.message === 'string' ? detail.message : undefined
-
-      if (code || message) {
-        errors[field] = translatePocketBaseError(field, code, message)
+      } else if (typeof detail.message === 'string' || typeof detail.code === 'string') {
+        errors[field] = translateMessage(field, detail.code, detail.message)
       }
     }
   }
 
-  // If username error exists but email doesn't, map username error to email (PocketBase auth collection standard)
+  for (const [field, detail] of Object.entries(rawData)) {
+    parseItem(field, detail)
+  }
+
+  // If username error exists but email error does not, map username error to email
   if (errors.username && !errors.email) {
     errors.email = errors.username
   }
@@ -138,9 +128,6 @@ export function extractFieldErrors(error: unknown): FieldErrors {
   return errors
 }
 
-/**
- * Gets a user-friendly error message, combining field errors or translating server error messages.
- */
 export function getErrorMessage(error: unknown): string {
   if (!error) return 'Ocorreu um erro inesperado.'
 
@@ -151,23 +138,11 @@ export function getErrorMessage(error: unknown): string {
   }
 
   if (error instanceof ClientResponseError) {
-    if (error.message) {
-      if (error.message.includes('Failed to create record')) {
-        return 'Falha ao criar o registro. Verifique os dados informados.'
-      }
-      if (error.message.includes('Failed to update record')) {
-        return 'Falha ao atualizar o registro. Verifique os dados informados.'
-      }
-      if (error.message.includes('Failed to authenticate')) {
-        return 'Falha na autenticação. Verifique seu e-mail e senha.'
-      }
-      return error.message
-    }
-    return 'Ocorreu um erro na requisição ao servidor.'
+    return error.message || 'Ocorreu um erro inesperado.'
   }
 
   if (error instanceof Error) {
-    return error.message
+    return error.message || 'Ocorreu um erro inesperado.'
   }
 
   if (
@@ -176,11 +151,7 @@ export function getErrorMessage(error: unknown): string {
     'message' in error &&
     typeof (error as any).message === 'string'
   ) {
-    const rawMsg = (error as any).message
-    if (rawMsg.includes('Failed to create record')) {
-      return 'Falha ao criar o registro. Verifique os dados informados.'
-    }
-    return rawMsg
+    return (error as any).message
   }
 
   return 'Ocorreu um erro inesperado.'
