@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import pb from '@/lib/pocketbase/client'
 import { useAuth, type UserRole, type User } from '@/contexts/AuthContext'
+import { extractFieldErrors, getErrorMessage } from '@/lib/pocketbase/errors'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -57,9 +58,11 @@ export const Admin: React.FC = () => {
     email: '',
     fone: '',
     password: '',
+    passwordConfirm: '',
     role: 'ANALISTA' as UserRole,
   })
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+  const [generalError, setGeneralError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   // Delete modal state
@@ -112,9 +115,11 @@ export const Admin: React.FC = () => {
       email: '',
       fone: '',
       password: '',
+      passwordConfirm: '',
       role: 'ANALISTA',
     })
     setFormErrors({})
+    setGeneralError(null)
     setModalOpen(true)
   }
 
@@ -126,9 +131,11 @@ export const Admin: React.FC = () => {
       email: user.email || '',
       fone: user.fone || '',
       password: '',
+      passwordConfirm: '',
       role: (user.role as UserRole) || 'ANALISTA',
     })
     setFormErrors({})
+    setGeneralError(null)
     setModalOpen(true)
   }
 
@@ -158,18 +165,29 @@ export const Admin: React.FC = () => {
       errors.email = 'Este e-mail já está sendo utilizado por outro usuário.'
     }
 
-    // Password validation
+    // Password validation: PocketBase auth requires min 8 chars
     if (!editingUser) {
-      // Create mode: password is required, min 6 chars (PocketBase SDK requires min 8 for auth usually, 6+ by prompt)
+      // Create mode: password is required, min 8 chars
       if (!formData.password) {
         errors.password = 'A senha é obrigatória para novos usuários.'
-      } else if (formData.password.length < 6) {
-        errors.password = 'A senha deve ter no mínimo 6 caracteres.'
+      } else if (formData.password.length < 8) {
+        errors.password = 'A senha deve ter no mínimo 8 caracteres.'
+      }
+
+      if (!formData.passwordConfirm) {
+        errors.passwordConfirm = 'Confirme a senha.'
+      } else if (formData.password !== formData.passwordConfirm) {
+        errors.passwordConfirm = 'As senhas digitadas não coincidem.'
       }
     } else {
-      // Edit mode: password optional, if provided min 6 chars
-      if (formData.password && formData.password.length < 6) {
-        errors.password = 'A nova senha deve ter no mínimo 6 caracteres.'
+      // Edit mode: password optional, if provided min 8 chars
+      if (formData.password) {
+        if (formData.password.length < 8) {
+          errors.password = 'A nova senha deve ter no mínimo 8 caracteres.'
+        }
+        if (formData.password !== formData.passwordConfirm) {
+          errors.passwordConfirm = 'As senhas digitadas não coincidem.'
+        }
       }
     }
 
@@ -184,37 +202,39 @@ export const Admin: React.FC = () => {
     if (!validateForm()) return
 
     setSubmitting(true)
+    setGeneralError(null)
+
     try {
       if (editingUser) {
         // Update user
         const payload: Record<string, any> = {
           name: formData.name.trim(),
-          email: formData.email.trim(),
+          email: formData.email.trim().toLowerCase(),
           fone: formData.fone.trim(),
           role: formData.role,
         }
 
         if (formData.password.trim()) {
           payload.password = formData.password.trim()
-          payload.passwordConfirm = formData.password.trim()
+          payload.passwordConfirm = (formData.passwordConfirm || formData.password).trim()
         }
 
         const updated = await pb.collection('users').update<User>(editingUser.id, payload)
         setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)))
 
         toast({
-          title: 'Usuário atualizado',
-          description: `Os dados de ${updated.name || updated.email} foram atualizados com sucesso.`,
+          title: 'Usuário atualizado com sucesso',
+          description: `Os dados de ${updated.name || updated.email} foram atualizados.`,
         })
       } else {
         // Create user
         const payload: Record<string, any> = {
           name: formData.name.trim(),
-          email: formData.email.trim(),
+          email: formData.email.trim().toLowerCase(),
           fone: formData.fone.trim(),
           role: formData.role,
           password: formData.password.trim(),
-          passwordConfirm: formData.password.trim(),
+          passwordConfirm: formData.passwordConfirm.trim() || formData.password.trim(),
           emailVisibility: true,
           verified: true,
         }
@@ -223,32 +243,34 @@ export const Admin: React.FC = () => {
         setUsers((prev) => [created, ...prev])
 
         toast({
-          title: 'Usuário cadastrado',
-          description: `O usuário ${created.name || created.email} foi criado com sucesso.`,
+          title: 'Usuário cadastrado com sucesso',
+          description: `O usuário ${created.name || created.email} foi criado.`,
         })
       }
 
       setModalOpen(false)
     } catch (err: unknown) {
-      console.error(err)
-      const msg = err instanceof Error ? err.message : String(err)
-      if (msg.includes('email') || msg.includes('unique') || msg.includes('already exists')) {
+      console.error('Erro ao salvar usuário:', err)
+
+      // Extrai erros específicos por campo
+      const fieldErrors = extractFieldErrors(err)
+      const errorMsg = getErrorMessage(err)
+
+      if (Object.keys(fieldErrors).length > 0) {
         setFormErrors((prev) => ({
           ...prev,
-          email: 'Este e-mail já está em uso ou é inválido no PocketBase.',
+          ...fieldErrors,
         }))
-      } else if (msg.includes('password')) {
-        setFormErrors((prev) => ({
-          ...prev,
-          password: 'A senha não atende aos requisitos do sistema.',
-        }))
+        setGeneralError('Por favor, corrija os campos destacados abaixo.')
       } else {
-        toast({
-          title: 'Erro ao salvar usuário',
-          description: 'Ocorreu um erro ao processar os dados. Verifique e tente novamente.',
-          variant: 'destructive',
-        })
+        setGeneralError(errorMsg)
       }
+
+      toast({
+        title: editingUser ? 'Erro ao atualizar usuário' : 'Erro ao cadastrar usuário',
+        description: errorMsg,
+        variant: 'destructive',
+      })
     } finally {
       setSubmitting(false)
     }
@@ -669,6 +691,17 @@ export const Admin: React.FC = () => {
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4 py-2">
+            {/* General Error Banner */}
+            {generalError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2.5 text-red-700 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
+                <div className="flex-1">
+                  <p className="font-semibold text-red-800">Falha ao salvar</p>
+                  <p className="mt-0.5 leading-relaxed">{generalError}</p>
+                </div>
+              </div>
+            )}
+
             {/* Nome Completo */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold uppercase text-[#12365A] flex items-center gap-1">
@@ -777,11 +810,9 @@ export const Admin: React.FC = () => {
                   <Lock className="w-3.5 h-3.5 text-[#5B6B82]" />
                   Senha {editingUser ? '(Opcional)' : '*'}
                 </span>
-                {editingUser && (
-                  <span className="text-[10px] text-slate-400 lowercase font-normal">
-                    apenas para alterar
-                  </span>
-                )}
+                <span className="text-[10px] text-slate-500 font-normal">
+                  {editingUser ? 'Deixe vazio para manter' : 'Mínimo 8 caracteres'}
+                </span>
               </label>
               <Input
                 type="password"
@@ -791,12 +822,43 @@ export const Admin: React.FC = () => {
                   if (formErrors.password) setFormErrors({ ...formErrors, password: '' })
                 }}
                 placeholder={
-                  editingUser ? 'Deixe em branco para manter a senha atual' : 'Mínimo 6 caracteres'
+                  editingUser ? 'Deixe em branco para manter a senha atual' : 'Mínimo 8 caracteres'
                 }
                 className={cn('text-xs bg-[#F8FAFC]', formErrors.password && 'border-red-500')}
               />
               {formErrors.password && (
                 <p className="text-[11px] text-red-600 font-medium">{formErrors.password}</p>
+              )}
+            </div>
+
+            {/* Confirmação de Senha */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold uppercase text-[#12365A] flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <Lock className="w-3.5 h-3.5 text-[#5B6B82]" />
+                  Confirmar Senha {editingUser ? '(Opcional)' : '*'}
+                </span>
+              </label>
+              <Input
+                type="password"
+                value={formData.passwordConfirm}
+                onChange={(e) => {
+                  setFormData({ ...formData, passwordConfirm: e.target.value })
+                  if (formErrors.passwordConfirm)
+                    setFormErrors({ ...formErrors, passwordConfirm: '' })
+                }}
+                placeholder={
+                  editingUser
+                    ? 'Confirme a nova senha caso tenha digitado acima'
+                    : 'Digite a senha novamente'
+                }
+                className={cn(
+                  'text-xs bg-[#F8FAFC]',
+                  formErrors.passwordConfirm && 'border-red-500',
+                )}
+              />
+              {formErrors.passwordConfirm && (
+                <p className="text-[11px] text-red-600 font-medium">{formErrors.passwordConfirm}</p>
               )}
             </div>
 
