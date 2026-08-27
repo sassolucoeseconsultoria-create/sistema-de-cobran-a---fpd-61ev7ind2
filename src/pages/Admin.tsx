@@ -12,6 +12,8 @@ import {
   Phone,
   Mail,
   Lock,
+  Eye,
+  EyeOff,
   User as UserIcon,
   CheckCircle2,
   RefreshCw,
@@ -74,6 +76,8 @@ export const Admin: React.FC = () => {
     passwordConfirm: '',
     role: 'ANALISTA' as UserRole,
   })
+  const [showPassword, setShowPassword] = useState(false)
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [generalError, setGeneralError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -131,6 +135,8 @@ export const Admin: React.FC = () => {
       passwordConfirm: '',
       role: 'ANALISTA',
     })
+    setShowPassword(false)
+    setShowPasswordConfirm(false)
     setFormErrors({})
     setGeneralError(null)
     setModalOpen(true)
@@ -147,6 +153,8 @@ export const Admin: React.FC = () => {
       passwordConfirm: '',
       role: (user.role as UserRole) || 'ANALISTA',
     })
+    setShowPassword(false)
+    setShowPasswordConfirm(false)
     setFormErrors({})
     setGeneralError(null)
     setModalOpen(true)
@@ -265,6 +273,11 @@ export const Admin: React.FC = () => {
       setModalOpen(false)
     } catch (err: unknown) {
       console.error('Erro ao salvar usuário:', err)
+      try {
+        console.error('Erro detalhado do PocketBase:', JSON.stringify(err, null, 2))
+      } catch {
+        console.error('Erro detalhado do PocketBase:', err)
+      }
 
       // Extrai erros específicos por campo
       const fieldErrors = extractFieldErrors(err)
@@ -275,7 +288,7 @@ export const Admin: React.FC = () => {
         setGeneralError('Por favor, corrija os campos destacados abaixo.')
       } else {
         setFormErrors({})
-        setGeneralError(errorMsg)
+        setGeneralError(errorMsg || 'Falha ao salvar dados no servidor.')
       }
 
       toast({
@@ -842,18 +855,34 @@ export const Admin: React.FC = () => {
                   {editingUser ? 'Deixe vazio para manter' : 'Mínimo 8 caracteres'}
                 </span>
               </label>
-              <Input
-                type="password"
-                value={formData.password}
-                onChange={(e) => {
-                  setFormData({ ...formData, password: e.target.value })
-                  if (formErrors.password) setFormErrors({ ...formErrors, password: '' })
-                }}
-                placeholder={
-                  editingUser ? 'Deixe em branco para manter a senha atual' : 'Mínimo 8 caracteres'
-                }
-                className={cn('text-xs bg-[#F8FAFC]', formErrors.password && 'border-red-500')}
-              />
+              <div className="relative">
+                <Input
+                  type={showPassword ? 'text' : 'password'}
+                  value={formData.password}
+                  onChange={(e) => {
+                    setFormData({ ...formData, password: e.target.value })
+                    if (formErrors.password) setFormErrors({ ...formErrors, password: '' })
+                  }}
+                  placeholder={
+                    editingUser
+                      ? 'Deixe em branco para manter a senha atual'
+                      : 'Mínimo 8 caracteres'
+                  }
+                  className={cn(
+                    'text-xs bg-[#F8FAFC] pr-10',
+                    formErrors.password && 'border-red-500',
+                  )}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#12365A] p-1 transition-colors focus:outline-none"
+                  tabIndex={-1}
+                  aria-label={showPassword ? 'Ocultar senha' : 'Exibir senha'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
               {formErrors.password && (
                 <p className="text-[11px] text-red-600 font-medium">{formErrors.password}</p>
               )}
@@ -867,24 +896,43 @@ export const Admin: React.FC = () => {
                   Confirmar Senha {editingUser ? '(Opcional)' : '*'}
                 </span>
               </label>
-              <Input
-                type="password"
-                value={formData.passwordConfirm}
-                onChange={(e) => {
-                  setFormData({ ...formData, passwordConfirm: e.target.value })
-                  if (formErrors.passwordConfirm)
-                    setFormErrors({ ...formErrors, passwordConfirm: '' })
-                }}
-                placeholder={
-                  editingUser
-                    ? 'Confirme a nova senha caso tenha digitado acima'
-                    : 'Digite a senha novamente'
-                }
-                className={cn(
-                  'text-xs bg-[#F8FAFC]',
-                  formErrors.passwordConfirm && 'border-red-500',
-                )}
-              />
+              <div className="relative">
+                <Input
+                  type={showPasswordConfirm ? 'text' : 'password'}
+                  value={formData.passwordConfirm}
+                  onChange={(e) => {
+                    setFormData({ ...formData, passwordConfirm: e.target.value })
+                    if (formErrors.passwordConfirm)
+                      setFormErrors({ ...formErrors, passwordConfirm: '' })
+                  }}
+                  placeholder={
+                    editingUser
+                      ? 'Confirme a nova senha caso tenha digitado acima'
+                      : 'Digite a senha novamente'
+                  }
+                  className={cn(
+                    'text-xs bg-[#F8FAFC] pr-10',
+                    formErrors.passwordConfirm && 'border-red-500',
+                  )}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordConfirm((prev) => !prev)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#12365A] p-1 transition-colors focus:outline-none"
+                  tabIndex={-1}
+                  aria-label={
+                    showPasswordConfirm
+                      ? 'Ocultar confirmação de senha'
+                      : 'Exibir confirmação de senha'
+                  }
+                >
+                  {showPasswordConfirm ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
               {formErrors.passwordConfirm && (
                 <p className="text-[11px] text-red-600 font-medium">{formErrors.passwordConfirm}</p>
               )}

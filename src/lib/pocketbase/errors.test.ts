@@ -20,7 +20,7 @@ describe('extractFieldErrors', () => {
 
     const result = extractFieldErrors(error)
     expect(result).toEqual({
-      email: 'Email must be unique.',
+      email: 'Este e-mail já está sendo utilizado por outro usuário.',
     })
   })
 
@@ -38,7 +38,7 @@ describe('extractFieldErrors', () => {
 
     const result = extractFieldErrors(error)
     expect(result).toEqual({
-      email: 'Username must be unique.',
+      email: 'Este e-mail já está sendo utilizado por outro usuário.',
     })
   })
 
@@ -57,7 +57,7 @@ describe('extractFieldErrors', () => {
     }
 
     const result = extractFieldErrors(error)
-    expect(result.email).toBe('Email must be unique.')
+    expect(result.email).toBe('Este e-mail já está sendo utilizado por outro usuário.')
   })
 
   it('extracts errors from nested structures or plain string/array values', () => {
@@ -77,6 +77,48 @@ describe('extractFieldErrors', () => {
     expect(result.fone).toBe('Formato inválido')
     expect(result.name).toBe('O nome é obrigatório')
     expect(result.nested).toBe('Perfil inválido')
+  })
+
+  it('handles real PocketBase 400 error structure with nested password and email errors', () => {
+    const pbError = {
+      data: {
+        password: {
+          code: 'validation_length_out_of_range',
+          message: 'The length must be between 8 and 72.',
+        },
+        passwordConfirm: {
+          code: 'validation_values_mismatch',
+          message: 'Values must match.',
+        },
+        email: {
+          code: 'validation_invalid_email',
+          message: 'Invalid email format.',
+        },
+      },
+      message: 'Failed to create record.',
+      status: 400,
+    }
+
+    const result = extractFieldErrors(pbError)
+    expect(result.password).toBe('A senha deve ter no mínimo 8 caracteres.')
+    expect(result.passwordConfirm).toBe('As senhas digitadas não coincidem.')
+    expect(result.email).toBe('Formato de e-mail inválido.')
+  })
+
+  it('handles validation_is_not_unique code translation', () => {
+    const pbError = {
+      data: {
+        data: {
+          custom_code: {
+            code: 'validation_is_not_unique',
+            message: 'Value must be unique.',
+          },
+        },
+      },
+    }
+
+    const result = extractFieldErrors(pbError)
+    expect(result.custom_code).toBe('Já existe um registro com este valor.')
   })
 
   it('returns empty object for null or non-object errors', () => {
