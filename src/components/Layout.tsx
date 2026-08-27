@@ -5,6 +5,7 @@ import {
   FileSpreadsheet,
   FolderOpen,
   Store,
+  Settings,
   LogOut,
   Menu,
   X,
@@ -61,6 +62,16 @@ export const Layout: React.FC = () => {
       icon: Store,
       description: 'Gerenciamento de lojas',
     },
+    ...(user?.role === 'ADM'
+      ? [
+          {
+            to: '/admin',
+            label: 'Administração',
+            icon: Settings,
+            description: 'Gestão de usuários e perfis',
+          },
+        ]
+      : []),
   ]
 
   // Page titles and contextual info
@@ -90,6 +101,11 @@ export const Layout: React.FC = () => {
         return {
           title: 'Gestão de Lojas e Estrutura',
           subtitle: 'Coordenações e supervisões operacionais',
+        }
+      case '/admin':
+        return {
+          title: 'Administração',
+          subtitle: 'Gerencie os usuários e perfis do sistema',
         }
       default:
         return {
@@ -205,9 +221,16 @@ export const Layout: React.FC = () => {
               </div>
               {(!collapsed || mobileOpen) && (
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-medium text-white truncate">
-                    {user?.name || user?.email?.split('@')[0] || 'Usuário'}
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-medium text-white truncate">
+                      {user?.name || user?.email?.split('@')[0] || 'Usuário'}
+                    </p>
+                    {user?.role && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-[#0E9F8A]/20 text-[#0E9F8A] uppercase shrink-0">
+                        {user.role}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[10px] text-slate-400 truncate">{user?.email}</p>
                 </div>
               )}

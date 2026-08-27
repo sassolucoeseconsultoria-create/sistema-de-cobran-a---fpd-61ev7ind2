@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-27T18:49:40.074Z",
+  "generatedAt": "2026-08-27T18:59:06.895Z",
   "collections": [
     {
       "name": "users",
@@ -37,6 +37,19 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "role",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["ADM", "GESTOR", "ANALISTA"]
+        },
+        {
+          "name": "fone",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

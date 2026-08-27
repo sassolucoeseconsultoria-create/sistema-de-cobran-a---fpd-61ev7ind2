@@ -2,10 +2,14 @@ import React, { createContext, useContext, useEffect, useState, useMemo } from '
 import type { RecordModel } from 'pocketbase'
 import pb from '@/lib/pocketbase/client'
 
+export type UserRole = 'ADM' | 'GESTOR' | 'ANALISTA'
+
 export interface User extends RecordModel {
   email: string
   name?: string
   avatar?: string
+  role?: UserRole
+  fone?: string
 }
 
 interface AuthContextType {
@@ -14,6 +18,7 @@ interface AuthContextType {
   loading: boolean
   login: (email: string, pass: string) => Promise<void>
   logout: () => void
+  refreshAuth: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -23,11 +28,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(pb.authStore.token)
   const [loading, setLoading] = useState(true)
 
+  const refreshAuth = async () => {
+    if (pb.authStore.isValid) {
+      try {
+        const refreshed = await pb.collection('users').authRefresh()
+        setUser(refreshed.record as User | null)
+      } catch (_) {
+        // If token is expired or invalid
+      }
+    }
+  }
+
   useEffect(() => {
-    // Sync initial state
+    // Sync initial state and attempt refresh if valid to get up-to-date custom fields
     setUser(pb.authStore.record as User | null)
     setToken(pb.authStore.token)
-    setLoading(false)
+
+    if (pb.authStore.isValid) {
+      pb.collection('users')
+        .authRefresh()
+        .then((res) => {
+          setUser(res.record as User | null)
+        })
+        .catch(() => {})
+        .finally(() => {
+          setLoading(false)
+        })
+    } else {
+      setLoading(false)
+    }
 
     // Listen for auth state changes
     const unsub = pb.authStore.onChange((newToken, newModel) => {
@@ -57,6 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loading,
       login,
       logout,
+      refreshAuth,
     }),
     [user, token, loading],
   )

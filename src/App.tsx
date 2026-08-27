@@ -13,6 +13,7 @@ import Vendedores from '@/pages/Vendedores'
 import Importar from '@/pages/Importar'
 import Arquivos from '@/pages/Arquivos'
 import Lojas from '@/pages/Lojas'
+import Admin from '@/pages/Admin'
 import Login from '@/pages/Login'
 import NotFound from '@/pages/NotFound'
 
@@ -39,6 +40,14 @@ const App = () => (
             <Route path="/importar" element={<Importar />} />
             <Route path="/arquivos" element={<Arquivos />} />
             <Route path="/lojas" element={<Lojas />} />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute requireRole="ADM">
+                  <Admin />
+                </ProtectedRoute>
+              }
+            />
           </Route>
 
           {/* Fallback */}
