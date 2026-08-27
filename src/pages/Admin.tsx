@@ -243,9 +243,19 @@ export const Admin: React.FC = () => {
         }
 
         if (formData.password) {
-          payload.password = formData.password
-          payload.passwordConfirm = formData.passwordConfirm
+          payload.password = formData.password.trim()
+          payload.passwordConfirm = formData.passwordConfirm.trim()
         }
+
+        // Diagnóstico: log do payload mascarando senhas
+        const maskedPayload = { ...payload }
+        if (maskedPayload.password !== undefined) {
+          maskedPayload.password = `*** (${maskedPayload.password.length} chars)`
+        }
+        if (maskedPayload.passwordConfirm !== undefined) {
+          maskedPayload.passwordConfirm = `*** (${maskedPayload.passwordConfirm.length} chars)`
+        }
+        console.log('[Admin] Payload sendo enviado:', maskedPayload)
 
         const updated = await pb.collection('users').update<User>(editingUser.id, payload)
         setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)))
@@ -261,11 +271,19 @@ export const Admin: React.FC = () => {
           email: formData.email.trim().toLowerCase(),
           fone: formData.fone.trim(),
           role: formData.role,
-          password: formData.password,
-          passwordConfirm: formData.passwordConfirm,
+          password: formData.password.trim(),
+          passwordConfirm: formData.passwordConfirm.trim(),
           emailVisibility: true,
           verified: true,
         }
+
+        // Diagnóstico: log do payload mascarando senhas
+        const maskedPayload = {
+          ...payload,
+          password: `*** (${payload.password.length} chars)`,
+          passwordConfirm: `*** (${payload.passwordConfirm.length} chars)`,
+        }
+        console.log('[Admin] Payload sendo enviado:', maskedPayload)
 
         const created = await pb.collection('users').create<User>(payload)
         setUsers((prev) => [created, ...prev])
@@ -279,6 +297,20 @@ export const Admin: React.FC = () => {
       setModalOpen(false)
     } catch (err: unknown) {
       console.error('Erro ao salvar usuário:', err)
+
+      // Diagnóstico detalhado do erro do PocketBase
+      const anyErr = err as any
+      console.log('[Admin] Erro bruto do PocketBase:', {
+        status: anyErr?.status,
+        message: anyErr?.message,
+        typeofResponse: typeof anyErr?.response,
+        responseIsResponseInstance:
+          typeof Response !== 'undefined' && anyErr?.response instanceof Response ? 'SIM' : 'NÃO',
+        dataKeys: Object.keys(anyErr?.data || {}),
+        responseDataKeys: Object.keys(anyErr?.response?.data || {}),
+        originalError: JSON.stringify(anyErr?.originalError, null, 2),
+      })
+      console.dir(err, { depth: 5 })
 
       // Extrai erros específicos por campo
       const fieldErrors = extractFieldErrors(err)
