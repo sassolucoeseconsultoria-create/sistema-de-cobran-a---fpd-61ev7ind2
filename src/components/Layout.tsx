@@ -52,7 +52,7 @@ export const Layout: React.FC = () => {
     },
     {
       to: '/arquivos',
-      label: 'Arquivos Importados',
+      label: 'Painel de Lojas',
       icon: FolderOpen,
       description: 'Visão analítica por arquivo bruto',
     },
