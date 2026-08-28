@@ -1,7 +1,6 @@
 import React, { useState } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import {
-  Table2,
   FileSpreadsheet,
   FolderOpen,
   Store,
@@ -32,12 +31,6 @@ export const Layout: React.FC = () => {
   }
 
   const navItems = [
-    {
-      to: '/',
-      label: 'Consolidado',
-      icon: Table2,
-      description: 'Painel geral consolidado',
-    },
     {
       to: '/vendedores',
       label: 'Ranking por Vendedor',
