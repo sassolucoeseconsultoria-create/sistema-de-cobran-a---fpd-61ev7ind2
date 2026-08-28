@@ -54,7 +54,7 @@ export const Layout: React.FC = () => {
       to: '/arquivos',
       label: 'Painel de Lojas',
       icon: FolderOpen,
-      description: 'Visão analítica por arquivo bruto',
+      description: 'Painel consolidado agrupado por loja',
     },
     {
       to: '/lojas',
@@ -94,8 +94,8 @@ export const Layout: React.FC = () => {
         }
       case '/arquivos':
         return {
-          title: 'Arquivos Importados (Visão Analítica)',
-          subtitle: 'Dados brutos extraídos de cada arquivo .xlsx antes da consolidação',
+          title: 'Painel de Lojas',
+          subtitle: 'Visão consolidada por loja (Móvel + Residencial) e indicadores de atendimento',
         }
       case '/lojas':
         return {

@@ -9,12 +9,12 @@ import {
   UploadCloud,
   FileSpreadsheet,
   AlertCircle,
+  Building2,
+  TrendingUp,
+  BarChart3,
   Calendar,
   Trash2,
-  FolderOpen,
-  ArrowUpDown,
-  Building2,
-  FileText,
+  Eye,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -30,35 +30,46 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useToast } from '@/hooks/use-toast'
 import useRealtime from '@/hooks/use-realtime'
+import { useCountUp } from '@/hooks/useCountUp'
 import {
-  fetchImportedFiles,
   fetchStores,
-  deleteImportedFile,
-  clearAllImportedFiles,
+  fetchFpdRecords,
+  deleteFpdRecord,
+  clearAllFpdRecords,
+  clearAllStores,
+  clearAllVendorConsolidations,
+  fetchFpdRecordsByStore,
 } from '@/services/fpdService'
-import { exportImportedFilesToXlsx } from '@/lib/xlsxExport'
-import { FPD_STATUSES, type ImportedFileRecord, type StoreRecord } from '@/types/fpd'
+import { exportConsolidatedToXlsx } from '@/lib/xlsxExport'
+import { FPD_STATUSES, type StoreRecord, type FpdRecord, type ConsolidatedRow } from '@/types/fpd'
 import { cn } from '@/lib/utils'
+import { StoreAnalyticsDrawer } from '@/components/StoreAnalyticsDrawer'
 
 export const Arquivos: React.FC = () => {
   const { toast } = useToast()
-  const [files, setFiles] = useState<ImportedFileRecord[]>([])
   const [stores, setStores] = useState<StoreRecord[]>([])
+  const [records, setRecords] = useState<FpdRecord[]>([])
   const [loading, setLoading] = useState(true)
 
   // Filters
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [selectedStoreId, setSelectedStoreId] = useState<string>('all')
-  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc') // By import date
+  const [selectedCoordenacoes, setSelectedCoordenacoes] = useState<string[]>([])
+  const [selectedSupervisoes, setSelectedSupervisoes] = useState<string[]>([])
 
-  // Delete modal
-  const [fileToDelete, setFileToDelete] = useState<ImportedFileRecord | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
+  // Analytics Drawer / details
+  const [selectedRow, setSelectedRow] = useState<ConsolidatedRow | null>(null)
+  const [storeHistory, setStoreHistory] = useState<FpdRecord[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
-  // Clear all modal
+  // Delete record confirmation
+  const [recordToDelete, setRecordToDelete] = useState<string | null>(null)
+
+  // Clear all data confirmation & loading
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
-  const [isClearingAll, setIsClearingAll] = useState(false)
+  const [alsoClearStores, setAlsoClearStores] = useState(false)
+  const [isClearing, setIsClearing] = useState(false)
 
   // Debounce search
   useEffect(() => {
@@ -68,17 +79,18 @@ export const Arquivos: React.FC = () => {
     return () => clearTimeout(timer)
   }, [search])
 
+  // Initial load
   const loadData = async () => {
     try {
       setLoading(true)
-      const [fetchedFiles, fetchedStores] = await Promise.all([fetchImportedFiles(), fetchStores()])
-      setFiles(fetchedFiles)
+      const [fetchedStores, fetchedRecords] = await Promise.all([fetchStores(), fetchFpdRecords()])
       setStores(fetchedStores)
+      setRecords(fetchedRecords)
     } catch (err: unknown) {
       console.error(err)
       toast({
-        title: 'Erro ao carregar arquivos',
-        description: 'Não foi possível buscar a lista de arquivos importados.',
+        title: 'Erro ao carregar dados',
+        description: 'Não foi possível buscar as informações do painel de lojas.',
         variant: 'destructive',
       })
     } finally {
@@ -90,65 +102,150 @@ export const Arquivos: React.FC = () => {
     loadData()
   }, [])
 
-  // Real-time updates for imported_files
-  useRealtime<ImportedFileRecord>('imported_files', (e) => {
+  // Real-time subscriptions
+  useRealtime<StoreRecord>('stores', (e) => {
     if (e.action === 'create') {
-      setFiles((prev) => [e.record, ...prev.filter((f) => f.id !== e.record.id)])
+      setStores((prev) => {
+        if (prev.some((s) => s.id === e.record.id)) return prev
+        return [...prev, e.record].sort((a, b) => a.name.localeCompare(b.name))
+      })
     } else if (e.action === 'update') {
-      setFiles((prev) => prev.map((f) => (f.id === e.record.id ? e.record : f)))
+      setStores((prev) => prev.map((s) => (s.id === e.record.id ? e.record : s)))
+      // If current selected in drawer, update it
+      setSelectedRow((prev) =>
+        prev && prev.storeId === e.record.id
+          ? {
+              ...prev,
+              storeName: e.record.name,
+              coordenacao: e.record.coordenacao || '',
+              supervisao: e.record.supervisao || '',
+            }
+          : prev,
+      )
     } else if (e.action === 'delete') {
-      setFiles((prev) => prev.filter((f) => f.id !== e.record.id))
+      setStores((prev) => prev.filter((s) => s.id !== e.record.id))
+      if (selectedRow?.storeId === e.record.id) {
+        setDrawerOpen(false)
+      }
     }
   })
 
-  // Filtered & Sorted files
-  const filteredFiles = useMemo(() => {
-    const list = files.filter((item) => {
-      const storeName = item.expand?.store?.name || item.store_name || ''
+  useRealtime<FpdRecord>('fpd_records', (e) => {
+    if (e.action === 'create') {
+      setRecords((prev) => [e.record, ...prev.filter((r) => r.id !== e.record.id)])
+    } else if (e.action === 'update') {
+      setRecords((prev) => prev.map((r) => (r.id === e.record.id ? e.record : r)))
+    } else if (e.action === 'delete') {
+      setRecords((prev) => prev.filter((r) => r.id !== e.record.id))
+    }
+  })
 
-      // Search match
-      if (debouncedSearch) {
-        const q = debouncedSearch.toLowerCase()
-        const matchName = item.file_name.toLowerCase().includes(q)
-        const matchStore = storeName.toLowerCase().includes(q)
-        const matchDate = (item.reference_date || '').toLowerCase().includes(q)
-        if (!matchName && !matchStore && !matchDate) return false
+  // Map each store to its consolidated FPD row (exact same aggregation logic as Index.tsx)
+  const consolidatedRows: ConsolidatedRow[] = useMemo(() => {
+    return stores.map((store) => {
+      // Find all records for this store, pick the latest (records sorted -importado_em, -created)
+      const storeRecords = records.filter((r) => r.store === store.id)
+      const latest = storeRecords[0]
+
+      if (!latest) {
+        return {
+          storeId: store.id,
+          storeName: store.name,
+          coordenacao: store.coordenacao || '',
+          supervisao: store.supervisao || '',
+          hasData: false,
+          totalLinhas: 0,
+          envioFatura: 0,
+          pendente: 0,
+          faturaPaga: 0,
+          semContato: 0,
+          promessaPagto: 0,
+          cancelados: 0,
+          naoTratados: 0,
+          contatoRealizado: 0,
+          outros: 0,
+        }
       }
 
-      // Store filter
-      if (selectedStoreId !== 'all') {
-        const currentStoreId = item.store || item.store_id || ''
-        if (currentStoreId !== selectedStoreId && storeName !== selectedStoreId) {
-          return false
-        }
+      return {
+        storeId: store.id,
+        storeName: store.name,
+        coordenacao: store.coordenacao || '',
+        supervisao: store.supervisao || '',
+        hasData: true,
+        latestRecordId: latest.id,
+        referente: latest.referente,
+        importadoEm: latest.importado_em || latest.created,
+        totalLinhas: latest.total_linhas || 0,
+        envioFatura: latest.envio_fatura || 0,
+        pendente: latest.pendente || 0,
+        faturaPaga: latest.fatura_paga || 0,
+        semContato: latest.sem_contato || 0,
+        promessaPagto: latest.promessa_pagto || 0,
+        cancelados: latest.cancelados || 0,
+        naoTratados: latest.nao_tratados || 0,
+        contatoRealizado: latest.contato_realizado || 0,
+        outros: latest.outros || 0,
+      }
+    })
+  }, [stores, records])
+
+  // Distinct filter options
+  const uniqueCoordenacoes = useMemo(() => {
+    const list = Array.from(
+      new Set(stores.map((s) => s.coordenacao?.trim()).filter(Boolean)),
+    ) as string[]
+    return list.sort((a, b) => a.localeCompare(b))
+  }, [stores])
+
+  const uniqueSupervisoes = useMemo(() => {
+    const list = Array.from(
+      new Set(stores.map((s) => s.supervisao?.trim()).filter(Boolean)),
+    ) as string[]
+    return list.sort((a, b) => a.localeCompare(b))
+  }, [stores])
+
+  // Filtered rows
+  const filteredRows = useMemo(() => {
+    return consolidatedRows.filter((row) => {
+      // Search
+      if (debouncedSearch) {
+        const q = debouncedSearch.toLowerCase()
+        const matchName = row.storeName.toLowerCase().includes(q)
+        const matchCoord = row.coordenacao.toLowerCase().includes(q)
+        const matchSuper = row.supervisao.toLowerCase().includes(q)
+        if (!matchName && !matchCoord && !matchSuper) return false
+      }
+
+      // Coordenacao filter
+      if (selectedCoordenacoes.length > 0) {
+        if (!selectedCoordenacoes.includes(row.coordenacao)) return false
+      }
+
+      // Supervisao filter
+      if (selectedSupervisoes.length > 0) {
+        if (!selectedSupervisoes.includes(row.supervisao)) return false
       }
 
       return true
     })
+  }, [consolidatedRows, debouncedSearch, selectedCoordenacoes, selectedSupervisoes])
 
-    // Sort by date (imported_at or created)
-    return list.sort((a, b) => {
-      const timeA = new Date(a.imported_at || a.created).getTime()
-      const timeB = new Date(b.imported_at || b.created).getTime()
-      return sortOrder === 'desc' ? timeB - timeA : timeA - timeB
-    })
-  }, [files, debouncedSearch, selectedStoreId, sortOrder])
-
-  // Summary Totals
+  // Totals of filtered rows
   const totals = useMemo(() => {
-    return filteredFiles.reduce(
-      (acc, f) => {
-        const enviado = f.enviado_faturas !== undefined ? f.enviado_faturas : f.envio_fatura || 0
-        acc.totalLinhas += f.total_linhas || 0
-        acc.envioFatura += enviado
-        acc.pendente += f.pendente || 0
-        acc.faturaPaga += f.fatura_paga || 0
-        acc.semContato += f.sem_contato || 0
-        acc.promessaPagto += f.promessa_pagto || 0
-        acc.cancelados += f.cancelados || 0
-        acc.naoTratados += f.nao_tratados || 0
-        acc.contatoRealizado += f.contato_realizado || 0
-        acc.outros += f.outros || 0
+    return filteredRows.reduce(
+      (acc, r) => {
+        if (!r.hasData) return acc
+        acc.totalLinhas += r.totalLinhas
+        acc.envioFatura += r.envioFatura
+        acc.pendente += r.pendente
+        acc.faturaPaga += r.faturaPaga
+        acc.semContato += r.semContato
+        acc.promessaPagto += r.promessaPagto
+        acc.cancelados += r.cancelados
+        acc.naoTratados += r.naoTratados
+        acc.contatoRealizado += r.contatoRealizado
+        acc.outros += r.outros
         return acc
       },
       {
@@ -164,77 +261,129 @@ export const Arquivos: React.FC = () => {
         outros: 0,
       },
     )
-  }, [filteredFiles])
+  }, [filteredRows])
 
-  // Delete individual file
-  const handleDeleteFile = async () => {
-    if (!fileToDelete) return
+  // Animated totals
+  const animatedTotalLinhas = useCountUp(totals.totalLinhas)
+  const animatedEnvioFatura = useCountUp(totals.envioFatura)
+  const animatedPendente = useCountUp(totals.pendente)
+  const animatedFaturaPaga = useCountUp(totals.faturaPaga)
+  const animatedSemContato = useCountUp(totals.semContato)
+  const animatedPromessaPagto = useCountUp(totals.promessaPagto)
+  const animatedCancelados = useCountUp(totals.cancelados)
+  const animatedNaoTratados = useCountUp(totals.naoTratados)
+  const animatedContatoRealizado = useCountUp(totals.contatoRealizado)
+  const animatedOutros = useCountUp(totals.outros)
+
+  // Latest Referente date
+  const latestReferente = useMemo(() => {
+    const withRef = records.find((r) => r.referente && r.referente.trim() !== '')
+    return withRef?.referente || null
+  }, [records])
+
+  // Handle open drawer
+  const handleOpenRowDetail = async (row: ConsolidatedRow) => {
+    setSelectedRow(row)
+    setDrawerOpen(true)
+
+    // Load store import history
     try {
-      setIsDeleting(true)
-      await deleteImportedFile(fileToDelete.id)
-      setFiles((prev) => prev.filter((f) => f.id !== fileToDelete.id))
+      setLoadingHistory(true)
+      const hist = await fetchFpdRecordsByStore(row.storeId)
+      setStoreHistory(hist)
+    } catch {
+      // ignore
+    } finally {
+      setLoadingHistory(false)
+    }
+  }
+
+  // Delete an imported record
+  const handleDeleteRecord = async (recordId: string) => {
+    try {
+      await deleteFpdRecord(recordId)
       toast({
-        title: 'Arquivo excluído',
-        description: `O arquivo "${fileToDelete.file_name}" foi removido do histórico. Os totais consolidados foram preservados.`,
+        title: 'Registro excluído',
+        description: 'Os dados desta importação foram removidos.',
       })
-      setFileToDelete(null)
+      if (selectedRow) {
+        const hist = await fetchFpdRecordsByStore(selectedRow.storeId)
+        setStoreHistory(hist)
+      }
+      setRecordToDelete(null)
     } catch {
       toast({
         title: 'Erro ao excluir',
-        description: 'Não foi possível excluir o arquivo.',
+        description: 'Não foi possível excluir o registro.',
         variant: 'destructive',
       })
-    } finally {
-      setIsDeleting(false)
     }
   }
 
-  // Clear all imported files
-  const handleClearAll = async () => {
+  // Clear all data action (with option to also clear stores)
+  const handleClearAllData = async () => {
     try {
-      setIsClearingAll(true)
-      const count = await clearAllImportedFiles()
-      setFiles([])
-      setClearDialogOpen(false)
-      toast({
-        title: 'Histórico de arquivos limpo',
-        description: `${count} arquivo(s) importado(s) foram removidos.`,
-      })
+      setIsClearing(true)
+      if (alsoClearStores) {
+        await clearAllStores()
+        setStores([])
+        setRecords([])
+        setClearDialogOpen(false)
+        setAlsoClearStores(false)
+        toast({
+          title: 'Dados e lojas limpos!',
+          description: 'Todos os registros consolidados e lojas cadastradas foram removidos.',
+        })
+      } else {
+        await clearAllFpdRecords()
+        await clearAllVendorConsolidations()
+        setRecords([])
+        setClearDialogOpen(false)
+        toast({
+          title: 'Dados limpos com sucesso!',
+          description:
+            'Todos os registros consolidados de lojas e vendedores foram removidos. As lojas cadastradas foram mantidas.',
+        })
+      }
     } catch (err: unknown) {
       console.error(err)
       toast({
-        title: 'Erro ao limpar',
-        description: 'Não foi possível limpar a lista de arquivos.',
+        title: 'Erro ao limpar dados',
+        description:
+          err instanceof Error ? err.message : 'Não foi possível remover os dados do consolidado.',
         variant: 'destructive',
       })
     } finally {
-      setIsClearingAll(false)
+      setIsClearing(false)
     }
   }
 
-  // Export to .xlsx
   const handleExportXlsx = () => {
-    if (filteredFiles.length === 0) {
+    if (filteredRows.length === 0) {
       toast({
         title: 'Nada a exportar',
-        description: 'Nenhum arquivo listado para exportar.',
+        description: 'Nenhuma linha visível com os filtros atuais.',
       })
       return
     }
-    exportImportedFilesToXlsx(filteredFiles, totals)
+    exportConsolidatedToXlsx(filteredRows, totals, latestReferente || undefined)
     toast({
       title: 'Planilha exportada',
-      description: 'O arquivo .xlsx com a visão analítica foi gerado.',
+      description: 'O arquivo .xlsx do Painel de Lojas foi gerado com sucesso.',
     })
   }
 
-  const hasActiveFilters = debouncedSearch !== '' || selectedStoreId !== 'all'
+  const hasActiveFilters =
+    debouncedSearch !== '' || selectedCoordenacoes.length > 0 || selectedSupervisoes.length > 0
 
   const clearFilters = () => {
     setSearch('')
     setDebouncedSearch('')
-    setSelectedStoreId('all')
+    setSelectedCoordenacoes([])
+    setSelectedSupervisoes([])
   }
+
+  const storesWithDataCount = consolidatedRows.filter((r) => r.hasData).length
 
   return (
     <div className="space-y-6">
@@ -243,32 +392,36 @@ export const Arquivos: React.FC = () => {
         <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82]">
-              Arquivos Importados
+              Lojas Cadastradas
             </p>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-bold text-[#12365A] tabular-nums">{files.length}</span>
-              <span className="text-xs text-[#0E9F8A] font-medium">arquivos salvos</span>
+              <span className="text-2xl font-bold text-[#12365A] tabular-nums">
+                {stores.length}
+              </span>
+              <span className="text-xs text-[#0E9F8A] font-medium">
+                {storesWithDataCount} com dados
+              </span>
             </div>
           </div>
           <div className="w-10 h-10 rounded-lg bg-[#12365A]/5 text-[#12365A] flex items-center justify-center">
-            <FolderOpen className="w-5 h-5" />
+            <Building2 className="w-5 h-5" />
           </div>
         </div>
 
         <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82]">
-              Total Linhas (Soma Bruta)
+              Total de Linhas
             </p>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-bold text-[#12365A] tabular-nums">
-                {totals.totalLinhas.toLocaleString('pt-BR')}
+                {animatedTotalLinhas.toLocaleString('pt-BR')}
               </span>
-              <span className="text-xs text-[#5B6B82]">ocorrências</span>
+              <span className="text-xs text-[#5B6B82]">Móvel + Res.</span>
             </div>
           </div>
           <div className="w-10 h-10 rounded-lg bg-[#0E9F8A]/10 text-[#0E9F8A] flex items-center justify-center">
-            <FileText className="w-5 h-5" />
+            <TrendingUp className="w-5 h-5" />
           </div>
         </div>
 
@@ -279,7 +432,7 @@ export const Arquivos: React.FC = () => {
             </p>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-bold text-[#0891B2] tabular-nums">
-                {totals.faturaPaga.toLocaleString('pt-BR')}
+                {animatedFaturaPaga.toLocaleString('pt-BR')}
               </span>
               {totals.totalLinhas > 0 && (
                 <span className="text-xs text-[#0891B2] font-medium">
@@ -289,23 +442,19 @@ export const Arquivos: React.FC = () => {
             </div>
           </div>
           <div className="w-10 h-10 rounded-lg bg-[#0891B2]/10 text-[#0891B2] flex items-center justify-center">
-            <Building2 className="w-5 h-5" />
+            <BarChart3 className="w-5 h-5" />
           </div>
         </div>
 
         <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82]">
-              Lojas Impactadas
+              Data de Referência
             </p>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-bold text-[#12365A]">
-                {
-                  new Set(files.map((f) => f.expand?.store?.name || f.store_name).filter(Boolean))
-                    .size
-                }
+              <span className="text-base sm:text-lg font-bold text-[#12365A]">
+                {latestReferente ? `Ref: ${latestReferente}` : 'Nenhuma importada'}
               </span>
-              <span className="text-xs text-[#5B6B82]">lojas distintas</span>
             </div>
           </div>
           <div className="w-10 h-10 rounded-lg bg-[#2563EB]/10 text-[#2563EB] flex items-center justify-center">
@@ -314,25 +463,25 @@ export const Arquivos: React.FC = () => {
         </div>
       </div>
 
-      {/* Empty State Banner if no imported files */}
-      {!loading && files.length === 0 && (
+      {/* Empty State Banner when no records exist */}
+      {!loading && storesWithDataCount === 0 && (
         <div className="bg-gradient-to-r from-[#12365A] to-[#1a4a7a] text-white rounded-2xl p-6 sm:p-8 shadow-lg flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="space-y-2 text-center md:text-left">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#0E9F8A]/20 text-[#0E9F8A] text-xs font-semibold tracking-wider uppercase border border-[#0E9F8A]/30">
-              <FolderOpen className="w-3.5 h-3.5" />
-              <span>Visão Analítica por Arquivo</span>
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Aguardando Dados</span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold">Nenhum arquivo individual salvo ainda</h2>
+            <h2 className="text-xl sm:text-2xl font-bold">Nenhum arquivo importado ainda</h2>
             <p className="text-sm text-slate-200 max-w-xl">
-              Ao importar novas planilhas <span className="text-white font-semibold">.xlsx</span> na
-              aba de Importar, cada arquivo bruto será arquivado aqui antes da consolidação de
-              totais.
+              Importe as planilhas <span className="text-white font-semibold">.xlsx</span> das lojas
+              para consolidar automaticamente as abas Móvel e Residencial e preencher o Painel de
+              Lojas.
             </p>
           </div>
           <Link to="/importar">
             <Button className="bg-[#0E9F8A] hover:bg-[#0c8a77] text-white shadow-lg shadow-[#0E9F8A]/30 font-semibold px-6 py-6 h-auto text-base gap-2.5 shrink-0">
               <UploadCloud className="w-5 h-5" />
-              <span>Importar Arquivos</span>
+              <span>Importar Arquivos Agora</span>
             </Button>
           </Link>
         </div>
@@ -342,13 +491,13 @@ export const Arquivos: React.FC = () => {
       <div className="bg-white rounded-xl border border-[#E3E9F2] shadow-xs overflow-hidden">
         {/* Toolbar */}
         <div className="p-4 sm:p-5 border-b border-[#E3E9F2] bg-white flex flex-col md:flex-row md:items-center justify-between gap-4">
-          {/* Left search & store filter */}
+          {/* Left search & filters */}
           <div className="flex flex-wrap items-center gap-2.5 flex-1">
             {/* Search */}
             <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 text-[#8A97AC] absolute left-3 top-1/2 -translate-y-1/2" />
               <Input
-                placeholder="Buscar arquivo ou loja..."
+                placeholder="Buscar loja, coordenação..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9 h-9 text-xs sm:text-sm bg-[#F8FAFC] border-[#E3E9F2] focus:border-[#0E9F8A]"
@@ -356,40 +505,150 @@ export const Arquivos: React.FC = () => {
               {search && (
                 <button
                   onClick={() => setSearch('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A97AC] hover:text-[#12365A]"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A97AC] hover:text-[#12233A]"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
 
-            {/* Filter Store */}
-            <div className="w-full sm:w-52">
-              <select
-                value={selectedStoreId}
-                onChange={(e) => setSelectedStoreId(e.target.value)}
-                className="w-full h-9 text-xs rounded-md border border-[#E3E9F2] bg-[#F8FAFC] px-2.5 text-[#12233A] focus:outline-none focus:border-[#0E9F8A]"
-              >
-                <option value="all">Todas as Lojas ({stores.length})</option>
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Filter Coordenação */}
+            {uniqueCoordenacoes.length > 0 && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      'h-9 text-xs font-medium border-[#E3E9F2]',
+                      selectedCoordenacoes.length > 0 &&
+                        'border-[#0E9F8A] text-[#0E9F8A] bg-[#0E9F8A]/5',
+                    )}
+                  >
+                    <Filter className="w-3.5 h-3.5 mr-1.5" />
+                    <span>Coordenação</span>
+                    {selectedCoordenacoes.length > 0 && (
+                      <Badge className="ml-1.5 h-5 px-1.5 bg-[#0E9F8A] text-white text-[10px]">
+                        {selectedCoordenacoes.length}
+                      </Badge>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-3 bg-white" align="start">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <span className="text-xs font-semibold text-[#12233A]">
+                        Filtrar por Coordenação
+                      </span>
+                      {selectedCoordenacoes.length > 0 && (
+                        <button
+                          onClick={() => setSelectedCoordenacoes([])}
+                          className="text-[11px] text-[#0E9F8A] hover:underline"
+                        >
+                          Limpar
+                        </button>
+                      )}
+                    </div>
+                    <div className="max-h-48 overflow-y-auto space-y-1">
+                      {uniqueCoordenacoes.map((coord) => {
+                        const checked = selectedCoordenacoes.includes(coord)
+                        return (
+                          <label
+                            key={coord}
+                            className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#F3F6FA] cursor-pointer text-xs"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedCoordenacoes([...selectedCoordenacoes, coord])
+                                } else {
+                                  setSelectedCoordenacoes(
+                                    selectedCoordenacoes.filter((c) => c !== coord),
+                                  )
+                                }
+                              }}
+                              className="rounded border-[#cbd5e1] text-[#0E9F8A] focus:ring-[#0E9F8A]"
+                            />
+                            <span className="text-[#12233A]">{coord}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
 
-            {/* Sort Toggle */}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
-              className="h-9 text-xs font-medium border-[#E3E9F2] text-[#12365A] gap-1.5"
-              title="Alternar ordenação por data"
-            >
-              <ArrowUpDown className="w-3.5 h-3.5 text-[#0E9F8A]" />
-              <span>{sortOrder === 'desc' ? 'Mais recentes 1º' : 'Mais antigos 1º'}</span>
-            </Button>
+            {/* Filter Supervisão */}
+            {uniqueSupervisoes.length > 0 && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={cn(
+                      'h-9 text-xs font-medium border-[#E3E9F2]',
+                      selectedSupervisoes.length > 0 &&
+                        'border-[#0E9F8A] text-[#0E9F8A] bg-[#0E9F8A]/5',
+                    )}
+                  >
+                    <Filter className="w-3.5 h-3.5 mr-1.5" />
+                    <span>Supervisão</span>
+                    {selectedSupervisoes.length > 0 && (
+                      <Badge className="ml-1.5 h-5 px-1.5 bg-[#0E9F8A] text-white text-[10px]">
+                        {selectedSupervisoes.length}
+                      </Badge>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-3 bg-white" align="start">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <span className="text-xs font-semibold text-[#12233A]">
+                        Filtrar por Supervisão
+                      </span>
+                      {selectedSupervisoes.length > 0 && (
+                        <button
+                          onClick={() => setSelectedSupervisoes([])}
+                          className="text-[11px] text-[#0E9F8A] hover:underline"
+                        >
+                          Limpar
+                        </button>
+                      )}
+                    </div>
+                    <div className="max-h-48 overflow-y-auto space-y-1">
+                      {uniqueSupervisoes.map((sup) => {
+                        const checked = selectedSupervisoes.includes(sup)
+                        return (
+                          <label
+                            key={sup}
+                            className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[#F3F6FA] cursor-pointer text-xs"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedSupervisoes([...selectedSupervisoes, sup])
+                                } else {
+                                  setSelectedSupervisoes(
+                                    selectedSupervisoes.filter((s) => s !== sup),
+                                  )
+                                }
+                              }}
+                              className="rounded border-[#cbd5e1] text-[#0E9F8A] focus:ring-[#0E9F8A]"
+                            />
+                            <span className="text-[#12233A]">{sup}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
 
             {/* Clear filters button */}
             {hasActiveFilters && (
@@ -397,7 +656,7 @@ export const Arquivos: React.FC = () => {
                 variant="ghost"
                 size="sm"
                 onClick={clearFilters}
-                className="h-9 text-xs text-[#5B6B82] hover:text-[#12365A] gap-1"
+                className="h-9 text-xs text-[#5B6B82] hover:text-[#12233A] gap-1"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Limpar filtros</span>
@@ -407,16 +666,14 @@ export const Arquivos: React.FC = () => {
 
           {/* Right Action Buttons */}
           <div className="flex items-center gap-2 shrink-0">
-            {files.length > 0 && (
-              <Button
-                onClick={() => setClearDialogOpen(true)}
-                variant="outline"
-                className="h-9 border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50 font-medium text-xs sm:text-sm gap-1.5 transition-colors"
-              >
-                <Trash2 className="w-4 h-4 text-red-500" />
-                <span>Limpar Histórico</span>
-              </Button>
-            )}
+            <Button
+              onClick={() => setClearDialogOpen(true)}
+              variant="outline"
+              className="h-9 border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50 font-medium text-xs sm:text-sm gap-1.5 transition-colors"
+            >
+              <Trash2 className="w-4 h-4 text-red-500" />
+              <span>Limpar Dados</span>
+            </Button>
 
             <Button
               onClick={handleExportXlsx}
@@ -429,288 +686,275 @@ export const Arquivos: React.FC = () => {
           </div>
         </div>
 
-        {/* Analytical Table */}
+        {/* 13-Column Consolidated Table */}
         <div className="relative overflow-x-auto max-h-[70vh] border-b border-[#E3E9F2]">
           <table className="w-full text-left border-collapse text-[13px]">
             {/* Header */}
             <thead className="sticky top-0 z-20 bg-[#12365A] text-white shadow-sm font-semibold tracking-wider uppercase text-[11px]">
               <tr>
-                {/* 1 - DATA / HORA (Sticky left) */}
-                <th className="sticky left-0 z-30 bg-[#12365A] px-3.5 py-3.5 min-w-[150px] border-r border-[#1e456f]">
-                  DATA / HORA
+                {/* A - LOJAS (Sticky left) */}
+                <th className="sticky left-0 z-30 bg-[#12365A] px-3.5 py-3.5 min-w-[200px] text-center border-r border-[#1e456f]">
+                  LOJAS
                 </th>
-                {/* 2 - LOJA */}
-                <th className="px-3.5 py-3.5 min-w-[190px] border-r border-[#1e456f]">LOJA</th>
-                {/* 3 - NOME DO ARQUIVO */}
-                <th className="px-3.5 py-3.5 min-w-[220px] border-r border-[#1e456f]">
-                  NOME DO ARQUIVO
+                {/* B - COORDENAÇÃO */}
+                <th className="px-3 py-3.5 min-w-[130px] text-center border-r border-[#1e456f]">
+                  COORDENAÇÃO
                 </th>
-                {/* 4 - REF */}
-                <th className="px-3 py-3.5 min-w-[100px] border-r border-[#1e456f]">DATA REF.</th>
-                {/* 5 - TOTAL LINHAS */}
-                <th className="px-3 py-3.5 min-w-[110px] text-right border-r border-[#1e456f] bg-[#0E2A47]">
+                {/* C - SUPERVISÃO */}
+                <th className="px-3 py-3.5 min-w-[130px] text-center border-r border-[#1e456f]">
+                  SUPERVISÃO
+                </th>
+                {/* D - TOTAL LINHAS */}
+                <th className="px-3 py-3.5 min-w-[110px] text-center border-r border-[#1e456f] bg-[#0E2A47]">
                   TOTAL LINHAS
                 </th>
-                {/* 6-15 Status Columns with Colored Chips */}
+                {/* E–M Status Columns with Colored Chips */}
                 {FPD_STATUSES.map((status) => (
                   <th
                     key={status.key}
-                    className="px-2.5 py-2.5 min-w-[120px] text-right border-r border-[#1e456f]"
+                    className="px-2 py-2.5 w-[130px] min-w-[130px] text-center border-r border-[#1e456f]"
                   >
                     <div
-                      className="inline-block px-2 py-0.5 rounded text-[10px] font-bold text-white shadow-xs"
+                      className="w-full flex items-center justify-center min-h-[34px] px-2 py-1 rounded text-[10px] font-bold text-white text-center leading-tight shadow-xs whitespace-normal"
                       style={{ backgroundColor: status.color }}
                     >
                       {status.label}
                     </div>
                   </th>
                 ))}
-                {/* 16 - AÇÕES */}
-                <th className="px-3 py-3.5 text-right min-w-[80px]">AÇÕES</th>
               </tr>
             </thead>
+
             {/* Body */}
             <tbody className="divide-y divide-[#E3E9F2]">
               {loading ? (
                 <tr>
-                  <td colSpan={16} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={13} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-6 h-6 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
-                      <span>Carregando arquivos importados...</span>
+                      <span>Carregando dados do painel de lojas...</span>
                     </div>
                   </td>
                 </tr>
-              ) : filteredFiles.length === 0 ? (
+              ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={16} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={13} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
                       <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
-                      <p className="font-medium text-[#12365A]">Nenhum arquivo encontrado</p>
+                      <p className="font-medium text-[#12365A]">Nenhuma loja encontrada</p>
                       <p className="text-xs text-[#5B6B82]">
-                        {files.length === 0
-                          ? 'Importe planilhas .xlsx na aba Importar para visualizar o histórico individual dos arquivos.'
-                          : 'Tente ajustar a busca ou o filtro de loja.'}
+                        {stores.length === 0
+                          ? 'Cadastre lojas na aba Lojas ou faça o upload de arquivos .xlsx para preencher a tabela.'
+                          : 'Tente ajustar os termos de busca ou remover os filtros aplicados.'}
                       </p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                filteredFiles.map((file, idx) => {
-                  const storeName = file.expand?.store?.name || file.store_name || 'Loja'
-                  const dateStr = file.imported_at || file.created
-                  const formattedDate = dateStr ? new Date(dateStr).toLocaleString('pt-BR') : '—'
-
+                filteredRows.map((row, idx) => {
                   return (
                     <tr
-                      key={file.id}
+                      key={row.storeId}
+                      onClick={() => handleOpenRowDetail(row)}
                       className={cn(
-                        'hover:bg-[#F0F5FC] transition-colors group',
+                        'hover:bg-[#F0F5FC] cursor-pointer transition-colors group animate-fade-in-up',
                         idx % 2 === 1 ? 'bg-[#FAFCFF]' : 'bg-white',
+                        !row.hasData && 'opacity-60 text-slate-400',
                       )}
+                      style={{ animationDelay: `${Math.min(idx * 25, 300)}ms` }}
                     >
-                      {/* 1: DATA / HORA (Sticky left) */}
+                      {/* A: LOJAS (Sticky left) */}
                       <td
                         className={cn(
-                          'sticky left-0 z-10 px-3.5 py-2.5 font-medium text-[#12365A] border-r border-[#E3E9F2] text-xs whitespace-nowrap',
+                          'sticky left-0 z-10 px-3.5 py-2.5 font-semibold text-[#12365A] border-r border-[#E3E9F2] max-w-[250px]',
                           idx % 2 === 1 ? 'bg-[#FAFCFF]' : 'bg-white',
                           'group-hover:bg-[#F0F5FC]',
                         )}
                       >
-                        {formattedDate}
-                      </td>
-
-                      {/* 2: LOJA */}
-                      <td className="px-3.5 py-2.5 font-bold text-[#12365A] border-r border-[#E3E9F2] truncate max-w-[200px]">
-                        {storeName}
-                      </td>
-
-                      {/* 3: NOME DO ARQUIVO */}
-                      <td className="px-3.5 py-2.5 text-[#5B6B82] border-r border-[#E3E9F2] truncate max-w-[240px]">
-                        <div className="flex items-center gap-1.5" title={file.file_name}>
-                          <FileSpreadsheet className="w-3.5 h-3.5 text-[#0E9F8A] shrink-0" />
-                          <span className="truncate font-medium text-[#12365A]">
-                            {file.file_name}
-                          </span>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="truncate group-hover:text-[#0E9F8A] transition-colors">
+                              {row.storeName}
+                            </span>
+                            {!row.hasData && (
+                              <span className="text-[10px] font-normal px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 shrink-0">
+                                Sem dados
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleOpenRowDetail(row)
+                            }}
+                            className="p-1 rounded-md text-[#8A97AC] group-hover:text-[#0E9F8A] hover:bg-[#0E9F8A]/10 transition-colors shrink-0"
+                            title="Ver visão analítica da loja"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
 
-                      {/* 4: DATA REF */}
-                      <td className="px-3 py-2.5 text-[#5B6B82] border-r border-[#E3E9F2] text-xs font-medium">
-                        {file.reference_date ? (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] bg-slate-50 border-slate-200 text-[#12365A]"
-                          >
-                            {file.reference_date}
-                          </Badge>
+                      {/* B: COORDENAÇÃO */}
+                      <td className="px-3 py-2.5 text-[#5B6B82] border-r border-[#E3E9F2] truncate max-w-[140px]">
+                        {row.coordenacao || <span className="text-slate-300">—</span>}
+                      </td>
+
+                      {/* C: SUPERVISÃO */}
+                      <td className="px-3 py-2.5 text-[#5B6B82] border-r border-[#E3E9F2] truncate max-w-[140px]">
+                        {row.supervisao || <span className="text-slate-300">—</span>}
+                      </td>
+
+                      {/* D: TOTAL LINHAS */}
+                      <td className="px-3 py-2.5 text-right font-bold text-[#12365A] tabular-nums border-r border-[#E3E9F2] bg-slate-50/50">
+                        {row.hasData ? (
+                          row.totalLinhas.toLocaleString('pt-BR')
                         ) : (
                           <span className="text-slate-300">—</span>
                         )}
                       </td>
 
-                      {/* 5: TOTAL LINHAS */}
-                      <td className="px-3 py-2.5 text-right font-bold text-[#12365A] tabular-nums border-r border-[#E3E9F2] bg-slate-50/50">
-                        {(file.total_linhas || 0).toLocaleString('pt-BR')}
-                      </td>
-
-                      {/* 6-15: 10 Status Columns with colored chip badge */}
+                      {/* E–M: Status columns with faint background tint */}
                       {FPD_STATUSES.map((status) => {
-                        let val: number | undefined
-                        if (status.key === 'envio_fatura') {
-                          val =
-                            file.enviado_faturas !== undefined
-                              ? file.enviado_faturas
-                              : file.envio_fatura || 0
-                        } else {
-                          val = (file[status.key as keyof ImportedFileRecord] as number) || 0
-                        }
-
-                        const hasVal = (val ?? 0) > 0
-
+                        const val = row.hasData
+                          ? (row[
+                              status.key.replace(/_([a-z])/g, (_, c) =>
+                                c.toUpperCase(),
+                              ) as keyof ConsolidatedRow
+                            ] as number)
+                          : undefined
                         return (
                           <td
                             key={status.key}
                             className="px-2.5 py-2.5 text-right font-medium tabular-nums border-r border-[#E3E9F2]"
                             style={{
-                              backgroundColor: hasVal ? status.bgTint : undefined,
-                              color: hasVal ? status.textColor : undefined,
+                              backgroundColor:
+                                row.hasData && (val ?? 0) > 0 ? status.bgTint : undefined,
+                              color: row.hasData && (val ?? 0) > 0 ? status.textColor : undefined,
                             }}
                           >
-                            {hasVal ? (
-                              (val ?? 0).toLocaleString('pt-BR')
+                            {row.hasData ? (
+                              (val ?? 0) > 0 ? (
+                                (val ?? 0).toLocaleString('pt-BR')
+                              ) : (
+                                <span className="text-slate-300">0</span>
+                              )
                             ) : (
-                              <span className="text-slate-300">0</span>
+                              <span className="text-slate-300">—</span>
                             )}
                           </td>
                         )
                       })}
-
-                      {/* 16: AÇÕES */}
-                      <td className="px-3 py-2.5 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setFileToDelete(file)}
-                          className="h-7 w-7 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                          title="Excluir arquivo individual"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </td>
                     </tr>
                   )
                 })
               )}
             </tbody>
+
             {/* Totals Row (Pinned Footer) */}
             <tfoot className="sticky bottom-0 z-20 bg-[#12365A] text-white font-bold text-[13px] shadow-lg border-t-2 border-[#0E9F8A]">
               <tr>
-                {/* 1: Totais */}
+                {/* A: Totais */}
                 <td className="sticky left-0 z-30 bg-[#12365A] px-3.5 py-3 border-r border-[#1e456f] text-white uppercase tracking-wider">
-                  Totais ({filteredFiles.length})
+                  Totais ({filteredRows.length})
                 </td>
-                {/* 2 */}
-                <td className="px-3.5 py-3 border-r border-[#1e456f]"></td>
-                {/* 3 */}
-                <td className="px-3.5 py-3 border-r border-[#1e456f]"></td>
-                {/* 4 */}
+                {/* B */}
                 <td className="px-3 py-3 border-r border-[#1e456f]"></td>
-                {/* 5: TOTAL LINHAS */}
-                <th className="px-3 py-3 text-right text-white tabular-nums border-r border-[#1e456f] bg-[#0E2A47]">
-                  {totals.totalLinhas.toLocaleString('pt-BR')}
-                </th>
-                {/* Status totals */}
-                {/* 1. Fatura(s) Paga(s) */}
+                {/* C */}
+                <td className="px-3 py-3 border-r border-[#1e456f]"></td>
+                {/* D: TOTAL LINHAS */}
+                <td className="px-3 py-3 text-right text-white tabular-nums border-r border-[#1e456f] bg-[#0E2A47]">
+                  {animatedTotalLinhas.toLocaleString('pt-BR')}
+                </td>
+                {/* E: 1. Fatura(s) Paga(s) */}
                 <td className="px-2.5 py-3 text-right text-[#67e8f9] tabular-nums border-r border-[#1e456f]">
-                  {totals.faturaPaga.toLocaleString('pt-BR')}
+                  {animatedFaturaPaga.toLocaleString('pt-BR')}
                 </td>
-                {/* 2. Enviado Fatura(s) */}
+                {/* F: 2. Enviado Fatura(s) */}
                 <td className="px-2.5 py-3 text-right text-[#4ade80] tabular-nums border-r border-[#1e456f]">
-                  {totals.envioFatura.toLocaleString('pt-BR')}
+                  {animatedEnvioFatura.toLocaleString('pt-BR')}
                 </td>
-                {/* 3. Promessa de Pagto. */}
+                {/* G: 3. Promessa de Pagto. */}
                 <td className="px-2.5 py-3 text-right text-[#d8b4fe] tabular-nums border-r border-[#1e456f]">
-                  {totals.promessaPagto.toLocaleString('pt-BR')}
+                  {animatedPromessaPagto.toLocaleString('pt-BR')}
                 </td>
-                {/* 4. Sem Contato */}
+                {/* H: 4. Sem Contato */}
                 <td className="px-2.5 py-3 text-right text-[#cbd5e1] tabular-nums border-r border-[#1e456f]">
-                  {totals.semContato.toLocaleString('pt-BR')}
+                  {animatedSemContato.toLocaleString('pt-BR')}
                 </td>
-                {/* 5. Cancelados */}
+                {/* I: 5. Cancelados */}
                 <td className="px-2.5 py-3 text-right text-slate-300 tabular-nums border-r border-[#1e456f]">
-                  {totals.cancelados.toLocaleString('pt-BR')}
+                  {animatedCancelados.toLocaleString('pt-BR')}
                 </td>
-                {/* 6. Pendente */}
+                {/* J: 6. Pendente */}
                 <td className="px-2.5 py-3 text-right text-[#fca5a5] tabular-nums border-r border-[#1e456f]">
-                  {totals.pendente.toLocaleString('pt-BR')}
+                  {animatedPendente.toLocaleString('pt-BR')}
                 </td>
-                {/* 7. Contato Realizado */}
+                {/* K: 7. Contato Realizado */}
                 <td className="px-2.5 py-3 text-right text-[#5eead4] tabular-nums border-r border-[#1e456f]">
-                  {totals.contatoRealizado.toLocaleString('pt-BR')}
+                  {animatedContatoRealizado.toLocaleString('pt-BR')}
                 </td>
-                {/* 8. Outros Motivos */}
+                {/* L: 8. Outros Motivos */}
                 <td className="px-2.5 py-3 text-right text-[#c4b5fd] tabular-nums border-r border-[#1e456f]">
-                  {totals.outros.toLocaleString('pt-BR')}
+                  {animatedOutros.toLocaleString('pt-BR')}
                 </td>
-                {/* 9. Não Tratados */}
+                {/* M: 9. Não Tratados */}
                 <td className="px-2.5 py-3 text-right text-[#fdba74] tabular-nums border-r border-[#1e456f]">
-                  {totals.naoTratados.toLocaleString('pt-BR')}
+                  {animatedNaoTratados.toLocaleString('pt-BR')}
                 </td>
-                {/* 16 */}
-                <td className="px-3 py-3"></td>
               </tr>
-            </tfoot>{' '}
+            </tfoot>
           </table>
         </div>
       </div>
 
-      {/* Modal: Confirmar Exclusão de Arquivo Individual */}
-      <Dialog open={!!fileToDelete} onOpenChange={(open) => !open && setFileToDelete(null)}>
+      {/* Analytical Drawer for Store */}
+      <StoreAnalyticsDrawer
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        store={selectedRow}
+        history={storeHistory}
+        loadingHistory={loadingHistory}
+        onDeleteRecord={(id) => setRecordToDelete(id)}
+      />
+
+      {/* Delete Record Confirmation Dialog */}
+      <Dialog open={!!recordToDelete} onOpenChange={(open) => !open && setRecordToDelete(null)}>
         <DialogContent className="sm:max-w-md bg-white">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-[#12365A]">
-              Confirmar exclusão de arquivo
+              Confirmar exclusão de importação
             </DialogTitle>
             <DialogDescription className="text-xs text-[#5B6B82]">
-              Deseja remover o registro individual do arquivo{' '}
-              <strong className="text-[#12365A]">"{fileToDelete?.file_name}"</strong> da loja{' '}
-              <strong className="text-[#12365A]">
-                "{fileToDelete?.expand?.store?.name || fileToDelete?.store_name}"
-              </strong>
-              ?
-              <br />
-              <br />
-              <span className="text-slate-500">
-                Nota: Esta exclusão remove apenas este arquivo do histórico bruto. O total já somado
-                no painel consolidado da loja permanece inalterado.
-              </span>
+              Tem certeza de que deseja remover os dados desta importação? O painel voltará a exibir
+              a importação anterior ou ficará sem dados se for a única.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0 mt-4">
-            <Button
-              variant="outline"
-              onClick={() => setFileToDelete(null)}
-              disabled={isDeleting}
-              className="text-xs"
-            >
+            <Button variant="outline" onClick={() => setRecordToDelete(null)} className="text-xs">
               Cancelar
             </Button>
             <Button
               variant="destructive"
-              onClick={handleDeleteFile}
-              disabled={isDeleting}
+              onClick={() => recordToDelete && handleDeleteRecord(recordToDelete)}
               className="text-xs bg-red-600 hover:bg-red-700"
             >
-              {isDeleting ? 'Excluindo...' : 'Sim, excluir arquivo'}
+              Sim, excluir
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Modal: Limpar Todos os Arquivos */}
+      {/* Clear All Data Confirmation Dialog */}
       <Dialog
         open={clearDialogOpen}
-        onOpenChange={(open) => !isClearingAll && setClearDialogOpen(open)}
+        onOpenChange={(open) => {
+          if (!isClearing) {
+            setClearDialogOpen(open)
+            if (!open) setAlsoClearStores(false)
+          }
+        }}
       >
         <DialogContent className="sm:max-w-md bg-white">
           <DialogHeader>
@@ -718,33 +962,65 @@ export const Arquivos: React.FC = () => {
               <Trash2 className="w-5 h-5" />
             </div>
             <DialogTitle className="text-lg font-bold text-[#12365A]">
-              Limpar todos os arquivos importados?
+              Limpar todos os dados?
             </DialogTitle>
             <DialogDescription className="text-xs sm:text-sm text-[#5B6B82] leading-relaxed">
-              Tem certeza de que deseja limpar todos os{' '}
-              <strong className="text-red-700">{files.length} registros individuais</strong> de
-              arquivos importados? Os totais consolidados no painel principal serão mantidos.
+              Tem certeza que deseja limpar os dados consolidados? Esta ação não pode ser desfeita.
             </DialogDescription>
           </DialogHeader>
+
+          {stores.length > 0 && (
+            <div className="py-2">
+              <label className="flex items-start gap-2.5 p-3 rounded-lg border border-red-100 bg-red-50/50 cursor-pointer select-none hover:bg-red-50 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={alsoClearStores}
+                  onChange={(e) => setAlsoClearStores(e.target.checked)}
+                  disabled={isClearing}
+                  className="mt-0.5 rounded border-red-300 text-red-600 focus:ring-red-500"
+                />
+                <div className="text-xs">
+                  <span className="font-semibold text-red-900 block">
+                    Também limpar todas as {stores.length} lojas cadastradas
+                  </span>
+                  <span className="text-[#5B6B82] text-[11px] block mt-0.5">
+                    {alsoClearStores
+                      ? 'Todas as lojas e históricos serão excluídos permanentemente.'
+                      : 'Se desmarcado, apenas os registros consolidados serão zerados e as lojas serão mantidas.'}
+                  </span>
+                </div>
+              </label>
+            </div>
+          )}
+
           <DialogFooter className="gap-2 sm:gap-0 mt-4">
             <Button
               variant="outline"
-              onClick={() => setClearDialogOpen(false)}
-              disabled={isClearingAll}
+              onClick={() => {
+                setClearDialogOpen(false)
+                setAlsoClearStores(false)
+              }}
+              disabled={isClearing}
               className="text-xs"
             >
               Cancelar
             </Button>
             <Button
               variant="destructive"
-              onClick={handleClearAll}
-              disabled={isClearingAll}
+              onClick={handleClearAllData}
+              disabled={isClearing}
               className="text-xs bg-red-600 hover:bg-red-700 gap-2"
             >
-              {isClearingAll && (
+              {isClearing && (
                 <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               )}
-              <span>{isClearingAll ? 'Limpando...' : 'Limpar Arquivos'}</span>
+              <span>
+                {isClearing
+                  ? 'Limpando...'
+                  : alsoClearStores
+                    ? 'Limpar Dados e Lojas'
+                    : 'Limpar Apenas Dados'}
+              </span>
             </Button>
           </DialogFooter>
         </DialogContent>
