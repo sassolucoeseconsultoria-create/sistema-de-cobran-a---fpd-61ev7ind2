@@ -325,7 +325,10 @@ export const Admin: React.FC = () => {
         }
 
         const created = await pb.collection('users').create<User>(payload)
-        setUsers((prev) => [created, ...prev])
+        setUsers((prev) => {
+          if (prev.some((u) => u.id === created.id)) return prev
+          return [created, ...prev]
+        })
 
         toast({
           title: 'Usuário cadastrado com sucesso',
