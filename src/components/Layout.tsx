@@ -280,7 +280,14 @@ export const Layout: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            {location.pathname !== '/importar' && (
+            {![
+              '/importar',
+              '/top-ofensores',
+              '/vendedores',
+              '/arquivos',
+              '/lojas',
+              '/admin',
+            ].includes(location.pathname) && (
               <Button
                 onClick={() => navigate('/importar')}
                 className="bg-[#0E9F8A] hover:bg-[#0c8a77] text-white shadow-sm font-medium text-xs sm:text-sm h-9 px-3 sm:px-4 gap-2"
