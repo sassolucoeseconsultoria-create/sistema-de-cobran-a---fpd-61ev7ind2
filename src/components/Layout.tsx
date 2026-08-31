@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   UserCheck,
   Flame,
+  Layers,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
@@ -55,6 +56,12 @@ export const Layout: React.FC = () => {
       label: 'Painel de Lojas',
       icon: FolderOpen,
       description: 'Painel consolidado agrupado por loja',
+    },
+    {
+      to: '/relacionamento',
+      label: 'Relacionamento',
+      icon: Layers,
+      description: 'Linhas analíticas das planilhas Móvel e Residencial',
     },
     {
       to: '/lojas',
@@ -101,6 +108,11 @@ export const Layout: React.FC = () => {
         return {
           title: 'Painel de Lojas',
           subtitle: 'Visão consolidada por loja (Móvel + Residencial) e indicadores de atendimento',
+        }
+      case '/relacionamento':
+        return {
+          title: 'Relacionamento Analítico',
+          subtitle: 'Linhas analíticas detalhadas das planilhas Móvel e Residencial',
         }
       case '/lojas':
         return {
@@ -285,6 +297,7 @@ export const Layout: React.FC = () => {
               '/top-ofensores',
               '/vendedores',
               '/arquivos',
+              '/relacionamento',
               '/lojas',
               '/admin',
             ].includes(location.pathname) && (

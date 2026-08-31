@@ -26,6 +26,16 @@ export interface AnalyticRowRecord extends RecordModel {
   }
 }
 
+export type RelacionamentoAba = 'Móvel' | 'Residencial'
+
+export interface RelacionamentoRecord extends RecordModel {
+  aba: RelacionamentoAba
+  loja?: string
+  arquivo?: string
+  linha?: number
+  dados?: Record<string, unknown>
+}
+
 export interface StoreRecord extends RecordModel {
   name: string
   coordenacao?: string

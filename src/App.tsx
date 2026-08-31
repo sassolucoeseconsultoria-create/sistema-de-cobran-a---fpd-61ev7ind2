@@ -13,6 +13,7 @@ import Vendedores from '@/pages/Vendedores'
 import TopOfensores from '@/pages/TopOfensores'
 import Importar from '@/pages/Importar'
 import Arquivos from '@/pages/Arquivos'
+import Relacionamento from '@/pages/Relacionamento'
 import Lojas from '@/pages/Lojas'
 import Admin from '@/pages/Admin'
 import Login from '@/pages/Login'
@@ -41,6 +42,7 @@ const App = () => (
             <Route path="/top-ofensores" element={<TopOfensores />} />
             <Route path="/importar" element={<Importar />} />
             <Route path="/arquivos" element={<Arquivos />} />
+            <Route path="/relacionamento" element={<Relacionamento />} />
             <Route path="/lojas" element={<Lojas />} />
             <Route
               path="/admin"

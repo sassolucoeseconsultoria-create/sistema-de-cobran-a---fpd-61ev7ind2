@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-31T20:09:50.063Z",
+  "generatedAt": "2026-08-31T20:54:58.809Z",
   "collections": [
     {
       "name": "users",
@@ -570,6 +570,70 @@
         "CREATE INDEX idx_analytic_rows_layout ON analytic_rows (layout_id)",
         "CREATE INDEX idx_analytic_rows_origem ON analytic_rows (origem)",
         "CREATE INDEX idx_analytic_rows_aba ON analytic_rows (aba)"
+      ]
+    },
+    {
+      "name": "relacionamento",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "aba",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["Móvel", "Residencial"]
+        },
+        {
+          "name": "loja",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "arquivo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "linha",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_relacionamento_aba ON relacionamento (aba)",
+        "CREATE INDEX idx_relacionamento_loja ON relacionamento (loja)",
+        "CREATE INDEX idx_relacionamento_arquivo ON relacionamento (arquivo)",
+        "CREATE INDEX idx_relacionamento_linha ON relacionamento (linha)"
       ]
     }
   ]
