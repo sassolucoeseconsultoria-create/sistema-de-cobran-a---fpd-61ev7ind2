@@ -30,8 +30,10 @@ export function exportVendorsToXlsx(
     naoTratados: number
   },
   referenteLabel?: string,
+  options?: { sheetName?: string; filePrefix?: string },
 ) {
   const headers = [
+    'POSIÇÃO',
     'VENDEDOR',
     'LOJA',
     'SUPERVISÃO',
@@ -47,7 +49,8 @@ export function exportVendorsToXlsx(
     'Não Tratados',
   ]
 
-  const dataRows = rows.map((r) => [
+  const dataRows = rows.map((r, idx) => [
+    `#${idx + 1}`,
     r.vendedor,
     r.loja || '',
     r.supervisao || '',
@@ -67,6 +70,7 @@ export function exportVendorsToXlsx(
     'Totais',
     '',
     '',
+    '',
     totals.totalLinhas,
     totals.faturaPaga,
     totals.envioFatura,
@@ -83,6 +87,7 @@ export function exportVendorsToXlsx(
   const ws = XLSX.utils.aoa_to_sheet(wsData)
 
   ws['!cols'] = [
+    { wch: 10 }, // POSICAO
     { wch: 30 }, // VENDEDOR
     { wch: 25 }, // LOJA
     { wch: 20 }, // SUPERVISAO
@@ -99,12 +104,14 @@ export function exportVendorsToXlsx(
   ]
 
   const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Ranking_Vendedores')
+  const sheetName = options?.sheetName || 'Ranking_Vendedores'
+  XLSX.utils.book_append_sheet(wb, ws, sheetName)
 
   const dateSlug = (referenteLabel || 'Consolidado')
     .replace(/[/\\?%*:|"<>]/g, '-')
     .replace(/\s+/g, '_')
-  const filename = `Ranking_Vendedores_FPD_${dateSlug}.xlsx`
+  const prefix = options?.filePrefix || 'Ranking_Vendedores_FPD'
+  const filename = `${prefix}_${dateSlug}.xlsx`
 
   XLSX.writeFile(wb, filename)
 }

@@ -10,6 +10,7 @@ import Layout from '@/components/Layout'
 // Real Pages
 import Index from '@/pages/Index'
 import Vendedores from '@/pages/Vendedores'
+import TopOfensores from '@/pages/TopOfensores'
 import Importar from '@/pages/Importar'
 import Arquivos from '@/pages/Arquivos'
 import Lojas from '@/pages/Lojas'
@@ -37,6 +38,7 @@ const App = () => (
           >
             <Route path="/" element={<Index />} />
             <Route path="/vendedores" element={<Vendedores />} />
+            <Route path="/top-ofensores" element={<TopOfensores />} />
             <Route path="/importar" element={<Importar />} />
             <Route path="/arquivos" element={<Arquivos />} />
             <Route path="/lojas" element={<Lojas />} />

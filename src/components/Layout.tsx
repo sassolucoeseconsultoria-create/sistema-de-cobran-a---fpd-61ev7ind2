@@ -13,6 +13,7 @@ import {
   ChevronRight,
   ShieldCheck,
   UserCheck,
+  Flame,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
@@ -36,6 +37,12 @@ export const Layout: React.FC = () => {
       label: 'Ranking por Vendedor',
       icon: UserCheck,
       description: 'Ranking agrupado por vendedor',
+    },
+    {
+      to: '/top-ofensores',
+      label: 'Top 20 Ofensores',
+      icon: Flame,
+      description: 'Ranking dos 20 principais ofensores por linhas',
     },
     {
       to: '/importar',
@@ -79,6 +86,11 @@ export const Layout: React.FC = () => {
         return {
           title: 'Ranking por Vendedor',
           subtitle: 'Acompanhamento de inadimplência e status agrupado por vendedor',
+        }
+      case '/top-ofensores':
+        return {
+          title: 'Ranking dos 20 Principais Ofensores',
+          subtitle: 'Top 20 vendedores com maior volume de linhas em atraso (Móvel + Residencial)',
         }
       case '/importar':
         return {
