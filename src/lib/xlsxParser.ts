@@ -1,6 +1,12 @@
 import * as XLSX from 'xlsx'
 import type { FpdStatusKey, ParsedVendorLine } from '@/types/fpd'
 
+export interface DetectedColumn {
+  letter: string
+  name: string
+  columnIndex: number
+}
+
 export interface ParsedSheetCounts {
   sheetName: string
   sheetType: 'movel' | 'residencial' | 'outro'
@@ -16,6 +22,7 @@ export interface ParsedSheetCounts {
   contato_realizado: number
   outros: number
   vendorLines: ParsedVendorLine[]
+  columns?: DetectedColumn[]
 }
 
 export interface ParsedFileData {
@@ -507,6 +514,94 @@ export function columnLetterToIndex(columnLetter: string): number {
 }
 
 /**
+ * Converts a 0-based column index to Excel column letter (0 -> 'A', 25 -> 'Z', 26 -> 'AA', 30 -> 'AE', 48 -> 'AW')
+ */
+export function indexToColumnLetter(index: number): string {
+  if (index < 0) return ''
+  let letter = ''
+  let num = index + 1
+  while (num > 0) {
+    const mod = (num - 1) % 26
+    letter = String.fromCharCode(65 + mod) + letter
+    num = Math.floor((num - mod) / 26)
+  }
+  return letter
+}
+
+/**
+ * Extracts the header columns map from worksheet jsonData or cell references.
+ * Finds the first structural header row or falls back to the first non-empty row.
+ */
+export function extractWorksheetColumns(jsonData: unknown[][]): DetectedColumn[] {
+  if (!jsonData || jsonData.length === 0) return []
+
+  // 1. Find the first row that matches isHeaderOrTotalRow or has typical header texts
+  let headerRowIndex = -1
+  for (let i = 0; i < Math.min(jsonData.length, 10); i++) {
+    const row = jsonData[i]
+    if (!Array.isArray(row) || row.length === 0) continue
+    const nonBlank = row.filter((c) => c !== null && c !== undefined && String(c).trim() !== '')
+    if (nonBlank.length === 0) continue
+
+    // Check if it's a genuine header row
+    if (isHeaderOrTotalRow(row)) {
+      // If it's a total row, skip; if it's structural header, take it
+      const normalizedCells = row.map(normalizeText).filter(Boolean)
+      const firstCell = normalizedCells[0] || ''
+      const isTotal =
+        firstCell === 'total' ||
+        firstCell === 'totais' ||
+        firstCell === 'total geral' ||
+        firstCell === 'resumo' ||
+        firstCell.startsWith('total ') ||
+        firstCell.startsWith('totais ')
+      if (!isTotal) {
+        headerRowIndex = i
+        break
+      }
+    }
+  }
+
+  // Fallback: If no explicit structural header found, pick the first non-empty row
+  if (headerRowIndex === -1) {
+    for (let i = 0; i < Math.min(jsonData.length, 5); i++) {
+      const row = jsonData[i]
+      if (
+        Array.isArray(row) &&
+        row.some((c) => c !== null && c !== undefined && String(c).trim() !== '')
+      ) {
+        headerRowIndex = i
+        break
+      }
+    }
+  }
+
+  if (headerRowIndex === -1) return []
+
+  const headerRow = jsonData[headerRowIndex]
+  if (!Array.isArray(headerRow)) return []
+
+  const detected: DetectedColumn[] = []
+
+  for (let c = 0; c < headerRow.length; c++) {
+    const cellVal = headerRow[c]
+    const letter = indexToColumnLetter(c)
+    if (cellVal !== null && cellVal !== undefined) {
+      const nameStr = String(cellVal).trim()
+      if (nameStr !== '') {
+        detected.push({
+          letter,
+          name: nameStr,
+          columnIndex: c,
+        })
+      }
+    }
+  }
+
+  return detected
+}
+
+/**
  * Extracts a numeric quantity from a cell value in a given column.
  * If empty, invalid, 0, or negative, defaults to 1 (each valid data row represents at least 1 occurrence unless specified).
  * If it's a positive number or string number, parses it (e.g. "5" -> 5).
@@ -544,6 +639,8 @@ export function parseWorksheet(
 
   const vendorLines: ParsedVendorLine[] = []
 
+  const detectedColumns = extractWorksheetColumns(jsonData)
+
   const counts: ParsedSheetCounts = {
     sheetName,
     sheetType,
@@ -559,6 +656,7 @@ export function parseWorksheet(
     contato_realizado: 0,
     outros: 0,
     vendorLines,
+    columns: detectedColumns,
   }
   if (!jsonData || jsonData.length === 0) {
     return counts

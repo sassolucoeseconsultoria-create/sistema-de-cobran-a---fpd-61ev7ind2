@@ -1,5 +1,31 @@
 import type { RecordModel } from 'pocketbase'
 
+export type AnalyticColumnType = 'texto' | 'numero' | 'data'
+export type AnalyticColumnSheet = 'Móvel' | 'Residencial' | 'Ambas'
+
+export interface AnalyticLayoutColumn {
+  nome: string
+  tipo: AnalyticColumnType
+  aba: AnalyticColumnSheet
+}
+
+export interface AnalyticLayoutRecord extends RecordModel {
+  nome: string
+  descricao?: string
+  colunas: AnalyticLayoutColumn[]
+}
+
+export interface AnalyticRowRecord extends RecordModel {
+  layout_id: string
+  origem: string
+  aba: string
+  numero_linha: number
+  valores: Record<string, string | number | null>
+  expand?: {
+    layout_id?: AnalyticLayoutRecord
+  }
+}
+
 export interface StoreRecord extends RecordModel {
   name: string
   coordenacao?: string

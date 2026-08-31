@@ -5,6 +5,8 @@ import {
   isHeaderOrTotalRow,
   normalizeText,
   columnLetterToIndex,
+  indexToColumnLetter,
+  extractWorksheetColumns,
   extractRowQuantity,
   parseWorksheet,
 } from './xlsxParser'
@@ -532,7 +534,7 @@ describe('isHeaderOrTotalRow', () => {
   })
 })
 
-describe('columnLetterToIndex and extractRowQuantity', () => {
+describe('columnLetterToIndex and indexToColumnLetter and extractRowQuantity', () => {
   it('should convert Excel column letters to 0-based indices correctly', () => {
     expect(columnLetterToIndex('A')).toBe(0)
     expect(columnLetterToIndex('B')).toBe(1)
@@ -540,6 +542,31 @@ describe('columnLetterToIndex and extractRowQuantity', () => {
     expect(columnLetterToIndex('AA')).toBe(26)
     expect(columnLetterToIndex('AE')).toBe(30)
     expect(columnLetterToIndex('AW')).toBe(48)
+  })
+
+  it('should convert 0-based indices to Excel column letters correctly', () => {
+    expect(indexToColumnLetter(0)).toBe('A')
+    expect(indexToColumnLetter(1)).toBe('B')
+    expect(indexToColumnLetter(3)).toBe('D')
+    expect(indexToColumnLetter(4)).toBe('E')
+    expect(indexToColumnLetter(25)).toBe('Z')
+    expect(indexToColumnLetter(26)).toBe('AA')
+    expect(indexToColumnLetter(30)).toBe('AE')
+    expect(indexToColumnLetter(46)).toBe('AU')
+    expect(indexToColumnLetter(47)).toBe('AV')
+    expect(indexToColumnLetter(48)).toBe('AW')
+  })
+
+  it('should extract detected columns map with letter and name', () => {
+    const headerRow = ['LOJA', 'CLIENTE', 'CPF', 'VENDEDOR', 'FILIAL']
+    const dataRow = ['LOJA 1', 'CLIENTE 1', '123', 'VEND 1', 'FIL 1']
+    const cols = extractWorksheetColumns([headerRow, dataRow])
+    expect(cols).toHaveLength(5)
+    expect(cols[0]).toEqual({ letter: 'A', name: 'LOJA', columnIndex: 0 })
+    expect(cols[1]).toEqual({ letter: 'B', name: 'CLIENTE', columnIndex: 1 })
+    expect(cols[2]).toEqual({ letter: 'C', name: 'CPF', columnIndex: 2 })
+    expect(cols[3]).toEqual({ letter: 'D', name: 'VENDEDOR', columnIndex: 3 })
+    expect(cols[4]).toEqual({ letter: 'E', name: 'FILIAL', columnIndex: 4 })
   })
 
   it('should extract quantity from row with fallback to 1 when empty or missing', () => {
@@ -610,6 +637,10 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     const ws = XLSX.utils.aoa_to_sheet([headerRow, row1, row2, row3, row3b, row4, row5])
     const counts = parseWorksheet(ws, 'Móvel', 'movel')
 
+    expect(counts.columns).toBeDefined()
+    expect(counts.columns?.find((c) => c.letter === 'A')?.name).toBe('LOJA')
+    expect(counts.columns?.find((c) => c.letter === 'B')?.name).toBe('STATUS')
+    expect(counts.columns?.find((c) => c.letter === 'AE')?.name).toBe('QUANTIDADE')
     expect(counts.envio_fatura).toBe(4)
     expect(counts.fatura_paga).toBe(3)
     expect(counts.outros).toBe(2)

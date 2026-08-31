@@ -14,6 +14,9 @@ import {
   ArrowRight,
   RefreshCw,
   Check,
+  ChevronDown,
+  ChevronUp,
+  TableProperties,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -53,8 +56,16 @@ export const Importar: React.FC = () => {
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [loadingStores, setLoadingStores] = useState(true)
   const [fileQueue, setFileQueue] = useState<FileQueueItem[]>([])
+  const [expandedColumnsMap, setExpandedColumnsMap] = useState<Record<string, boolean>>({})
   const [isDragging, setIsDragging] = useState(false)
   const [isProcessingAll, setIsProcessingAll] = useState(false)
+
+  const toggleColumnsExpanded = (itemId: string) => {
+    setExpandedColumnsMap((prev) => ({
+      ...prev,
+      [itemId]: !prev[itemId],
+    }))
+  }
 
   // Load existing stores
   const loadStores = async () => {
@@ -486,60 +497,218 @@ export const Importar: React.FC = () => {
 
                         {/* Breakdown summary preview if parsed */}
                         {item.parsedData && item.status !== 'error' && (
-                          <div className="flex flex-wrap items-center gap-3 pt-1 text-[11px] text-[#5B6B82]">
-                            <span>
-                              Abas:{' '}
-                              <strong>
-                                {[
-                                  item.parsedData.sheetsFound.movel && 'Móvel',
-                                  item.parsedData.sheetsFound.residencial && 'Residencial',
-                                ]
-                                  .filter(Boolean)
-                                  .join(' + ') || 'Nenhuma'}
-                              </strong>
-                            </span>
-                            <span>•</span>
-                            <span className="font-semibold text-[#12365A]">
-                              Total:{' '}
-                              {item.parsedData.aggregated.total_linhas.toLocaleString('pt-BR')}{' '}
-                              ocorrências
-                            </span>
-                            <span>•</span>
-                            <span className="text-[#0891B2] font-medium">
-                              Pagas: {item.parsedData.aggregated.fatura_paga}
-                            </span>
-                            <span>•</span>
-                            <span className="text-[#16A34A] font-medium">
-                              Enviado: {item.parsedData.aggregated.envio_fatura}
-                            </span>
-                            <span>•</span>
-                            <span className="text-[#9333EA] font-medium">
-                              Promessa: {item.parsedData.aggregated.promessa_pagto}
-                            </span>
-                            <span>•</span>
-                            <span className="text-[#64748B] font-medium">
-                              Sem Contato: {item.parsedData.aggregated.sem_contato}
-                            </span>
-                            <span>•</span>
-                            <span className="text-[#0F172A] font-medium">
-                              Cancelados: {item.parsedData.aggregated.cancelados}
-                            </span>
-                            <span>•</span>
-                            <span className="text-[#DC2626] font-medium">
-                              Pendente: {item.parsedData.aggregated.pendente}
-                            </span>
-                            <span>•</span>
-                            <span className="text-[#0D9488] font-medium">
-                              Contato: {item.parsedData.aggregated.contato_realizado}
-                            </span>
-                            <span>•</span>
-                            <span className="text-[#8B5CF6] font-medium">
-                              Outros: {item.parsedData.aggregated.outros}
-                            </span>
-                            <span>•</span>
-                            <span className="text-[#EA580C] font-medium">
-                              Não Tratados: {item.parsedData.aggregated.nao_tratados}
-                            </span>
+                          <div className="space-y-2 pt-1">
+                            <div className="flex flex-wrap items-center gap-3 text-[11px] text-[#5B6B82]">
+                              <span>
+                                Abas:{' '}
+                                <strong>
+                                  {[
+                                    item.parsedData.sheetsFound.movel && 'Móvel',
+                                    item.parsedData.sheetsFound.residencial && 'Residencial',
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' + ') || 'Nenhuma'}
+                                </strong>
+                              </span>
+                              <span>•</span>
+                              <span className="font-semibold text-[#12365A]">
+                                Total:{' '}
+                                {item.parsedData.aggregated.total_linhas.toLocaleString('pt-BR')}{' '}
+                                ocorrências
+                              </span>
+                              <span>•</span>
+                              <span className="text-[#0891B2] font-medium">
+                                Pagas: {item.parsedData.aggregated.fatura_paga}
+                              </span>
+                              <span>•</span>
+                              <span className="text-[#16A34A] font-medium">
+                                Enviado: {item.parsedData.aggregated.envio_fatura}
+                              </span>
+                              <span>•</span>
+                              <span className="text-[#9333EA] font-medium">
+                                Promessa: {item.parsedData.aggregated.promessa_pagto}
+                              </span>
+                              <span>•</span>
+                              <span className="text-[#64748B] font-medium">
+                                Sem Contato: {item.parsedData.aggregated.sem_contato}
+                              </span>
+                              <span>•</span>
+                              <span className="text-[#0F172A] font-medium">
+                                Cancelados: {item.parsedData.aggregated.cancelados}
+                              </span>
+                              <span>•</span>
+                              <span className="text-[#DC2626] font-medium">
+                                Pendente: {item.parsedData.aggregated.pendente}
+                              </span>
+                              <span>•</span>
+                              <span className="text-[#0D9488] font-medium">
+                                Contato: {item.parsedData.aggregated.contato_realizado}
+                              </span>
+                              <span>•</span>
+                              <span className="text-[#8B5CF6] font-medium">
+                                Outros: {item.parsedData.aggregated.outros}
+                              </span>
+                              <span>•</span>
+                              <span className="text-[#EA580C] font-medium">
+                                Não Tratados: {item.parsedData.aggregated.nao_tratados}
+                              </span>
+                            </div>
+
+                            {/* Column inspection toggle & display */}
+                            {(item.parsedData.movelCounts?.columns?.length ||
+                              item.parsedData.residencialCounts?.columns?.length) && (
+                              <div className="pt-1">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    toggleColumnsExpanded(item.id)
+                                  }}
+                                  className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#12365A] hover:text-[#0E9F8A] bg-white border border-[#E3E9F2] px-2.5 py-1 rounded-md transition-colors"
+                                >
+                                  <TableProperties className="w-3.5 h-3.5 text-[#0E9F8A]" />
+                                  <span>
+                                    {expandedColumnsMap[item.id]
+                                      ? 'Ocultar colunas detectadas'
+                                      : 'Ver colunas detectadas nas abas'}
+                                  </span>
+                                  {expandedColumnsMap[item.id] ? (
+                                    <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                                  ) : (
+                                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                                  )}
+                                </button>
+
+                                {expandedColumnsMap[item.id] && (
+                                  <div className="mt-2.5 space-y-3 bg-white p-3.5 rounded-lg border border-[#E3E9F2] text-xs shadow-xs">
+                                    {/* Aba Móvel */}
+                                    {item.parsedData.movelCounts && (
+                                      <div className="space-y-1.5">
+                                        <div className="flex items-center gap-2">
+                                          <Badge
+                                            variant="outline"
+                                            className="bg-[#12365A]/5 text-[#12365A] border-[#12365A]/20 font-bold text-[10px]"
+                                          >
+                                            Aba Móvel ({item.parsedData.movelCounts.sheetName})
+                                          </Badge>
+                                          <span className="text-[11px] text-[#5B6B82]">
+                                            {item.parsedData.movelCounts.columns?.length || 0}{' '}
+                                            colunas encontradas
+                                          </span>
+                                        </div>
+                                        {item.parsedData.movelCounts.columns &&
+                                        item.parsedData.movelCounts.columns.length > 0 ? (
+                                          <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto pr-1">
+                                            {item.parsedData.movelCounts.columns.map((col) => {
+                                              const isKeyCol =
+                                                col.letter === 'D' ||
+                                                col.letter === 'E' ||
+                                                col.letter === 'AE'
+                                              return (
+                                                <span
+                                                  key={`movel-${col.letter}-${col.columnIndex}`}
+                                                  className={cn(
+                                                    'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px]',
+                                                    isKeyCol
+                                                      ? 'bg-[#0E9F8A]/10 text-[#0E9F8A] font-semibold border border-[#0E9F8A]/30'
+                                                      : 'bg-slate-100 text-[#334155]',
+                                                  )}
+                                                  title={`Coluna ${col.letter} (índice ${col.columnIndex}): ${col.name}`}
+                                                >
+                                                  <strong className="text-[#12365A] font-mono">
+                                                    {col.letter}:
+                                                  </strong>{' '}
+                                                  <span className="truncate max-w-[200px]">
+                                                    {col.name}
+                                                  </span>
+                                                  {isKeyCol && (
+                                                    <span className="text-[9px] bg-[#0E9F8A] text-white rounded px-1 ml-0.5">
+                                                      {col.letter === 'D'
+                                                        ? 'Vendedor'
+                                                        : col.letter === 'E'
+                                                          ? 'Loja'
+                                                          : 'Qtd'}
+                                                    </span>
+                                                  )}
+                                                </span>
+                                              )
+                                            })}
+                                          </div>
+                                        ) : (
+                                          <p className="text-[11px] text-slate-400 italic">
+                                            Nenhum cabeçalho detectado nesta aba.
+                                          </p>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {/* Aba Residencial */}
+                                    {item.parsedData.residencialCounts && (
+                                      <div className="space-y-1.5 pt-2 border-t border-[#F1F5F9]">
+                                        <div className="flex items-center gap-2">
+                                          <Badge
+                                            variant="outline"
+                                            className="bg-[#0E9F8A]/5 text-[#0E9F8A] border-[#0E9F8A]/20 font-bold text-[10px]"
+                                          >
+                                            Aba Residencial (
+                                            {item.parsedData.residencialCounts.sheetName})
+                                          </Badge>
+                                          <span className="text-[11px] text-[#5B6B82]">
+                                            {item.parsedData.residencialCounts.columns?.length || 0}{' '}
+                                            colunas encontradas
+                                          </span>
+                                        </div>
+                                        {item.parsedData.residencialCounts.columns &&
+                                        item.parsedData.residencialCounts.columns.length > 0 ? (
+                                          <div className="flex flex-wrap gap-1.5 max-h-40 overflow-y-auto pr-1">
+                                            {item.parsedData.residencialCounts.columns.map(
+                                              (col) => {
+                                                const isKeyCol =
+                                                  col.letter === 'AU' ||
+                                                  col.letter === 'AV' ||
+                                                  col.letter === 'AW'
+                                                return (
+                                                  <span
+                                                    key={`res-${col.letter}-${col.columnIndex}`}
+                                                    className={cn(
+                                                      'inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px]',
+                                                      isKeyCol
+                                                        ? 'bg-[#0E9F8A]/10 text-[#0E9F8A] font-semibold border border-[#0E9F8A]/30'
+                                                        : 'bg-slate-100 text-[#334155]',
+                                                    )}
+                                                    title={`Coluna ${col.letter} (índice ${col.columnIndex}): ${col.name}`}
+                                                  >
+                                                    <strong className="text-[#12365A] font-mono">
+                                                      {col.letter}:
+                                                    </strong>{' '}
+                                                    <span className="truncate max-w-[200px]">
+                                                      {col.name}
+                                                    </span>
+                                                    {isKeyCol && (
+                                                      <span className="text-[9px] bg-[#0E9F8A] text-white rounded px-1 ml-0.5">
+                                                        {col.letter === 'AU'
+                                                          ? 'Loja'
+                                                          : col.letter === 'AV'
+                                                            ? 'Vendedor'
+                                                            : 'Qtd'}
+                                                      </span>
+                                                    )}
+                                                  </span>
+                                                )
+                                              },
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <p className="text-[11px] text-slate-400 italic">
+                                            Nenhum cabeçalho detectado nesta aba.
+                                          </p>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

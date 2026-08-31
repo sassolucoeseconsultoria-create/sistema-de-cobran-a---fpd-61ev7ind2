@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-31T18:34:26.333Z",
+  "generatedAt": "2026-08-31T20:09:50.063Z",
   "collections": [
     {
       "name": "users",
@@ -461,6 +461,115 @@
         "CREATE INDEX idx_vendor_consolidations_vendedor ON vendor_consolidations (vendedor)",
         "CREATE INDEX idx_vendor_consolidations_loja ON vendor_consolidations (loja)",
         "CREATE INDEX idx_vendor_consolidations_data_ref ON vendor_consolidations (data_referencia)"
+      ]
+    },
+    {
+      "name": "analytic_layouts",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "colunas",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_analytic_layouts_nome ON analytic_layouts (nome)"]
+    },
+    {
+      "name": "analytic_rows",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "layout_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "analytic_layouts"
+        },
+        {
+          "name": "origem",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "aba",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "numero_linha",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valores",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_analytic_rows_layout ON analytic_rows (layout_id)",
+        "CREATE INDEX idx_analytic_rows_origem ON analytic_rows (origem)",
+        "CREATE INDEX idx_analytic_rows_aba ON analytic_rows (aba)"
       ]
     }
   ]
