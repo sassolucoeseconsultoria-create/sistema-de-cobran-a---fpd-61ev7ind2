@@ -33,6 +33,9 @@ let pendingLojasRequest: Promise<string[]> | null = null
 let cachedLojas: { data: string[]; timestamp: number } | null = null
 const LOJAS_CACHE_TTL = 30000 // 30 seconds
 
+// Delay helper for throttling
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
 /**
  * Invalidate stores cache when new data is imported or deleted
  */
@@ -244,41 +247,32 @@ export async function fetchDistinctAnalyticalLojas(): Promise<string[]> {
 }
 
 /**
- * Helper to inspect batch send response items and format error details with file and row info.
+ * Format error message from PocketBase error object for reporting
  */
-function extractBatchErrors<T extends { arquivo?: string; linha?: number }>(
-  batchResponse: unknown,
-  chunk: T[],
-  collectionName: 'Móvel' | 'Residencial',
-): string[] {
-  const errors: string[] = []
-  if (Array.isArray(batchResponse)) {
-    batchResponse.forEach((item, idx) => {
-      if (!item) return
-      // Check if item indicates error (status >= 400 or code >= 400 or has error field)
-      const status = Number(item.status || item.code || 0)
-      const isError = status >= 400 || item.error || item.message
-      if (isError) {
-        const row = chunk[idx]
-        const fileInfo = row?.arquivo ? `arquivo '${row.arquivo}'` : `arquivo desconhecido`
-        const lineInfo =
-          row?.linha !== undefined && row?.linha !== null ? `, linha ${row.linha}` : ''
-        const errorDetail =
-          typeof item.message === 'string'
-            ? `: ${item.message}`
-            : item.data && typeof item.data === 'object'
-              ? `: ${JSON.stringify(item.data)}`
-              : ''
-        errors.push(`[${collectionName}] ${fileInfo}${lineInfo}${errorDetail}`)
-      }
-    })
+function extractErrorMessage(err: unknown): string {
+  if (!err) return 'Erro desconhecido'
+  const errObj = err as {
+    message?: string
+    status?: number
+    response?: { message?: string; data?: Record<string, { message?: string; code?: string }> }
   }
-  return errors
+
+  if (errObj.response?.data && typeof errObj.response.data === 'object') {
+    const fieldDetails = Object.entries(errObj.response.data)
+      .map(([k, v]) => `${k}: ${v?.message || JSON.stringify(v)}`)
+      .join(', ')
+    if (fieldDetails) return fieldDetails
+  }
+
+  if (errObj.response?.message) return errObj.response.message
+  if (errObj.message) return errObj.message
+  return String(err)
 }
 
 /**
- * Insert batch of rows into collection 'movel' using native PocketBase createBatch.
- * Chunks into max 50 rows per batch HTTP request (1 request per 50 rows).
+ * Insert rows into collection 'movel' using throttled individual requests (pb.collection('movel').create).
+ * Uses concurrency throttling (5 concurrent requests) with a small delay between batches
+ * to strictly prevent 429 Too Many Requests and avoids server batch limitations.
  * Accurately tracks and reports any failed rows by file name and line number.
  */
 export async function insertMovelBatch(
@@ -295,48 +289,54 @@ export async function insertMovelBatch(
   if (!rows || rows.length === 0) return 0
   invalidateAnalyticalCache()
 
-  const CHUNK_SIZE = 50 // Native PocketBase /api/batch max chunk size
+  const CONCURRENCY = 5
+  const DELAY_MS = 100
   let insertedTotal = 0
   const accumulatedErrors: string[] = []
 
-  for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
-    const chunk = rows.slice(i, i + CHUNK_SIZE)
-    const batch = pb.createBatch()
+  for (let i = 0; i < rows.length; i += CONCURRENCY) {
+    const chunk = rows.slice(i, i + CONCURRENCY)
 
-    for (const item of chunk) {
-      batch.collection('movel').create({
-        arquivo: item.arquivo?.trim() || '',
-        linha: item.linha,
-        loja: item.loja?.trim() || '',
-        vendedor: item.vendedor?.trim() || '',
-        cliente: item.cliente?.trim() || '',
-        dados: item.dados || {},
-      })
-    }
-
-    try {
-      const results = await batch.send()
-      const chunkErrors = extractBatchErrors(results, chunk, 'Móvel')
-      if (chunkErrors.length > 0) {
-        accumulatedErrors.push(...chunkErrors)
-      } else {
-        insertedTotal += chunk.length
+    const promises = chunk.map(async (item) => {
+      try {
+        await pb.collection('movel').create(
+          {
+            arquivo: item.arquivo?.trim() || '',
+            linha: item.linha,
+            loja: item.loja?.trim() || '',
+            vendedor: item.vendedor?.trim() || '',
+            cliente: item.cliente?.trim() || '',
+            dados: item.dados || {},
+          },
+          { requestKey: null },
+        )
+        return { success: true, item, error: null }
+      } catch (err) {
+        return { success: false, item, error: extractErrorMessage(err) }
       }
-    } catch (err: unknown) {
-      // If batch.send() itself threw an error (e.g. batch validation failure or network)
-      const errObj = err as { status?: number; message?: string; response?: { data?: unknown } }
-      const firstRow = chunk[0]
-      const fileInfo = firstRow?.arquivo ? `arquivo '${firstRow.arquivo}'` : 'arquivo'
-      const lineRange =
-        chunk.length === 1
-          ? `linha ${firstRow?.linha ?? 1}`
-          : `linhas ${chunk[0]?.linha ?? 1} a ${chunk[chunk.length - 1]?.linha ?? chunk.length}`
-      const detail = errObj?.message ? ` (${errObj.message})` : ''
-      accumulatedErrors.push(`[Móvel] Falha no lote: ${fileInfo}, ${lineRange}${detail}`)
+    })
+
+    const results = await Promise.all(promises)
+
+    for (const res of results) {
+      if (res.success) {
+        insertedTotal++
+      } else {
+        const fileInfo = res.item.arquivo ? `arquivo '${res.item.arquivo}'` : 'arquivo desconhecido'
+        const lineInfo =
+          res.item.linha !== undefined && res.item.linha !== null ? `, linha ${res.item.linha}` : ''
+        const errorDetail = res.error ? ` (${res.error})` : ''
+        accumulatedErrors.push(`[Móvel] ${fileInfo}${lineInfo}${errorDetail}`)
+      }
     }
 
     if (onProgress) {
       onProgress(insertedTotal, rows.length)
+    }
+
+    // Delay between concurrent chunks to respect server rate limits
+    if (i + CONCURRENCY < rows.length) {
+      await sleep(DELAY_MS)
     }
   }
 
@@ -356,8 +356,9 @@ export async function insertMovelBatch(
 }
 
 /**
- * Insert batch of rows into collection 'residencial' using native PocketBase createBatch.
- * Chunks into max 50 rows per batch HTTP request (1 request per 50 rows).
+ * Insert rows into collection 'residencial' using throttled individual requests (pb.collection('residencial').create).
+ * Uses concurrency throttling (5 concurrent requests) with a small delay between batches
+ * to strictly prevent 429 Too Many Requests and avoids server batch limitations.
  * Accurately tracks and reports any failed rows by file name and line number.
  */
 export async function insertResidencialBatch(
@@ -375,48 +376,55 @@ export async function insertResidencialBatch(
   if (!rows || rows.length === 0) return 0
   invalidateAnalyticalCache()
 
-  const CHUNK_SIZE = 50
+  const CONCURRENCY = 5
+  const DELAY_MS = 100
   let insertedTotal = 0
   const accumulatedErrors: string[] = []
 
-  for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
-    const chunk = rows.slice(i, i + CHUNK_SIZE)
-    const batch = pb.createBatch()
+  for (let i = 0; i < rows.length; i += CONCURRENCY) {
+    const chunk = rows.slice(i, i + CONCURRENCY)
 
-    for (const item of chunk) {
-      batch.collection('residencial').create({
-        arquivo: item.arquivo?.trim() || '',
-        linha: item.linha,
-        loja: item.loja?.trim() || '',
-        vendedor: item.vendedor?.trim() || '',
-        cliente: item.cliente?.trim() || '',
-        dados: item.dados || {},
-        ...(item.typedFields || {}),
-      })
-    }
-
-    try {
-      const results = await batch.send()
-      const chunkErrors = extractBatchErrors(results, chunk, 'Residencial')
-      if (chunkErrors.length > 0) {
-        accumulatedErrors.push(...chunkErrors)
-      } else {
-        insertedTotal += chunk.length
+    const promises = chunk.map(async (item) => {
+      try {
+        await pb.collection('residencial').create(
+          {
+            arquivo: item.arquivo?.trim() || '',
+            linha: item.linha,
+            loja: item.loja?.trim() || '',
+            vendedor: item.vendedor?.trim() || '',
+            cliente: item.cliente?.trim() || '',
+            dados: item.dados || {},
+            ...(item.typedFields || {}),
+          },
+          { requestKey: null },
+        )
+        return { success: true, item, error: null }
+      } catch (err) {
+        return { success: false, item, error: extractErrorMessage(err) }
       }
-    } catch (err: unknown) {
-      const errObj = err as { status?: number; message?: string; response?: { data?: unknown } }
-      const firstRow = chunk[0]
-      const fileInfo = firstRow?.arquivo ? `arquivo '${firstRow.arquivo}'` : 'arquivo'
-      const lineRange =
-        chunk.length === 1
-          ? `linha ${firstRow?.linha ?? 1}`
-          : `linhas ${chunk[0]?.linha ?? 1} a ${chunk[chunk.length - 1]?.linha ?? chunk.length}`
-      const detail = errObj?.message ? ` (${errObj.message})` : ''
-      accumulatedErrors.push(`[Residencial] Falha no lote: ${fileInfo}, ${lineRange}${detail}`)
+    })
+
+    const results = await Promise.all(promises)
+
+    for (const res of results) {
+      if (res.success) {
+        insertedTotal++
+      } else {
+        const fileInfo = res.item.arquivo ? `arquivo '${res.item.arquivo}'` : 'arquivo desconhecido'
+        const lineInfo =
+          res.item.linha !== undefined && res.item.linha !== null ? `, linha ${res.item.linha}` : ''
+        const errorDetail = res.error ? ` (${res.error})` : ''
+        accumulatedErrors.push(`[Residencial] ${fileInfo}${lineInfo}${errorDetail}`)
+      }
     }
 
     if (onProgress) {
       onProgress(insertedTotal, rows.length)
+    }
+
+    // Delay between concurrent chunks to respect server rate limits
+    if (i + CONCURRENCY < rows.length) {
+      await sleep(DELAY_MS)
     }
   }
 
@@ -446,7 +454,8 @@ export async function deleteAnalyticalRow(id: string, aba: RelacionamentoAba): P
 
 /**
  * Clear all records from both 'movel' and 'residencial' collections (or single aba).
- * Uses native PocketBase createBatch to delete in chunks of 50 IDs per single HTTP request.
+ * Uses throttled individual delete requests in small concurrent groups (concurrency = 5) with delays,
+ * strictly without batch endpoints, to prevent 429 Too Many Requests and handle large datasets reliably.
  */
 export async function clearAllAnalyticalRows(targetAba?: RelacionamentoAba | 'TODAS'): Promise<{
   movelCount: number
@@ -459,42 +468,46 @@ export async function clearAllAnalyticalRows(targetAba?: RelacionamentoAba | 'TO
 
   const shouldClearMovel = !targetAba || targetAba === 'TODAS' || targetAba === 'Móvel'
   const shouldClearResidencial = !targetAba || targetAba === 'TODAS' || targetAba === 'Residencial'
-  const BATCH_DELETE_CHUNK = 50
+  const FETCH_PAGE_SIZE = 50
+  const CONCURRENCY = 5
+  const DELAY_MS = 100
 
-  // 1. Clear Móvel using native batch deletes
+  // 1. Clear Móvel using throttled individual deletes
   if (shouldClearMovel) {
     try {
       while (true) {
-        const page = await pb.collection('movel').getList<{ id: string }>(1, BATCH_DELETE_CHUNK, {
+        const page = await pb.collection('movel').getList<{ id: string }>(1, FETCH_PAGE_SIZE, {
           fields: 'id',
           requestKey: null,
         })
         if (!page.items || page.items.length === 0) break
 
-        const batch = pb.createBatch()
-        for (const item of page.items) {
-          batch.collection('movel').delete(item.id)
-        }
-
-        try {
-          await batch.send()
-          movelCount += page.items.length
-        } catch (batchErr) {
-          console.warn('Erro ao deletar lote em Móvel, tentando individualmente:', batchErr)
-          for (const item of page.items) {
-            try {
-              await pb.collection('movel').delete(item.id, { requestKey: null })
-              movelCount++
-            } catch (delErr: unknown) {
-              const status = (delErr as { status?: number })?.status
-              if (status !== 404) {
-                console.error(`Erro ao deletar id ${item.id} de movel:`, delErr)
+        const items = page.items
+        for (let i = 0; i < items.length; i += CONCURRENCY) {
+          const chunk = items.slice(i, i + CONCURRENCY)
+          await Promise.all(
+            chunk.map(async (item) => {
+              try {
+                await pb.collection('movel').delete(item.id, { requestKey: null })
+                movelCount++
+              } catch (delErr: unknown) {
+                const status = (delErr as { status?: number })?.status
+                if (status !== 404) {
+                  console.error(`Erro ao deletar id ${item.id} de movel:`, delErr)
+                }
               }
-            }
+            }),
+          )
+
+          if (i + CONCURRENCY < items.length) {
+            await sleep(DELAY_MS)
           }
         }
 
-        if (page.items.length < BATCH_DELETE_CHUNK) break
+        // Small delay between page fetches
+        await sleep(DELAY_MS)
+
+        if (page.items.length < FETCH_PAGE_SIZE) break
       }
     } catch (err) {
       console.error('Erro na limpeza da tabela móvel:', err)
@@ -502,42 +515,44 @@ export async function clearAllAnalyticalRows(targetAba?: RelacionamentoAba | 'TO
     }
   }
 
-  // 2. Clear Residencial using native batch deletes
+  // 2. Clear Residencial using throttled individual deletes
   if (shouldClearResidencial) {
     try {
       while (true) {
         const page = await pb
           .collection('residencial')
-          .getList<{ id: string }>(1, BATCH_DELETE_CHUNK, {
+          .getList<{ id: string }>(1, FETCH_PAGE_SIZE, {
             fields: 'id',
             requestKey: null,
           })
         if (!page.items || page.items.length === 0) break
 
-        const batch = pb.createBatch()
-        for (const item of page.items) {
-          batch.collection('residencial').delete(item.id)
-        }
-
-        try {
-          await batch.send()
-          residencialCount += page.items.length
-        } catch (batchErr) {
-          console.warn('Erro ao deletar lote em Residencial, tentando individualmente:', batchErr)
-          for (const item of page.items) {
-            try {
-              await pb.collection('residencial').delete(item.id, { requestKey: null })
-              residencialCount++
-            } catch (delErr: unknown) {
-              const status = (delErr as { status?: number })?.status
-              if (status !== 404) {
-                console.error(`Erro ao deletar id ${item.id} de residencial:`, delErr)
+        const items = page.items
+        for (let i = 0; i < items.length; i += CONCURRENCY) {
+          const chunk = items.slice(i, i + CONCURRENCY)
+          await Promise.all(
+            chunk.map(async (item) => {
+              try {
+                await pb.collection('residencial').delete(item.id, { requestKey: null })
+                residencialCount++
+              } catch (delErr: unknown) {
+                const status = (delErr as { status?: number })?.status
+                if (status !== 404) {
+                  console.error(`Erro ao deletar id ${item.id} de residencial:`, delErr)
+                }
               }
-            }
+            }),
+          )
+
+          if (i + CONCURRENCY < items.length) {
+            await sleep(DELAY_MS)
           }
         }
 
-        if (page.items.length < BATCH_DELETE_CHUNK) break
+        // Small delay between page fetches
+        await sleep(DELAY_MS)
+
+        if (page.items.length < FETCH_PAGE_SIZE) break
       }
     } catch (err) {
       console.error('Erro na limpeza da tabela residencial:', err)
