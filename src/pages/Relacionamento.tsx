@@ -446,6 +446,7 @@ export const Relacionamento: React.FC = () => {
             vendedor: r.vendedor,
             cliente: r.cliente,
             dados: r.dados,
+            ocorrencias: r.ocorrencias || 'Não Tratados',
           }))
 
           await insertMovelBatch(movelBatchData, (insertedInBatch) => {
@@ -468,6 +469,7 @@ export const Relacionamento: React.FC = () => {
             cliente: r.cliente,
             dados: r.dados,
             typedFields: r.typedFields,
+            ocorrencias: r.ocorrencias || 'Não Tratados',
           }))
 
           await insertResidencialBatch(resBatchData, (insertedInBatch) => {

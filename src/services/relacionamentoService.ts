@@ -344,20 +344,37 @@ export interface MovelInsertItem {
   vendedor?: string
   cliente?: string
   dados?: Record<string, unknown>
+  ocorrencias?: string
   data_promessa_de_pagto?: string
   comentarios?: string
 }
 
 /**
  * Fetch existing records for a given filename in a collection to preserve manual fields
+ * (ocorrencias, data_promessa_de_pagto, comentarios)
  */
 async function fetchExistingManualFields(
   collectionName: 'movel' | 'residencial',
   fileName: string,
-): Promise<Map<number, { data_promessa_de_pagto?: string; comentarios?: string; id: string }>> {
+): Promise<
+  Map<
+    number,
+    {
+      ocorrencias?: string
+      data_promessa_de_pagto?: string
+      comentarios?: string
+      id: string
+    }
+  >
+> {
   const map = new Map<
     number,
-    { data_promessa_de_pagto?: string; comentarios?: string; id: string }
+    {
+      ocorrencias?: string
+      data_promessa_de_pagto?: string
+      comentarios?: string
+      id: string
+    }
   >()
   if (!fileName) return map
 
@@ -370,11 +387,12 @@ async function fetchExistingManualFields(
           pb.collection(collectionName).getList<{
             id: string
             linha?: number
+            ocorrencias?: string
             data_promessa_de_pagto?: string
             comentarios?: string
           }>(page, perPage, {
             filter: `arquivo = "${fileName.replace(/"/g, '\\"')}"`,
-            fields: 'id,linha,data_promessa_de_pagto,comentarios',
+            fields: 'id,linha,ocorrencias,data_promessa_de_pagto,comentarios',
             requestKey: null,
           }),
         5,
@@ -385,6 +403,7 @@ async function fetchExistingManualFields(
         if (item.linha !== undefined && item.linha !== null) {
           map.set(item.linha, {
             id: item.id,
+            ocorrencias: item.ocorrencias || '',
             data_promessa_de_pagto: item.data_promessa_de_pagto || '',
             comentarios: item.comentarios || '',
           })
@@ -405,7 +424,8 @@ async function fetchExistingManualFields(
 
 /**
  * Insert or upsert rows into collection 'movel' sequentially one by one with a safe pause.
- * Preserves existing 'data_promessa_de_pagto' and 'comentarios' when re-importing the same file+linha.
+ * Preserves existing 'ocorrencias', 'data_promessa_de_pagto' and 'comentarios' when re-importing the same file+linha.
+ * All new records default to 'Não Tratados' for 'ocorrencias'.
  */
 export async function insertMovelBatch(
   rows: MovelInsertItem[],
@@ -420,7 +440,15 @@ export async function insertMovelBatch(
   ) as string[]
   const existingMapByFile = new Map<
     string,
-    Map<number, { data_promessa_de_pagto?: string; comentarios?: string; id: string }>
+    Map<
+      number,
+      {
+        ocorrencias?: string
+        data_promessa_de_pagto?: string
+        comentarios?: string
+        id: string
+      }
+    >
   >()
 
   for (const f of distinctFiles) {
@@ -438,6 +466,8 @@ export async function insertMovelBatch(
     const existingRecord = item.linha !== undefined ? existingMap?.get(item.linha) : undefined
 
     // Preserve manual fields from existing record if not explicitly provided in new item
+    // Default ocorrencias to 'Não Tratados'
+    const preservedOcorrencias = item.ocorrencias || existingRecord?.ocorrencias || 'Não Tratados'
     const preservedPromessa =
       item.data_promessa_de_pagto || existingRecord?.data_promessa_de_pagto || ''
     const preservedComentarios = item.comentarios || existingRecord?.comentarios || ''
@@ -449,6 +479,7 @@ export async function insertMovelBatch(
       vendedor: item.vendedor?.trim() || '',
       cliente: item.cliente?.trim() || '',
       dados: item.dados || {},
+      ocorrencias: preservedOcorrencias,
       data_promessa_de_pagto: preservedPromessa,
       comentarios: preservedComentarios,
     }
@@ -511,13 +542,15 @@ export interface ResidencialInsertItem {
   cliente?: string
   dados?: Record<string, unknown>
   typedFields?: Record<string, string>
+  ocorrencias?: string
   data_promessa_de_pagto?: string
   comentarios?: string
 }
 
 /**
  * Insert or upsert rows into collection 'residencial' sequentially one by one with a safe pause.
- * Preserves existing 'data_promessa_de_pagto' and 'comentarios' when re-importing the same file+linha.
+ * Preserves existing 'ocorrencias', 'data_promessa_de_pagto' and 'comentarios' when re-importing the same file+linha.
+ * All new records default to 'Não Tratados' for 'ocorrencias'.
  */
 export async function insertResidencialBatch(
   rows: ResidencialInsertItem[],
@@ -532,7 +565,15 @@ export async function insertResidencialBatch(
   ) as string[]
   const existingMapByFile = new Map<
     string,
-    Map<number, { data_promessa_de_pagto?: string; comentarios?: string; id: string }>
+    Map<
+      number,
+      {
+        ocorrencias?: string
+        data_promessa_de_pagto?: string
+        comentarios?: string
+        id: string
+      }
+    >
   >()
 
   for (const f of distinctFiles) {
@@ -549,7 +590,10 @@ export async function insertResidencialBatch(
     const existingMap = existingMapByFile.get(fileKey)
     const existingRecord = item.linha !== undefined ? existingMap?.get(item.linha) : undefined
 
-    // Preserve manual fields if existing
+    // Preserve manual fields if existing, else default ocorrencias to 'Não Tratados'
+    const typedOcorrencias = item.typedFields?.ocorrencias || item.ocorrencias
+    const preservedOcorrencias = existingRecord?.ocorrencias || typedOcorrencias || 'Não Tratados'
+
     const typedPromessa = item.typedFields?.data_promessa_de_pagto || item.data_promessa_de_pagto
     const preservedPromessa = typedPromessa || existingRecord?.data_promessa_de_pagto || ''
 
@@ -564,6 +608,7 @@ export async function insertResidencialBatch(
       cliente: item.cliente?.trim() || '',
       dados: item.dados || {},
       ...(item.typedFields || {}),
+      ocorrencias: preservedOcorrencias,
       data_promessa_de_pagto: preservedPromessa,
       comentarios: preservedComentarios,
     }
@@ -620,12 +665,12 @@ export async function insertResidencialBatch(
 }
 
 /**
- * Update manual fields (data_promessa_de_pagto and comentarios) for a single row in 'movel' or 'residencial'.
+ * Update manual fields (ocorrencias, data_promessa_de_pagto and comentarios) for a single row in 'movel' or 'residencial'.
  */
 export async function updateClientManualFields(
   id: string,
   aba: RelacionamentoAba,
-  fields: { data_promessa_de_pagto?: string; comentarios?: string },
+  fields: { ocorrencias?: string; data_promessa_de_pagto?: string; comentarios?: string },
 ): Promise<boolean> {
   const collectionName = aba === 'Móvel' ? 'movel' : 'residencial'
   return await executeWithRetry(

@@ -37,6 +37,16 @@ routerAdd(
           record.set('vendedor', item.vendedor ? String(item.vendedor).trim() : '')
           record.set('cliente', item.cliente ? String(item.cliente).trim() : '')
           record.set('dados', item.dados && typeof item.dados === 'object' ? item.dados : {})
+          record.set(
+            'ocorrencias',
+            item.ocorrencias ? String(item.ocorrencias).trim() : 'Não Tratados',
+          )
+          if (item.data_promessa_de_pagto) {
+            record.set('data_promessa_de_pagto', String(item.data_promessa_de_pagto).trim())
+          }
+          if (item.comentarios) {
+            record.set('comentarios', String(item.comentarios).trim())
+          }
 
           txApp.save(record)
           inserted++

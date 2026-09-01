@@ -13,11 +13,17 @@ import {
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import pb from '@/lib/pocketbase/client'
-import type { MovelRecord } from '@/types/fpd'
+import { OCORRENCIAS_OPTIONS, type MovelRecord, type OcorrenciaType } from '@/types/fpd'
 import { applyDateMask, formatCpf, getDadosField } from '@/lib/clientFormatters'
 import { updateClientManualFields } from '@/services/relacionamentoService'
 import { cn } from '@/lib/utils'
@@ -42,9 +48,9 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas }) 
   const [selectedLoja, setSelectedLoja] = useState('TODAS')
 
   // Inline edit state
-  // key: recordId -> { data_promessa_de_pagto, comentarios }
+  // key: recordId -> { ocorrencias, data_promessa_de_pagto, comentarios }
   const [editValues, setEditValues] = useState<
-    Record<string, { data_promessa_de_pagto: string; comentarios: string }>
+    Record<string, { ocorrencias: string; data_promessa_de_pagto: string; comentarios: string }>
   >({})
   const [savingRecordId, setSavingRecordId] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<Record<string, 'saved' | 'error' | 'saving'>>({})
@@ -85,10 +91,14 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas }) 
       setTotalPages(res.totalPages)
 
       // Initialize edit values
-      const initialEdits: Record<string, { data_promessa_de_pagto: string; comentarios: string }> =
-        {}
+      const initialEdits: Record<
+        string,
+        { ocorrencias: string; data_promessa_de_pagto: string; comentarios: string }
+      > = {}
       res.items.forEach((item) => {
+        const itemOcorrencia = item.ocorrencias || 'Não Tratados'
         initialEdits[item.id] = {
+          ocorrencias: itemOcorrencia,
           data_promessa_de_pagto: item.data_promessa_de_pagto || '',
           comentarios: item.comentarios || '',
         }
@@ -111,18 +121,35 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas }) 
   }, [loadData])
 
   // Save manual fields inline
-  const handleSaveField = async (id: string) => {
-    const currentEdit = editValues[id]
-    if (!currentEdit) return
+  const handleSaveField = async (
+    id: string,
+    overrideFields?: Partial<{
+      ocorrencias: string
+      data_promessa_de_pagto: string
+      comentarios: string
+    }>,
+  ) => {
+    const currentEdit = {
+      ...(editValues[id] || {
+        ocorrencias: 'Não Tratados',
+        data_promessa_de_pagto: '',
+        comentarios: '',
+      }),
+      ...(overrideFields || {}),
+    }
 
     const originalRecord = records.find((r) => r.id === id)
     if (!originalRecord) return
 
+    const origOcorrencias = originalRecord.ocorrencias || 'Não Tratados'
+    const origPromessa = originalRecord.data_promessa_de_pagto || ''
+    const origComentarios = originalRecord.comentarios || ''
+
     // If unchanged, skip save
     if (
-      (originalRecord.data_promessa_de_pagto || '') ===
-        (currentEdit.data_promessa_de_pagto || '') &&
-      (originalRecord.comentarios || '') === (currentEdit.comentarios || '')
+      origOcorrencias === (currentEdit.ocorrencias || 'Não Tratados') &&
+      origPromessa === (currentEdit.data_promessa_de_pagto || '') &&
+      origComentarios === (currentEdit.comentarios || '')
     ) {
       return
     }
@@ -132,6 +159,7 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas }) 
 
     try {
       await updateClientManualFields(id, 'Móvel', {
+        ocorrencias: currentEdit.ocorrencias,
         data_promessa_de_pagto: currentEdit.data_promessa_de_pagto,
         comentarios: currentEdit.comentarios,
       })
@@ -142,6 +170,7 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas }) 
           r.id === id
             ? {
                 ...r,
+                ocorrencias: currentEdit.ocorrencias,
                 data_promessa_de_pagto: currentEdit.data_promessa_de_pagto,
                 comentarios: currentEdit.comentarios,
               }
@@ -170,13 +199,29 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas }) 
     }
   }
 
+  // Handle ocorrencia change with immediate save
+  const handleOcorrenciaChange = async (id: string, val: string) => {
+    setEditValues((prev) => ({
+      ...prev,
+      [id]: {
+        ...(prev[id] || {
+          ocorrencias: 'Não Tratados',
+          data_promessa_de_pagto: '',
+          comentarios: '',
+        }),
+        ocorrencias: val,
+      },
+    }))
+    await handleSaveField(id, { ocorrencias: val })
+  }
+
   // Handle date change with mask
   const handleDateChange = (id: string, rawVal: string) => {
     const masked = applyDateMask(rawVal)
     setEditValues((prev) => ({
       ...prev,
       [id]: {
-        ...(prev[id] || { comentarios: '' }),
+        ...(prev[id] || { ocorrencias: 'Não Tratados', comentarios: '' }),
         data_promessa_de_pagto: masked,
       },
     }))
@@ -187,7 +232,7 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas }) 
     setEditValues((prev) => ({
       ...prev,
       [id]: {
-        ...(prev[id] || { data_promessa_de_pagto: '' }),
+        ...(prev[id] || { ocorrencias: 'Não Tratados', data_promessa_de_pagto: '' }),
         comentarios: val,
       },
     }))
@@ -320,10 +365,10 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas }) 
                 <th className="px-3.5 py-3.5 min-w-[120px] text-center border-r border-[#1e456f]">
                   Maior atraso
                 </th>
-                <th className="px-3.5 py-3.5 min-w-[130px] border-r border-[#1e456f]">
+                <th className="px-3.5 py-3.5 min-w-[185px] border-r border-[#1e456f]">
                   Ocorrências
                 </th>
-                <th className="px-3.5 py-3.5 min-w-[180px] border-r border-[#1e456f]">
+                <th className="px-3.5 py-3.5 min-w-[170px] border-r border-[#1e456f]">
                   Data Promessa de Pagto
                 </th>
                 <th className="px-3.5 py-3.5 min-w-[240px]">Comentários</th>
@@ -421,18 +466,8 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas }) 
                       'Qtd Dias Venc',
                     ) || '—'
 
-                  const ocorrencias =
-                    getDadosField(
-                      d,
-                      'Ocorrências',
-                      'OCORRENCIAS',
-                      'Ocorrencia',
-                      'OCORRENCIA',
-                      'Motivo',
-                      'Faturas em atraso',
-                    ) || '—'
-
                   const edit = editValues[row.id] || {
+                    ocorrencias: row.ocorrencias || 'Não Tratados',
                     data_promessa_de_pagto: row.data_promessa_de_pagto || '',
                     comentarios: row.comentarios || '',
                   }
@@ -515,11 +550,46 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas }) 
                         {maiorAtraso}
                       </td>
 
-                      {/* Ocorrências */}
-                      <td className="px-3.5 py-3 text-xs text-slate-600 border-r border-[#E3E9F2]">
-                        <span className="line-clamp-1" title={ocorrencias}>
-                          {ocorrencias}
-                        </span>
+                      {/* Ocorrências (Dropdown / Select) */}
+                      <td className="px-3.5 py-2 border-r border-[#E3E9F2]">
+                        <div className="relative flex items-center">
+                          <Select
+                            value={edit.ocorrencias || 'Não Tratados'}
+                            onValueChange={(val) => handleOcorrenciaChange(row.id, val)}
+                            disabled={isSavingThis}
+                          >
+                            <SelectTrigger
+                              className={cn(
+                                'h-8 text-xs bg-white border-[#E3E9F2] focus:border-[#0E9F8A] transition-all font-medium',
+                                edit.ocorrencias === 'Não Tratados' &&
+                                  'text-[#EA580C] bg-orange-50/40 border-orange-200',
+                                edit.ocorrencias === 'Fatura(s) Paga(s)' &&
+                                  'text-[#0891B2] bg-cyan-50/40 border-cyan-200',
+                                edit.ocorrencias === 'Enviado Fatura(s)' &&
+                                  'text-[#16A34A] bg-green-50/40 border-green-200',
+                                edit.ocorrencias === 'Sem Contato' &&
+                                  'text-[#64748B] bg-slate-50/60 border-slate-200',
+                                edit.ocorrencias === 'Promessa de Pagto.' &&
+                                  'text-[#9333EA] bg-purple-50/40 border-purple-200',
+                                edit.ocorrencias === 'Cancelados' &&
+                                  'text-[#0F172A] bg-slate-100 border-slate-300 font-semibold',
+                                edit.ocorrencias === 'Outros Motivos' &&
+                                  'text-[#8B5CF6] bg-violet-50/40 border-violet-200',
+                                edit.ocorrencias === 'Contato Realizado' &&
+                                  'text-[#0D9488] bg-teal-50/40 border-teal-200',
+                              )}
+                            >
+                              <SelectValue placeholder="Selecione ocorrência" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-white">
+                              {OCORRENCIAS_OPTIONS.map((opt) => (
+                                <SelectItem key={opt} value={opt} className="text-xs font-medium">
+                                  {opt}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </td>
 
                       {/* Data Promessa de Pagto (Editable Mask) */}

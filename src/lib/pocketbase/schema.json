@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-01T19:08:07.982Z",
+  "generatedAt": "2026-09-01T20:10:22.604Z",
   "collections": [
     {
       "name": "users",
@@ -705,6 +705,12 @@
         },
         {
           "name": "comentarios",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ocorrencias",
           "type": "text",
           "required": false,
           "system": false

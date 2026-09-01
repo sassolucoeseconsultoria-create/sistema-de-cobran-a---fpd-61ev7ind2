@@ -28,6 +28,19 @@ export interface AnalyticRowRecord extends RecordModel {
 
 export type RelacionamentoAba = 'Móvel' | 'Residencial'
 
+export const OCORRENCIAS_OPTIONS = [
+  'Não Tratados',
+  'Fatura(s) Paga(s)',
+  'Enviado Fatura(s)',
+  'Sem Contato',
+  'Promessa de Pagto.',
+  'Cancelados',
+  'Outros Motivos',
+  'Contato Realizado',
+] as const
+
+export type OcorrenciaType = (typeof OCORRENCIAS_OPTIONS)[number]
+
 export interface MovelRecord extends RecordModel {
   arquivo?: string
   linha?: number
@@ -35,6 +48,7 @@ export interface MovelRecord extends RecordModel {
   vendedor?: string
   cliente?: string
   dados?: Record<string, unknown>
+  ocorrencias?: string
   data_promessa_de_pagto?: string
   comentarios?: string
 }
@@ -106,6 +120,7 @@ export interface UnifiedAnalyticRecord extends RecordModel {
   vendedor?: string
   cliente?: string
   dados?: Record<string, unknown>
+  ocorrencias?: string
   data_promessa_de_pagto?: string
   comentarios?: string
   rawRecord?: MovelRecord | ResidencialRecord

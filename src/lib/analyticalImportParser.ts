@@ -87,6 +87,7 @@ export interface ParsedAnalyticalRow {
   loja?: string
   vendedor?: string
   cliente?: string
+  ocorrencias?: string
   dados: Record<string, unknown>
   typedFields?: Record<string, string>
 }
@@ -238,6 +239,7 @@ export function parseAnalyticalWorksheet(
       loja: lojaVal,
       vendedor: vendedorVal,
       cliente: clienteVal,
+      ocorrencias: 'Não Tratados',
       dados: rowDataMap,
       typedFields: sheetType === 'residencial' ? typedFields : undefined,
     })

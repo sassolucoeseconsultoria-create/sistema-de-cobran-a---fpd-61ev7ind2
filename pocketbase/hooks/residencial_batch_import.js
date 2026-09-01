@@ -99,6 +99,12 @@ routerAdd(
             }
           }
 
+          // Ensure default ocorrencias is 'Não Tratados' if empty
+          const currentOcorr = record.getString('ocorrencias')
+          if (!currentOcorr || currentOcorr.trim() === '' || currentOcorr === 'Pendente') {
+            record.set('ocorrencias', 'Não Tratados')
+          }
+
           txApp.save(record)
           inserted++
         } catch (saveErr) {
