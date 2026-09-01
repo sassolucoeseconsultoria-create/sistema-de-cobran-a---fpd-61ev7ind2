@@ -117,7 +117,7 @@ export const Relacionamento: React.FC = () => {
       console.error(err)
       toast({
         title: 'Erro ao carregar dados',
-        description: 'Não foi possível carregar as linhas analíticas de Relacionamento.',
+        description: 'Não foi possível carregar as linhas analíticas de Inadimplência.',
         variant: 'destructive',
       })
     } finally {
@@ -187,7 +187,7 @@ export const Relacionamento: React.FC = () => {
       const count = await clearAllRelacionamentoRows()
       toast({
         title: 'Base analítica limpa',
-        description: `${count} registro(s) foram removidos da collection Relacionamento.`,
+        description: `${count} registro(s) de inadimplência foram removidos com sucesso.`,
       })
       setClearDialogOpen(false)
       loadRows()
@@ -195,7 +195,7 @@ export const Relacionamento: React.FC = () => {
     } catch {
       toast({
         title: 'Erro ao limpar dados',
-        description: 'Não foi possível limpar a collection de Relacionamento.',
+        description: 'Não foi possível limpar a base de Inadimplência.',
         variant: 'destructive',
       })
     } finally {
@@ -213,7 +213,7 @@ export const Relacionamento: React.FC = () => {
               <Database className="w-5 h-5 text-[#0E9F8A]" />
             </span>
             <h2 className="text-base font-bold text-[#12365A] tracking-tight">
-              Banco Analítico de Relacionamento (Móvel & Residencial)
+              Banco Analítico de Inadimplência (Móvel & Residencial)
             </h2>
             <Badge
               variant="outline"
@@ -414,7 +414,7 @@ export const Relacionamento: React.FC = () => {
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-7 h-7 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
                       <span className="text-xs sm:text-sm">
-                        Carregando linhas analíticas de Relacionamento...
+                        Carregando linhas analíticas de Inadimplência...
                       </span>
                     </div>
                   </td>
@@ -433,7 +433,7 @@ export const Relacionamento: React.FC = () => {
                         <p className="text-xs text-[#5B6B82]">
                           {hasActiveFilters
                             ? 'Nenhum registro corresponde aos filtros selecionados. Tente ajustar os filtros ou a busca.'
-                            : 'O modelo de dados Relacionamento está pronto para receber as linhas analíticas das planilhas Móvel e Residencial.'}
+                            : 'O modelo de dados de Inadimplência está pronto para receber as linhas analíticas das planilhas Móvel e Residencial.'}
                         </p>
                       </div>
                       {hasActiveFilters && (
@@ -788,7 +788,7 @@ export const Relacionamento: React.FC = () => {
               Excluir Linha Analítica?
             </DialogTitle>
             <DialogDescription className="text-xs text-[#5B6B82]">
-              Esta ação removerá permanentemente esta linha da base analítica de Relacionamento.
+              Esta ação removerá permanentemente esta linha da base analítica de Inadimplência.
             </DialogDescription>
           </DialogHeader>
 
@@ -818,11 +818,11 @@ export const Relacionamento: React.FC = () => {
               <Trash2 className="w-5 h-5" />
             </div>
             <DialogTitle className="text-lg font-bold text-[#12365A]">
-              Limpar todas as linhas de Relacionamento?
+              Limpar todas as linhas de Inadimplência?
             </DialogTitle>
             <DialogDescription className="text-xs text-[#5B6B82] leading-relaxed">
               Tem certeza que deseja apagar todas as {totalItems.toLocaleString('pt-BR')} linhas
-              analíticas da collection Relacionamento? Esta ação não pode ser desfeita.
+              analíticas da base de Inadimplência? Esta ação não pode ser desfeita.
             </DialogDescription>
           </DialogHeader>
 

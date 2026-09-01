@@ -59,7 +59,7 @@ export const Layout: React.FC = () => {
     },
     {
       to: '/relacionamento',
-      label: 'Relacionamento',
+      label: 'Inadimplência',
       icon: Layers,
       description: 'Linhas analíticas das planilhas Móvel e Residencial',
     },
@@ -111,7 +111,7 @@ export const Layout: React.FC = () => {
         }
       case '/relacionamento':
         return {
-          title: 'Relacionamento Analítico',
+          title: 'Inadimplência Analítica',
           subtitle: 'Linhas analíticas detalhadas das planilhas Móvel e Residencial',
         }
       case '/lojas':
