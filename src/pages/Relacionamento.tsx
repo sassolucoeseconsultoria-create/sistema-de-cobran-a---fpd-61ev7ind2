@@ -487,9 +487,14 @@ export const Relacionamento: React.FC = () => {
     } catch (err: unknown) {
       const error = err as Error
       console.error('Erro na importação:', err)
+      // Display full error details including exact file and line number
       toast({
         title: 'Erro durante a importação',
-        description: error?.message || 'Ocorreu uma falha ao salvar as linhas no banco de dados.',
+        description: (
+          <div className="max-h-60 overflow-y-auto whitespace-pre-line text-xs font-mono">
+            {error?.message || 'Ocorreu uma falha ao salvar as linhas no banco de dados.'}
+          </div>
+        ),
         variant: 'destructive',
       })
       setIsImporting(false)
