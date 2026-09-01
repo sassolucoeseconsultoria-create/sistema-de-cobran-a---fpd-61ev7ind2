@@ -423,6 +423,7 @@ export async function clearAllAnalyticalRows(targetAba?: RelacionamentoAba | 'TO
 }> {
   invalidateAnalyticalCache()
 
+  // 1. Try high-performance custom hook endpoint first
   try {
     const res = await pb.send<{
       success: boolean
@@ -435,41 +436,105 @@ export async function clearAllAnalyticalRows(targetAba?: RelacionamentoAba | 'TO
       },
       requestKey: null,
     })
-    return {
-      movelCount: res.movelCount || 0,
-      residencialCount: res.residencialCount || 0,
+    if (res && res.success) {
+      return {
+        movelCount: res.movelCount || 0,
+        residencialCount: res.residencialCount || 0,
+      }
     }
   } catch (err) {
-    console.warn('Backend clear hook falhou, executando fallback por SDK:', err)
-    let movelCount = 0
-    let residencialCount = 0
-
-    if (!targetAba || targetAba === 'TODAS' || targetAba === 'Móvel') {
-      const movelRecords = await pb.collection('movel').getList<{ id: string }>(1, 200, {
-        fields: 'id',
-        requestKey: null,
-      })
-      for (const r of movelRecords.items) {
-        await pb.collection('movel').delete(r.id, { requestKey: null })
-        await new Promise((resolve) => setTimeout(resolve, 80))
-      }
-      movelCount = movelRecords.totalItems
-    }
-
-    if (!targetAba || targetAba === 'TODAS' || targetAba === 'Residencial') {
-      const resRecords = await pb.collection('residencial').getList<{ id: string }>(1, 200, {
-        fields: 'id',
-        requestKey: null,
-      })
-      for (const r of resRecords.items) {
-        await pb.collection('residencial').delete(r.id, { requestKey: null })
-        await new Promise((resolve) => setTimeout(resolve, 80))
-      }
-      residencialCount = resRecords.totalItems
-    }
-
-    return { movelCount, residencialCount }
+    console.warn(
+      'Backend custom clear endpoint indisponível ou falhou, iniciando fallback seguro:',
+      err,
+    )
   }
+
+  // 2. Safe Fallback via SDK: Delete sequentially in small batches with pauses
+  // to strictly prevent 429 "Too Many Requests" rate limiter
+  let movelCount = 0
+  let residencialCount = 0
+
+  const shouldClearMovel = !targetAba || targetAba === 'TODAS' || targetAba === 'Móvel'
+  const shouldClearResidencial = !targetAba || targetAba === 'TODAS' || targetAba === 'Residencial'
+
+  if (shouldClearMovel) {
+    try {
+      while (true) {
+        const page = await pb.collection('movel').getList<{ id: string }>(1, 50, {
+          fields: 'id',
+          requestKey: null,
+        })
+        if (!page.items || page.items.length === 0) break
+
+        for (const item of page.items) {
+          try {
+            await pb.collection('movel').delete(item.id, { requestKey: null })
+            movelCount++
+            // 60ms safe pause between requests to respect rate limit
+            await new Promise((resolve) => setTimeout(resolve, 60))
+          } catch (delErr: unknown) {
+            const status = (delErr as { status?: number })?.status
+            if (status === 404) {
+              // Already deleted, proceed
+              continue
+            }
+            if (status === 429) {
+              // Rate limit encountered: back off for 1.5s then retry once
+              await new Promise((resolve) => setTimeout(resolve, 1500))
+              await pb.collection('movel').delete(item.id, { requestKey: null })
+              movelCount++
+            } else {
+              throw delErr
+            }
+          }
+        }
+
+        if (page.items.length < 50) break
+      }
+    } catch (err) {
+      console.error('Erro no fallback de limpeza da collection movel:', err)
+      throw new Error('Não foi possível limpar a tabela Móvel.')
+    }
+  }
+
+  if (shouldClearResidencial) {
+    try {
+      while (true) {
+        const page = await pb.collection('residencial').getList<{ id: string }>(1, 50, {
+          fields: 'id',
+          requestKey: null,
+        })
+        if (!page.items || page.items.length === 0) break
+
+        for (const item of page.items) {
+          try {
+            await pb.collection('residencial').delete(item.id, { requestKey: null })
+            residencialCount++
+            await new Promise((resolve) => setTimeout(resolve, 60))
+          } catch (delErr: unknown) {
+            const status = (delErr as { status?: number })?.status
+            if (status === 404) {
+              continue
+            }
+            if (status === 429) {
+              await new Promise((resolve) => setTimeout(resolve, 1500))
+              await pb.collection('residencial').delete(item.id, { requestKey: null })
+              residencialCount++
+            } else {
+              throw delErr
+            }
+          }
+        }
+
+        if (page.items.length < 50) break
+      }
+    } catch (err) {
+      console.error('Erro no fallback de limpeza da collection residencial:', err)
+      throw new Error('Não foi possível limpar a tabela Residencial.')
+    }
+  }
+
+  return { movelCount, residencialCount }
 }
 
 // Backward compatibility exports for existing codebase referencing relacionamentoService

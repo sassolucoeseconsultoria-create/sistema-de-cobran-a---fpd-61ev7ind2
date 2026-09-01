@@ -301,18 +301,38 @@ export const Relacionamento: React.FC = () => {
       setIsClearing(true)
       const target = selectedAba === 'TODAS' ? undefined : selectedAba
       const counts = await clearAllAnalyticalRows(target)
+
+      // Update local state immediately without waiting for server response
+      if (selectedAba === 'Móvel') {
+        setRows((prev) => prev.filter((r) => r.aba !== 'Móvel'))
+        setTotalMovel(0)
+        setTotalItems((prev) => Math.max(0, prev - counts.movelCount))
+      } else if (selectedAba === 'Residencial') {
+        setRows((prev) => prev.filter((r) => r.aba !== 'Residencial'))
+        setTotalResidencial(0)
+        setTotalItems((prev) => Math.max(0, prev - counts.residencialCount))
+      } else {
+        setRows([])
+        setTotalItems(0)
+        setTotalMovel(0)
+        setTotalResidencial(0)
+        setAvailableLojas([])
+      }
+
       toast({
         title: 'Tabelas analíticas limpas',
-        description: `${counts.movelCount} linha(s) de Móvel e ${counts.residencialCount} linha(s) de Residencial foram removidas.`,
+        description: `${counts.movelCount} linha(s) de Móvel e ${counts.residencialCount} linha(s) de Residencial foram removidas com sucesso.`,
       })
       setClearDialogOpen(false)
       invalidateAnalyticalCache()
-      loadRows(true)
+      loadRows(false)
       loadLojas()
-    } catch {
+    } catch (err: unknown) {
+      console.error('Erro ao limpar tabelas analíticas:', err)
+      const msg = (err as Error)?.message || 'Não foi possível limpar as tabelas analíticas.'
       toast({
         title: 'Erro ao limpar dados',
-        description: 'Não foi possível limpar as tabelas analíticas.',
+        description: msg,
         variant: 'destructive',
       })
     } finally {

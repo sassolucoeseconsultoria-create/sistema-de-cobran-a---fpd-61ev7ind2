@@ -6,24 +6,36 @@ routerAdd(
   (e) => {
     let body = {}
     try {
-      const rawBody = e.requestInfo().body
-      if (rawBody) {
-        if (typeof rawBody === 'string') {
-          body = JSON.parse(rawBody)
-        } else if (typeof rawBody === 'object') {
-          body = rawBody
+      const info = e.requestInfo()
+      if (info && info.body) {
+        const raw = info.body
+        if (typeof raw === 'string') {
+          try {
+            body = JSON.parse(raw)
+          } catch (_) {}
+        } else if (typeof raw === 'object' && raw !== null) {
+          body = raw
         }
       }
-    } catch (parseErr) {
-      console.error('[relacionamento_clear] Erro ao parsear JSON do corpo da requisição:', parseErr)
-    }
+    } catch (_) {}
 
-    if (!body || Object.keys(body).length === 0) {
+    if (!body || typeof body !== 'object' || Object.keys(body).length === 0) {
       try {
         const bound = {}
         e.bindBody(bound)
-        if (bound && Object.keys(bound).length > 0) {
+        if (bound && typeof bound === 'object' && Object.keys(bound).length > 0) {
           body = bound
+        }
+      } catch (_) {}
+    }
+
+    // Also check query param fallback e.g. ?target=movel
+    if (!body || !body.target) {
+      try {
+        const queryTarget = e.requestInfo().query ? e.requestInfo().query.target : ''
+        if (queryTarget) {
+          if (!body) body = {}
+          body.target = queryTarget
         }
       } catch (_) {}
     }
@@ -34,25 +46,53 @@ routerAdd(
     let movelCount = 0
     let residencialCount = 0
 
-    if (!target || target === 'TODAS' || target === 'Móvel' || target === 'movel') {
+    if (
+      !target ||
+      target === 'TODAS' ||
+      target === 'Móvel' ||
+      target === 'movel' ||
+      target === 'MOVEL'
+    ) {
+      try {
+        movelCount = $app.countRecords('movel')
+      } catch (_) {
+        movelCount = 0
+      }
       try {
         const colMovel = $app.findCollectionByNameOrId('movel')
-        movelCount = $app.countRecords('movel')
         $app.truncateCollection(colMovel)
       } catch (err) {
-        // Fallback to SQL delete
-        $app.db().newQuery('DELETE FROM movel').execute()
+        // Fallback to direct SQL delete
+        try {
+          $app.db().newQuery('DELETE FROM movel').execute()
+        } catch (sqlErr) {
+          console.error('[relacionamento_clear] Erro ao deletar movel via SQL:', sqlErr)
+        }
       }
     }
 
-    if (!target || target === 'TODAS' || target === 'Residencial' || target === 'residencial') {
+    if (
+      !target ||
+      target === 'TODAS' ||
+      target === 'Residencial' ||
+      target === 'residencial' ||
+      target === 'RESIDENCIAL'
+    ) {
+      try {
+        residencialCount = $app.countRecords('residencial')
+      } catch (_) {
+        residencialCount = 0
+      }
       try {
         const colRes = $app.findCollectionByNameOrId('residencial')
-        residencialCount = $app.countRecords('residencial')
         $app.truncateCollection(colRes)
       } catch (err) {
-        // Fallback to SQL delete
-        $app.db().newQuery('DELETE FROM residencial').execute()
+        // Fallback to direct SQL delete
+        try {
+          $app.db().newQuery('DELETE FROM residencial').execute()
+        } catch (sqlErr) {
+          console.error('[relacionamento_clear] Erro ao deletar residencial via SQL:', sqlErr)
+        }
       }
     }
 
