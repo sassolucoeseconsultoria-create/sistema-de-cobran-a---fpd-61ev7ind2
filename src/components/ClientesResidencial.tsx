@@ -1,0 +1,704 @@
+import React, { useState, useEffect, useCallback } from 'react'
+import {
+  Search,
+  RotateCcw,
+  RefreshCw,
+  Calendar,
+  MessageSquare,
+  ChevronLeft,
+  ChevronRight,
+  Store,
+  CheckCircle2,
+  AlertCircle,
+} from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
+import { useToast } from '@/hooks/use-toast'
+import pb from '@/lib/pocketbase/client'
+import type { ResidencialRecord } from '@/types/fpd'
+import {
+  applyDateMask,
+  formatCpf,
+  formatExcelOrIsoDate,
+  formatPhone,
+  getDadosField,
+} from '@/lib/clientFormatters'
+import { updateClientManualFields } from '@/services/relacionamentoService'
+import { cn } from '@/lib/utils'
+
+interface ClientesResidencialProps {
+  availableLojas: string[]
+}
+
+export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({ availableLojas }) => {
+  const { toast } = useToast()
+
+  const [records, setRecords] = useState<ResidencialRecord[]>([])
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [perPage, setPerPage] = useState(25)
+  const [totalItems, setTotalItems] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+
+  // Filters
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [selectedLoja, setSelectedLoja] = useState('TODAS')
+
+  // Inline edit state
+  const [editValues, setEditValues] = useState<
+    Record<string, { data_promessa_de_pagto: string; comentarios: string }>
+  >({})
+  const [savingRecordId, setSavingRecordId] = useState<string | null>(null)
+  const [saveStatus, setSaveStatus] = useState<Record<string, 'saved' | 'error' | 'saving'>>({})
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+      setPage(1)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const loadData = useCallback(async () => {
+    setLoading(true)
+    try {
+      const filterParts: string[] = []
+      if (selectedLoja && selectedLoja !== 'TODAS') {
+        filterParts.push(`loja = "${selectedLoja.replace(/"/g, '\\"')}"`)
+      }
+      if (debouncedSearch.trim()) {
+        const s = debouncedSearch.trim().replace(/"/g, '\\"')
+        filterParts.push(
+          `(loja ~ "${s}" || vendedor ~ "${s}" || cliente ~ "${s}" || cpf ~ "${s}" || nr_contrato ~ "${s}" || arquivo ~ "${s}")`,
+        )
+      }
+
+      const filterStr = filterParts.length > 0 ? filterParts.join(' && ') : undefined
+
+      const res = await pb.collection('residencial').getList<ResidencialRecord>(page, perPage, {
+        filter: filterStr,
+        sort: '-created',
+        requestKey: null,
+      })
+
+      setRecords(res.items)
+      setTotalItems(res.totalItems)
+      setTotalPages(res.totalPages)
+
+      // Initialize edit values
+      const initialEdits: Record<string, { data_promessa_de_pagto: string; comentarios: string }> =
+        {}
+      res.items.forEach((item) => {
+        initialEdits[item.id] = {
+          data_promessa_de_pagto: item.data_promessa_de_pagto || '',
+          comentarios: item.comentarios || '',
+        }
+      })
+      setEditValues(initialEdits)
+    } catch (err) {
+      console.error('Erro ao carregar clientes residencial:', err)
+      toast({
+        title: 'Erro ao carregar dados',
+        description: 'Não foi possível carregar a lista de clientes residencial.',
+        variant: 'destructive',
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [page, perPage, debouncedSearch, selectedLoja, toast])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  // Save manual fields inline
+  const handleSaveField = async (id: string) => {
+    const currentEdit = editValues[id]
+    if (!currentEdit) return
+
+    const originalRecord = records.find((r) => r.id === id)
+    if (!originalRecord) return
+
+    // If unchanged, skip save
+    if (
+      (originalRecord.data_promessa_de_pagto || '') ===
+        (currentEdit.data_promessa_de_pagto || '') &&
+      (originalRecord.comentarios || '') === (currentEdit.comentarios || '')
+    ) {
+      return
+    }
+
+    setSavingRecordId(id)
+    setSaveStatus((prev) => ({ ...prev, [id]: 'saving' }))
+
+    try {
+      await updateClientManualFields(id, 'Residencial', {
+        data_promessa_de_pagto: currentEdit.data_promessa_de_pagto,
+        comentarios: currentEdit.comentarios,
+      })
+
+      // Update local record to reflect changes
+      setRecords((prev) =>
+        prev.map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                data_promessa_de_pagto: currentEdit.data_promessa_de_pagto,
+                comentarios: currentEdit.comentarios,
+              }
+            : r,
+        ),
+      )
+
+      setSaveStatus((prev) => ({ ...prev, [id]: 'saved' }))
+      setTimeout(() => {
+        setSaveStatus((prev) => {
+          const next = { ...prev }
+          delete next[id]
+          return next
+        })
+      }, 2500)
+    } catch (err) {
+      console.error('Erro ao salvar campos de cliente residencial:', err)
+      setSaveStatus((prev) => ({ ...prev, [id]: 'error' }))
+      toast({
+        title: 'Erro ao salvar',
+        description: 'Não foi possível salvar os dados manuais.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingRecordId(null)
+    }
+  }
+
+  // Handle date change with mask
+  const handleDateChange = (id: string, rawVal: string) => {
+    const masked = applyDateMask(rawVal)
+    setEditValues((prev) => ({
+      ...prev,
+      [id]: {
+        ...(prev[id] || { comentarios: '' }),
+        data_promessa_de_pagto: masked,
+      },
+    }))
+  }
+
+  // Handle comment change
+  const handleCommentChange = (id: string, val: string) => {
+    setEditValues((prev) => ({
+      ...prev,
+      [id]: {
+        ...(prev[id] || { data_promessa_de_pagto: '' }),
+        comentarios: val,
+      },
+    }))
+  }
+
+  const hasActiveFilters = debouncedSearch !== '' || selectedLoja !== 'TODAS'
+
+  return (
+    <div className="space-y-4">
+      {/* Top Filter Bar */}
+      <div className="bg-white p-4 rounded-xl border border-[#E3E9F2] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2.5 flex-1">
+          {/* Search */}
+          <div className="relative w-full sm:w-64">
+            <Search className="w-4 h-4 text-[#8A97AC] absolute left-3 top-1/2 -translate-y-1/2" />
+            <Input
+              placeholder="Buscar por contrato, CPF, cliente, loja..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-9 text-xs sm:text-sm bg-[#F8FAFC] border-[#E3E9F2] focus:border-[#0E9F8A]"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A97AC] hover:text-[#12233A]"
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          {/* Loja selector */}
+          {availableLojas.length > 0 && (
+            <div className="w-full sm:w-48">
+              <Select
+                value={selectedLoja}
+                onValueChange={(val) => {
+                  setSelectedLoja(val)
+                  setPage(1)
+                }}
+              >
+                <SelectTrigger className="h-9 text-xs bg-[#F8FAFC] border-[#E3E9F2]">
+                  <div className="flex items-center gap-2 truncate">
+                    <Store className="w-3.5 h-3.5 text-[#8A97AC] shrink-0" />
+                    <span className="truncate">
+                      Loja: <strong>{selectedLoja === 'TODAS' ? 'Todas' : selectedLoja}</strong>
+                    </span>
+                  </div>
+                </SelectTrigger>
+                <SelectContent className="bg-white max-h-56">
+                  <SelectItem value="TODAS" className="text-xs">
+                    Todas as Lojas
+                  </SelectItem>
+                  {availableLojas.map((l) => (
+                    <SelectItem key={l} value={l} className="text-xs uppercase">
+                      {l}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {hasActiveFilters && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearch('')
+                setSelectedLoja('TODAS')
+                setPage(1)
+              }}
+              className="h-9 text-xs text-[#5B6B82] hover:text-[#12233A] gap-1"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Limpar filtros</span>
+            </Button>
+          )}
+        </div>
+
+        {/* Refresh & Pagination size */}
+        <div className="flex items-center gap-3 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadData}
+            disabled={loading}
+            className="h-9 text-xs text-[#12365A] border-[#E3E9F2] hover:bg-slate-50 gap-1.5"
+            title="Atualizar dados"
+          >
+            <RefreshCw className={cn('w-3.5 h-3.5 text-[#0E9F8A]', loading && 'animate-spin')} />
+            <span>Atualizar</span>
+          </Button>
+
+          <div className="flex items-center gap-1.5 text-xs text-[#5B6B82]">
+            <span>Exibir:</span>
+            <select
+              value={perPage}
+              onChange={(e) => {
+                setPerPage(Number(e.target.value))
+                setPage(1)
+              }}
+              className="h-8 text-xs rounded-md border border-[#E3E9F2] bg-white px-2 text-[#12365A]"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Clientes Residencial Table */}
+      <div className="bg-white rounded-xl border border-[#E3E9F2] shadow-xs overflow-hidden">
+        <div className="relative overflow-x-auto max-h-[65vh]">
+          <table className="w-full text-left border-collapse text-[13px]">
+            <thead className="sticky top-0 z-20 bg-[#12365A] text-white shadow-sm font-semibold tracking-wider uppercase text-[11px]">
+              <tr>
+                <th className="px-3 py-3.5 text-center w-12 border-r border-[#1e456f]">#</th>
+                <th className="px-3.5 py-3.5 min-w-[130px] border-r border-[#1e456f]">
+                  NR_CONTRATO
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[180px] border-r border-[#1e456f]">
+                  DSC_STATUS_CONTRATO
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[130px] text-center border-r border-[#1e456f]">
+                  DAT_VENCIMENTO
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[90px] text-center border-r border-[#1e456f]">
+                  Pago
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[120px] text-center border-r border-[#1e456f]">
+                  Preventiva FPD
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[110px] text-center border-r border-[#1e456f]">
+                  Virou FPD
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[140px] border-r border-[#1e456f]">CPF</th>
+                <th className="px-3.5 py-3.5 min-w-[200px] border-r border-[#1e456f]">CLIENTE</th>
+                <th className="px-3.5 py-3.5 min-w-[130px] border-r border-[#1e456f]">FONE</th>
+                <th className="px-3.5 py-3.5 min-w-[160px] border-r border-[#1e456f]">LOJA</th>
+                <th className="px-3.5 py-3.5 min-w-[160px] border-r border-[#1e456f]">VENDEDOR</th>
+                <th className="px-3.5 py-3.5 min-w-[120px] border-r border-[#1e456f]">
+                  Ocorrências
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[180px] border-r border-[#1e456f]">
+                  Data Promessa de Pagto
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[240px]">Comentários</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#E3E9F2]">
+              {loading ? (
+                <tr>
+                  <td colSpan={15} className="py-16 text-center text-[#5B6B82]">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <div className="w-7 h-7 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
+                      <span className="text-xs sm:text-sm">
+                        Carregando lista de clientes residencial...
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ) : records.length === 0 ? (
+                <tr>
+                  <td colSpan={15} className="py-16 text-center text-[#5B6B82]">
+                    <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
+                      <p className="font-bold text-[#12365A] text-sm">
+                        Nenhum cliente residencial encontrado.
+                      </p>
+                      <p className="text-xs text-[#5B6B82]">
+                        Importe uma planilha na aba analítica para popular a lista de clientes.
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                records.map((row, idx) => {
+                  const d = row.dados || {}
+
+                  // Deriving columns strictly matching requirements:
+                  // NR_CONTRATO, DSC_STATUS_CONTRATO, DAT_VENCIMENTO, Pago, Preventiva FPD, Virou FPD, CPF, CLIENTE, FONE, LOJA, VENDEDOR, Ocorrências, Data Promessa de Pagto, Comentários
+
+                  const nrContrato =
+                    row.nr_contrato ||
+                    getDadosField(
+                      d,
+                      'NR_CONTRATO',
+                      'NR CONTRATO',
+                      'CONTRATO',
+                      'Numero Contrato',
+                      'Contrato',
+                    ) ||
+                    '—'
+
+                  const dscStatus =
+                    row.dsc_status_contrato ||
+                    getDadosField(
+                      d,
+                      'DSC_STATUS_CONTRATO',
+                      'DSC STATUS CONTRATO',
+                      'Status Contrato',
+                      'STATUS',
+                    ) ||
+                    '—'
+
+                  const rawVencimento =
+                    row.dat_vencimento ||
+                    getDadosField(
+                      d,
+                      'DAT_VENCIMENTO',
+                      'DAT VENCIMENTO',
+                      'Vencimento',
+                      'Data Vencimento',
+                    ) ||
+                    ''
+                  const datVencimento = rawVencimento ? formatExcelOrIsoDate(rawVencimento) : '—'
+
+                  const pagoVal =
+                    row.pago || getDadosField(d, 'Pago', 'PAGO', 'Paga', 'Fatura Paga') || '—'
+
+                  const preventivaFpd =
+                    row.preventiva_fpd ||
+                    getDadosField(
+                      d,
+                      'Preventiva FPD',
+                      'PREVENTIVA FPD',
+                      'Preventiva_FPD',
+                      'PREVENTIVA',
+                    ) ||
+                    '—'
+
+                  const virouFpd =
+                    row.virou_fpd ||
+                    getDadosField(d, 'Virou FPD', 'VIROU FPD', 'Virou_FPD', 'VIROU', 'FPD') ||
+                    '—'
+
+                  const rawCpf =
+                    row.cpf || getDadosField(d, 'CPF', 'Cpf', 'CNPJ', 'Documento', 'DOC') || ''
+                  const cpf = rawCpf ? formatCpf(rawCpf) : '—'
+
+                  const cliente =
+                    row.cliente ||
+                    getDadosField(d, 'CLIENTE', 'Cliente', 'NOME', 'Nome', 'Razão Social') ||
+                    '—'
+
+                  const rawFone =
+                    row.fone ||
+                    getDadosField(
+                      d,
+                      'FONE',
+                      'Fone',
+                      'Telefone',
+                      'TELEFONE',
+                      'Celular',
+                      'CELULAR',
+                    ) ||
+                    ''
+                  const fone = rawFone ? formatPhone(rawFone) : '—'
+
+                  const loja =
+                    row.loja || getDadosField(d, 'LOJA', 'Loja', 'LOCAL', 'Local', 'Filial') || '—'
+
+                  const vendedor =
+                    row.vendedor ||
+                    getDadosField(d, 'VENDEDOR', 'Vendedor', 'Consultor', 'Operador') ||
+                    '—'
+
+                  const ocorrencias =
+                    row.ocorrencias ||
+                    getDadosField(
+                      d,
+                      'Ocorrências',
+                      'OCORRENCIAS',
+                      'Ocorrencia',
+                      'OCORRENCIA',
+                      'Motivo',
+                      'Fatura',
+                    ) ||
+                    '—'
+
+                  const edit = editValues[row.id] || {
+                    data_promessa_de_pagto: row.data_promessa_de_pagto || '',
+                    comentarios: row.comentarios || '',
+                  }
+
+                  const rowStatus = saveStatus[row.id]
+                  const isSavingThis = savingRecordId === row.id
+
+                  return (
+                    <tr
+                      key={row.id}
+                      className={cn(
+                        'hover:bg-[#F0F5FC] transition-colors',
+                        idx % 2 === 1 ? 'bg-[#FAFCFF]' : 'bg-white',
+                      )}
+                    >
+                      {/* # Index */}
+                      <td className="px-3 py-3 text-center text-xs text-slate-400 font-mono border-r border-[#E3E9F2]">
+                        {(page - 1) * perPage + idx + 1}
+                      </td>
+
+                      {/* NR_CONTRATO */}
+                      <td className="px-3.5 py-3 font-mono text-xs font-semibold text-[#12365A] border-r border-[#E3E9F2]">
+                        {nrContrato}
+                      </td>
+
+                      {/* DSC_STATUS_CONTRATO */}
+                      <td className="px-3.5 py-3 text-xs border-r border-[#E3E9F2]">
+                        {dscStatus !== '—' ? (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] bg-slate-50 border-slate-200 text-slate-700"
+                          >
+                            {dscStatus}
+                          </Badge>
+                        ) : (
+                          <span className="text-slate-300 italic text-xs">—</span>
+                        )}
+                      </td>
+
+                      {/* DAT_VENCIMENTO */}
+                      <td className="px-3.5 py-3 text-xs text-center font-mono font-medium text-slate-700 border-r border-[#E3E9F2]">
+                        {datVencimento}
+                      </td>
+
+                      {/* Pago */}
+                      <td className="px-3.5 py-3 text-xs text-center border-r border-[#E3E9F2]">
+                        {pagoVal === '1' || pagoVal.toLowerCase() === 'sim' ? (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 border border-green-200">
+                            Sim
+                          </span>
+                        ) : pagoVal === '0' ||
+                          pagoVal.toLowerCase() === 'não' ||
+                          pagoVal.toLowerCase() === 'nao' ? (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                            Não
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs font-mono">{pagoVal}</span>
+                        )}
+                      </td>
+
+                      {/* Preventiva FPD */}
+                      <td className="px-3.5 py-3 text-xs text-center font-mono text-slate-700 border-r border-[#E3E9F2]">
+                        {preventivaFpd === '1' ? (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                            1
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs">{preventivaFpd}</span>
+                        )}
+                      </td>
+
+                      {/* Virou FPD */}
+                      <td className="px-3.5 py-3 text-xs text-center font-mono text-slate-700 border-r border-[#E3E9F2]">
+                        {virouFpd === '1' ? (
+                          <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+                            1
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs">{virouFpd}</span>
+                        )}
+                      </td>
+
+                      {/* CPF */}
+                      <td className="px-3.5 py-3 font-mono text-xs text-slate-700 border-r border-[#E3E9F2]">
+                        {cpf}
+                      </td>
+
+                      {/* CLIENTE */}
+                      <td className="px-3.5 py-3 text-xs font-semibold text-[#12365A] border-r border-[#E3E9F2]">
+                        <span className="line-clamp-1" title={cliente}>
+                          {cliente}
+                        </span>
+                      </td>
+
+                      {/* FONE */}
+                      <td className="px-3.5 py-3 font-mono text-xs text-slate-700 border-r border-[#E3E9F2]">
+                        {fone}
+                      </td>
+
+                      {/* LOJA */}
+                      <td className="px-3.5 py-3 text-xs uppercase font-medium text-[#5B6B82] border-r border-[#E3E9F2]">
+                        <span className="line-clamp-1" title={loja}>
+                          {loja}
+                        </span>
+                      </td>
+
+                      {/* VENDEDOR */}
+                      <td className="px-3.5 py-3 text-xs text-[#12365A] border-r border-[#E3E9F2]">
+                        <span className="line-clamp-1" title={vendedor}>
+                          {vendedor}
+                        </span>
+                      </td>
+
+                      {/* Ocorrências */}
+                      <td className="px-3.5 py-3 text-xs text-slate-600 border-r border-[#E3E9F2]">
+                        <span className="line-clamp-1" title={ocorrencias}>
+                          {ocorrencias}
+                        </span>
+                      </td>
+
+                      {/* Data Promessa de Pagto (Editable Mask) */}
+                      <td className="px-3.5 py-2.5 border-r border-[#E3E9F2]">
+                        <div className="relative flex items-center">
+                          <Calendar className="w-3.5 h-3.5 text-[#8A97AC] absolute left-2 pointer-events-none" />
+                          <Input
+                            type="text"
+                            placeholder="DD/MM/AAAA"
+                            value={edit.data_promessa_de_pagto}
+                            onChange={(e) => handleDateChange(row.id, e.target.value)}
+                            onBlur={() => handleSaveField(row.id)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSaveField(row.id)}
+                            disabled={isSavingThis}
+                            maxLength={10}
+                            className={cn(
+                              'h-8 pl-7 pr-7 text-xs font-mono bg-white border-[#E3E9F2] focus:border-[#0E9F8A] transition-all',
+                              edit.data_promessa_de_pagto && 'font-semibold text-[#12365A]',
+                              rowStatus === 'saved' && 'border-green-500 bg-green-50/30',
+                              rowStatus === 'error' && 'border-red-500 bg-red-50/30',
+                            )}
+                          />
+                          {rowStatus === 'saving' && (
+                            <RefreshCw className="w-3.5 h-3.5 text-[#0E9F8A] animate-spin absolute right-2 pointer-events-none" />
+                          )}
+                          {rowStatus === 'saved' && (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-green-600 absolute right-2 pointer-events-none" />
+                          )}
+                          {rowStatus === 'error' && (
+                            <AlertCircle className="w-3.5 h-3.5 text-red-600 absolute right-2 pointer-events-none" />
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Comentários (Editable Text) */}
+                      <td className="px-3.5 py-2.5">
+                        <div className="relative flex items-center">
+                          <MessageSquare className="w-3.5 h-3.5 text-[#8A97AC] absolute left-2 pointer-events-none" />
+                          <Input
+                            type="text"
+                            placeholder="Digite uma observação..."
+                            value={edit.comentarios}
+                            onChange={(e) => handleCommentChange(row.id, e.target.value)}
+                            onBlur={() => handleSaveField(row.id)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSaveField(row.id)}
+                            disabled={isSavingThis}
+                            className={cn(
+                              'h-8 pl-7 pr-7 text-xs bg-white border-[#E3E9F2] focus:border-[#0E9F8A] transition-all',
+                              edit.comentarios && 'text-[#12365A]',
+                              rowStatus === 'saved' && 'border-green-500 bg-green-50/30',
+                              rowStatus === 'error' && 'border-red-500 bg-red-50/30',
+                            )}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination Footer */}
+        {totalPages > 1 && (
+          <div className="p-4 border-t border-[#E3E9F2] bg-white flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#5B6B82]">
+            <div>
+              Mostrando <strong>{(page - 1) * perPage + 1}</strong> a{' '}
+              <strong>{Math.min(page * perPage, totalItems)}</strong> de{' '}
+              <strong>{totalItems.toLocaleString('pt-BR')}</strong> clientes residencial
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(p - 1, 1))}
+                disabled={page <= 1 || loading}
+                className="h-8 px-2.5 text-xs text-[#12365A]"
+              >
+                <ChevronLeft className="w-3.5 h-3.5 mr-1" />
+                <span>Anterior</span>
+              </Button>
+
+              <div className="px-2 text-xs font-semibold text-[#12365A]">
+                Página {page} de {totalPages}
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
+                disabled={page >= totalPages || loading}
+                className="h-8 px-2.5 text-xs text-[#12365A]"
+              >
+                <span>Próxima</span>
+                <ChevronRight className="w-3.5 h-3.5 ml-1" />
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default ClientesResidencial

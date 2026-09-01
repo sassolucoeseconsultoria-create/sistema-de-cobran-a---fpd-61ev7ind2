@@ -20,6 +20,8 @@ import {
   Home,
   Check,
   User,
+  Users,
+  Layers,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -53,10 +55,18 @@ import type {
   ResidencialRecord,
 } from '@/types/fpd'
 import { cn } from '@/lib/utils'
+import { ClientesMovel } from '@/components/ClientesMovel'
+import { ClientesResidencial } from '@/components/ClientesResidencial'
 
 export const Relacionamento: React.FC = () => {
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Top sub-menu navigation: 'analitico' | 'clientes'
+  const [activeSubMenu, setActiveSubMenu] = useState<'analitico' | 'clientes'>('analitico')
+
+  // Clientes tab: 'movel' | 'residencial'
+  const [activeClientesTab, setActiveClientesTab] = useState<'movel' | 'residencial'>('movel')
 
   // Data state
   const [rows, setRows] = useState<UnifiedAnalyticRecord[]>([])
@@ -528,45 +538,54 @@ export const Relacionamento: React.FC = () => {
         className="hidden"
       />
 
-      {/* Top Banner Context Card */}
-      <div className="bg-white rounded-xl p-5 border border-[#E3E9F2] shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <div className="space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-[#12365A]/5 text-[#12365A]">
-              <Database className="w-5 h-5 text-[#0E9F8A]" />
-            </span>
-            <h2 className="text-base font-bold text-[#12365A] tracking-tight">
-              Banco Analítico de Inadimplência
-            </h2>
+      {/* Top Navigation Sub-Menu (Visão Analítica / Clientes) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E3E9F2] pb-3">
+        <div className="flex items-center gap-2 p-1 bg-[#E8EEF5] rounded-xl w-fit">
+          <button
+            type="button"
+            onClick={() => setActiveSubMenu('analitico')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all',
+              activeSubMenu === 'analitico'
+                ? 'bg-white text-[#12365A] shadow-xs'
+                : 'text-[#5B6B82] hover:text-[#12365A]',
+            )}
+          >
+            <Layers className="w-4 h-4 text-[#0E9F8A]" />
+            <span>Visão Analítica</span>
             <Badge
-              variant="outline"
-              className="bg-[#12365A]/10 text-[#12365A] border-[#12365A]/25 text-[11px] font-semibold gap-1"
+              variant="secondary"
+              className="text-[10px] px-1.5 h-4 bg-slate-100 text-slate-600 ml-1"
             >
-              <Smartphone className="w-3 h-3" /> Tabela MÓVEL
+              {totalItems}
             </Badge>
-            <Badge
-              variant="outline"
-              className="bg-[#0E9F8A]/10 text-[#0E9F8A] border-[#0E9F8A]/30 text-[11px] font-semibold gap-1"
-            >
-              <Home className="w-3 h-3" /> Tabela RESIDENCIAL
-            </Badge>
-          </div>
-          <p className="text-xs text-[#5B6B82] max-w-3xl leading-relaxed">
-            Armazenamento analítico separado para as tabelas <strong>Móvel</strong> e{' '}
-            <strong>Residencial</strong>. Importe planilhas .xlsx com extração dinâmica de
-            cabeçalhos e visualização linha a linha com layout flexível.
-          </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubMenu('clientes')}
+            className={cn(
+              'flex items-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all',
+              activeSubMenu === 'clientes'
+                ? 'bg-white text-[#12365A] shadow-xs'
+                : 'text-[#5B6B82] hover:text-[#12365A]',
+            )}
+          >
+            <Users className="w-4 h-4 text-[#0E9F8A]" />
+            <span>Clientes</span>
+            <span className="w-2 h-2 rounded-full bg-[#0E9F8A]" />
+          </button>
         </div>
 
         {/* Action Controls & Totals */}
-        <div className="flex flex-wrap items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5">
           {/* Quick Counter Badges */}
           <div className="flex items-center gap-2">
-            <div className="px-3 py-1.5 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] text-right">
+            <div className="px-3 py-1.5 rounded-lg bg-white border border-[#E3E9F2] text-right shadow-2xs">
               <span className="text-[9px] uppercase font-bold tracking-wider text-[#5B6B82] block">
                 Total Geral
               </span>
-              <span className="text-base font-bold text-[#12365A] tabular-nums">
+              <span className="text-sm font-bold text-[#12365A] tabular-nums">
                 {totalItems.toLocaleString('pt-BR')}
               </span>
             </div>
@@ -581,25 +600,8 @@ export const Relacionamento: React.FC = () => {
             <span>Importar Planilha</span>
           </Button>
 
-          {/* Refresh Button */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              invalidateAnalyticalCache()
-              loadRows(true)
-              loadLojas()
-            }}
-            disabled={loading}
-            className="h-9 text-xs text-[#12365A] border-[#E3E9F2] hover:bg-slate-50 gap-1.5"
-            title="Atualizar dados"
-          >
-            <RefreshCw className={cn('w-3.5 h-3.5 text-[#0E9F8A]', loading && 'animate-spin')} />
-            <span className="hidden sm:inline">Atualizar</span>
-          </Button>
-
           {/* Clear Button */}
-          {totalItems > 0 && (
+          {totalItems > 0 && activeSubMenu === 'analitico' && (
             <Button
               variant="outline"
               size="sm"
@@ -613,487 +615,621 @@ export const Relacionamento: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Table Container */}
-      <div className="bg-white rounded-xl border border-[#E3E9F2] shadow-xs overflow-hidden">
-        {/* Filter bar */}
-        <div className="p-4 sm:p-5 border-b border-[#E3E9F2] bg-white flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2.5 flex-1">
-            {/* Search Input */}
-            <div className="relative w-full sm:w-64">
-              <Search className="w-4 h-4 text-[#8A97AC] absolute left-3 top-1/2 -translate-y-1/2" />
-              <Input
-                placeholder="Buscar por loja, vendedor, cliente ou arquivo..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9 h-9 text-xs sm:text-sm bg-[#F8FAFC] border-[#E3E9F2] focus:border-[#0E9F8A]"
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A97AC] hover:text-[#12233A]"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
+      {/* Sub-menu View: CLIENTES */}
+      {activeSubMenu === 'clientes' ? (
+        <div className="space-y-4">
+          {/* Clientes Tabs (Móvel / Residencial) */}
+          <div className="bg-white p-4 rounded-xl border border-[#E3E9F2] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-[#0E9F8A]/10 text-[#0E9F8A]">
+                <Users className="w-5 h-5" />
+              </span>
+              <div>
+                <h2 className="text-base font-bold text-[#12365A] tracking-tight">
+                  Gestão de Clientes em Inadimplência
+                </h2>
+                <p className="text-xs text-[#5B6B82]">
+                  Acompanhamento individualizado com registro de{' '}
+                  <strong>Data Promessa de Pagto</strong> e <strong>Comentários</strong>.
+                </p>
+              </div>
             </div>
 
-            {/* Select Aba / Origem Filter (Tabela Móvel / Residencial) */}
-            <div className="w-full sm:w-52">
-              <Select
-                value={selectedAba}
-                onValueChange={(val) => {
-                  setSelectedAba(val as RelacionamentoAba | 'TODAS')
-                  setPage(1)
-                }}
+            {/* Abas Móvel / Residencial */}
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-lg shrink-0">
+              <button
+                type="button"
+                onClick={() => setActiveClientesTab('movel')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all',
+                  activeClientesTab === 'movel'
+                    ? 'bg-white text-[#12365A] shadow-xs'
+                    : 'text-[#5B6B82] hover:text-[#12365A]',
+                )}
               >
-                <SelectTrigger className="h-9 text-xs bg-[#F8FAFC] border-[#E3E9F2]">
-                  <div className="flex items-center gap-2 truncate">
-                    <Filter className="w-3.5 h-3.5 text-[#8A97AC] shrink-0" />
-                    <span>
-                      Tabela:{' '}
-                      <strong>
-                        {selectedAba === 'TODAS'
-                          ? 'Todas (Móvel + Res.)'
-                          : selectedAba === 'Móvel'
-                            ? 'Móvel'
-                            : 'Residencial'}
-                      </strong>
-                    </span>
-                  </div>
-                </SelectTrigger>
-                <SelectContent className="bg-white">
-                  <SelectItem value="TODAS" className="text-xs">
-                    Todas as Tabelas
-                  </SelectItem>
-                  <SelectItem value="Móvel" className="text-xs font-semibold text-[#12365A]">
-                    Tabela Móvel
-                  </SelectItem>
-                  <SelectItem value="Residencial" className="text-xs font-semibold text-[#0E9F8A]">
-                    Tabela Residencial
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+                <Smartphone className="w-3.5 h-3.5 text-[#12365A]" />
+                <span>Móvel</span>
+                <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-slate-50">
+                  {totalMovel}
+                </Badge>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveClientesTab('residencial')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all',
+                  activeClientesTab === 'residencial'
+                    ? 'bg-white text-[#0E9F8A] shadow-xs'
+                    : 'text-[#5B6B82] hover:text-[#0E9F8A]',
+                )}
+              >
+                <Home className="w-3.5 h-3.5 text-[#0E9F8A]" />
+                <span>Residencial</span>
+                <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 bg-slate-50">
+                  {totalResidencial}
+                </Badge>
+              </button>
+            </div>
+          </div>
+
+          {/* Render Active Clientes Table */}
+          {activeClientesTab === 'movel' ? (
+            <ClientesMovel availableLojas={availableLojas} />
+          ) : (
+            <ClientesResidencial availableLojas={availableLojas} />
+          )}
+        </div>
+      ) : (
+        /* Sub-menu View: VISÃO ANALÍTICA (Original) */
+        <div className="space-y-6">
+          {/* Top Banner Context Card */}
+          <div className="bg-white rounded-xl p-5 border border-[#E3E9F2] shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-[#12365A]/5 text-[#12365A]">
+                  <Database className="w-5 h-5 text-[#0E9F8A]" />
+                </span>
+                <h2 className="text-base font-bold text-[#12365A] tracking-tight">
+                  Banco Analítico de Inadimplência
+                </h2>
+                <Badge
+                  variant="outline"
+                  className="bg-[#12365A]/10 text-[#12365A] border-[#12365A]/25 text-[11px] font-semibold gap-1"
+                >
+                  <Smartphone className="w-3 h-3" /> Tabela MÓVEL
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className="bg-[#0E9F8A]/10 text-[#0E9F8A] border-[#0E9F8A]/30 text-[11px] font-semibold gap-1"
+                >
+                  <Home className="w-3 h-3" /> Tabela RESIDENCIAL
+                </Badge>
+              </div>
+              <p className="text-xs text-[#5B6B82] max-w-3xl leading-relaxed">
+                Armazenamento analítico separado para as tabelas <strong>Móvel</strong> e{' '}
+                <strong>Residencial</strong>. Importe planilhas .xlsx com extração dinâmica de
+                cabeçalhos e visualização linha a linha com layout flexível.
+              </p>
             </div>
 
-            {/* Select Loja Filter */}
-            {availableLojas.length > 0 && (
-              <div className="w-full sm:w-48">
-                <Select
-                  value={selectedLoja}
-                  onValueChange={(val) => {
-                    setSelectedLoja(val)
+            {/* Quick Refresh */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  invalidateAnalyticalCache()
+                  loadRows(true)
+                  loadLojas()
+                }}
+                disabled={loading}
+                className="h-9 text-xs text-[#12365A] border-[#E3E9F2] hover:bg-slate-50 gap-1.5"
+                title="Atualizar dados"
+              >
+                <RefreshCw
+                  className={cn('w-3.5 h-3.5 text-[#0E9F8A]', loading && 'animate-spin')}
+                />
+                <span className="hidden sm:inline">Atualizar</span>
+              </Button>
+            </div>
+          </div>
+
+          {/* Main Table Container */}
+          <div className="bg-white rounded-xl border border-[#E3E9F2] shadow-xs overflow-hidden">
+            {/* Filter bar */}
+            <div className="p-4 sm:p-5 border-b border-[#E3E9F2] bg-white flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2.5 flex-1">
+                {/* Search Input */}
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-4 h-4 text-[#8A97AC] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Input
+                    placeholder="Buscar por loja, vendedor, cliente ou arquivo..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-9 h-9 text-xs sm:text-sm bg-[#F8FAFC] border-[#E3E9F2] focus:border-[#0E9F8A]"
+                  />
+                  {search && (
+                    <button
+                      onClick={() => setSearch('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A97AC] hover:text-[#12233A]"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Select Aba / Origem Filter (Tabela Móvel / Residencial) */}
+                <div className="w-full sm:w-52">
+                  <Select
+                    value={selectedAba}
+                    onValueChange={(val) => {
+                      setSelectedAba(val as RelacionamentoAba | 'TODAS')
+                      setPage(1)
+                    }}
+                  >
+                    <SelectTrigger className="h-9 text-xs bg-[#F8FAFC] border-[#E3E9F2]">
+                      <div className="flex items-center gap-2 truncate">
+                        <Filter className="w-3.5 h-3.5 text-[#8A97AC] shrink-0" />
+                        <span>
+                          Tabela:{' '}
+                          <strong>
+                            {selectedAba === 'TODAS'
+                              ? 'Todas (Móvel + Res.)'
+                              : selectedAba === 'Móvel'
+                                ? 'Móvel'
+                                : 'Residencial'}
+                          </strong>
+                        </span>
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      <SelectItem value="TODAS" className="text-xs">
+                        Todas as Tabelas
+                      </SelectItem>
+                      <SelectItem value="Móvel" className="text-xs font-semibold text-[#12365A]">
+                        Tabela Móvel
+                      </SelectItem>
+                      <SelectItem
+                        value="Residencial"
+                        className="text-xs font-semibold text-[#0E9F8A]"
+                      >
+                        Tabela Residencial
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Select Loja Filter */}
+                {availableLojas.length > 0 && (
+                  <div className="w-full sm:w-48">
+                    <Select
+                      value={selectedLoja}
+                      onValueChange={(val) => {
+                        setSelectedLoja(val)
+                        setPage(1)
+                      }}
+                    >
+                      <SelectTrigger className="h-9 text-xs bg-[#F8FAFC] border-[#E3E9F2]">
+                        <div className="flex items-center gap-2 truncate">
+                          <Store className="w-3.5 h-3.5 text-[#8A97AC] shrink-0" />
+                          <span className="truncate">
+                            Loja:{' '}
+                            <strong>{selectedLoja === 'TODAS' ? 'Todas' : selectedLoja}</strong>
+                          </span>
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent className="bg-white max-h-56">
+                        <SelectItem value="TODAS" className="text-xs">
+                          Todas as Lojas
+                        </SelectItem>
+                        {availableLojas.map((l) => (
+                          <SelectItem key={l} value={l} className="text-xs uppercase">
+                            {l}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Clear Filters Button */}
+                {hasActiveFilters && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearFilters}
+                    className="h-9 text-xs text-[#5B6B82] hover:text-[#12233A] gap-1"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Limpar filtros</span>
+                  </Button>
+                )}
+              </div>
+
+              {/* Page size selector */}
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs text-[#5B6B82]">Exibir:</span>
+                <select
+                  value={perPage}
+                  onChange={(e) => {
+                    setPerPage(Number(e.target.value))
                     setPage(1)
                   }}
+                  className="h-8 text-xs rounded-md border border-[#E3E9F2] bg-white px-2 text-[#12365A] focus:outline-none focus:border-[#0E9F8A]"
                 >
-                  <SelectTrigger className="h-9 text-xs bg-[#F8FAFC] border-[#E3E9F2]">
-                    <div className="flex items-center gap-2 truncate">
-                      <Store className="w-3.5 h-3.5 text-[#8A97AC] shrink-0" />
-                      <span className="truncate">
-                        Loja: <strong>{selectedLoja === 'TODAS' ? 'Todas' : selectedLoja}</strong>
-                      </span>
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent className="bg-white max-h-56">
-                    <SelectItem value="TODAS" className="text-xs">
-                      Todas as Lojas
-                    </SelectItem>
-                    {availableLojas.map((l) => (
-                      <SelectItem key={l} value={l} className="text-xs uppercase">
-                        {l}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <option value={10}>10 linhas</option>
+                  <option value={25}>25 linhas</option>
+                  <option value={50}>50 linhas</option>
+                  <option value={100}>100 linhas</option>
+                </select>
               </div>
-            )}
+            </div>
 
-            {/* Clear Filters Button */}
-            {hasActiveFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleClearFilters}
-                className="h-9 text-xs text-[#5B6B82] hover:text-[#12233A] gap-1"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Limpar filtros</span>
-              </Button>
-            )}
-          </div>
+            {/* Analytical Table */}
+            <div className="relative overflow-x-auto max-h-[65vh] border-b border-[#E3E9F2]">
+              <table className="w-full text-left border-collapse text-[13px]">
+                {/* Table Head */}
+                <thead className="sticky top-0 z-20 bg-[#12365A] text-white shadow-sm font-semibold tracking-wider uppercase text-[11px]">
+                  <tr>
+                    <th className="px-3 py-3.5 w-12 text-center border-r border-[#1e456f]">#</th>
+                    <th className="px-3.5 py-3.5 min-w-[120px] border-r border-[#1e456f]">
+                      Tabela
+                    </th>
+                    <th className="px-3.5 py-3.5 min-w-[160px] border-r border-[#1e456f]">Loja</th>
+                    <th className="px-3.5 py-3.5 min-w-[160px] border-r border-[#1e456f]">
+                      Vendedor
+                    </th>
+                    <th className="px-3.5 py-3.5 min-w-[180px] border-r border-[#1e456f]">
+                      Cliente
+                    </th>
+                    <th className="px-3.5 py-3.5 min-w-[190px] border-r border-[#1e456f]">
+                      Arquivo de Origem
+                    </th>
+                    <th className="px-3 py-3.5 w-20 text-center border-r border-[#1e456f]">
+                      Linha
+                    </th>
+                    <th className="px-3.5 py-3.5 min-w-[300px] border-r border-[#1e456f]">
+                      Campos Extraídos (JSON)
+                    </th>
+                    <th className="px-3 py-3.5 w-24 text-center">Ações</th>
+                  </tr>
+                </thead>
 
-          {/* Page size selector */}
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-xs text-[#5B6B82]">Exibir:</span>
-            <select
-              value={perPage}
-              onChange={(e) => {
-                setPerPage(Number(e.target.value))
-                setPage(1)
-              }}
-              className="h-8 text-xs rounded-md border border-[#E3E9F2] bg-white px-2 text-[#12365A] focus:outline-none focus:border-[#0E9F8A]"
-            >
-              <option value={10}>10 linhas</option>
-              <option value={25}>25 linhas</option>
-              <option value={50}>50 linhas</option>
-              <option value={100}>100 linhas</option>
-            </select>
-          </div>
-        </div>
+                {/* Table Body */}
+                <tbody className="divide-y divide-[#E3E9F2]">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={9} className="py-16 text-center text-[#5B6B82]">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <div className="w-7 h-7 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
+                          <span className="text-xs sm:text-sm">
+                            Carregando linhas analíticas de Inadimplência...
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-16 text-center text-[#5B6B82]">
+                        <div className="flex flex-col items-center justify-center gap-3 max-w-md mx-auto">
+                          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-[#8A97AC]">
+                            <Database className="w-6 h-6" />
+                          </div>
+                          <div className="space-y-1">
+                            <p className="font-bold text-[#12365A] text-sm">
+                              Nenhuma linha analítica cadastrada ainda.
+                            </p>
+                            <p className="text-xs text-[#5B6B82] leading-relaxed">
+                              {hasActiveFilters
+                                ? 'Nenhum registro corresponde aos filtros selecionados. Tente ajustar os filtros ou a busca.'
+                                : 'Clique em "Importar Planilha" acima para carregar o arquivo Excel com as abas Móvel e Residencial.'}
+                            </p>
+                          </div>
+                          {hasActiveFilters ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={handleClearFilters}
+                              className="text-xs mt-1"
+                            >
+                              Limpar Filtros
+                            </Button>
+                          ) : (
+                            <Button
+                              onClick={() => fileInputRef.current?.click()}
+                              size="sm"
+                              className="text-xs mt-1 bg-[#0E9F8A] hover:bg-[#0c8a77] text-white gap-1.5"
+                            >
+                              <UploadCloud className="w-3.5 h-3.5" />
+                              <span>Importar Planilha Agora</span>
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    rows.map((row, idx) => {
+                      const isExpanded = !!expandedRowIds[row.id]
+                      const dadosKeys = Object.keys(row.dados || {})
+                      const isMovel = row.aba === 'Móvel'
 
-        {/* Analytical Table */}
-        <div className="relative overflow-x-auto max-h-[65vh] border-b border-[#E3E9F2]">
-          <table className="w-full text-left border-collapse text-[13px]">
-            {/* Table Head */}
-            <thead className="sticky top-0 z-20 bg-[#12365A] text-white shadow-sm font-semibold tracking-wider uppercase text-[11px]">
-              <tr>
-                <th className="px-3 py-3.5 w-12 text-center border-r border-[#1e456f]">#</th>
-                <th className="px-3.5 py-3.5 min-w-[120px] border-r border-[#1e456f]">Tabela</th>
-                <th className="px-3.5 py-3.5 min-w-[160px] border-r border-[#1e456f]">Loja</th>
-                <th className="px-3.5 py-3.5 min-w-[160px] border-r border-[#1e456f]">Vendedor</th>
-                <th className="px-3.5 py-3.5 min-w-[180px] border-r border-[#1e456f]">Cliente</th>
-                <th className="px-3.5 py-3.5 min-w-[190px] border-r border-[#1e456f]">
-                  Arquivo de Origem
-                </th>
-                <th className="px-3 py-3.5 w-20 text-center border-r border-[#1e456f]">Linha</th>
-                <th className="px-3.5 py-3.5 min-w-[300px] border-r border-[#1e456f]">
-                  Campos Extraídos (JSON)
-                </th>
-                <th className="px-3 py-3.5 w-24 text-center">Ações</th>
-              </tr>
-            </thead>
-
-            {/* Table Body */}
-            <tbody className="divide-y divide-[#E3E9F2]">
-              {loading ? (
-                <tr>
-                  <td colSpan={9} className="py-16 text-center text-[#5B6B82]">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <div className="w-7 h-7 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
-                      <span className="text-xs sm:text-sm">
-                        Carregando linhas analíticas de Inadimplência...
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ) : rows.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="py-16 text-center text-[#5B6B82]">
-                    <div className="flex flex-col items-center justify-center gap-3 max-w-md mx-auto">
-                      <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-[#8A97AC]">
-                        <Database className="w-6 h-6" />
-                      </div>
-                      <div className="space-y-1">
-                        <p className="font-bold text-[#12365A] text-sm">
-                          Nenhuma linha analítica cadastrada ainda.
-                        </p>
-                        <p className="text-xs text-[#5B6B82] leading-relaxed">
-                          {hasActiveFilters
-                            ? 'Nenhum registro corresponde aos filtros selecionados. Tente ajustar os filtros ou a busca.'
-                            : 'Clique em "Importar Planilha" acima para carregar o arquivo Excel com as abas Móvel e Residencial.'}
-                        </p>
-                      </div>
-                      {hasActiveFilters ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleClearFilters}
-                          className="text-xs mt-1"
-                        >
-                          Limpar Filtros
-                        </Button>
-                      ) : (
-                        <Button
-                          onClick={() => fileInputRef.current?.click()}
-                          size="sm"
-                          className="text-xs mt-1 bg-[#0E9F8A] hover:bg-[#0c8a77] text-white gap-1.5"
-                        >
-                          <UploadCloud className="w-3.5 h-3.5" />
-                          <span>Importar Planilha Agora</span>
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                rows.map((row, idx) => {
-                  const isExpanded = !!expandedRowIds[row.id]
-                  const dadosKeys = Object.keys(row.dados || {})
-                  const isMovel = row.aba === 'Móvel'
-
-                  return (
-                    <React.Fragment key={row.id}>
-                      <tr
-                        className={cn(
-                          'hover:bg-[#F0F5FC] transition-colors group',
-                          idx % 2 === 1 ? 'bg-[#FAFCFF]' : 'bg-white',
-                          isExpanded && 'bg-[#F0F5FC]/70',
-                        )}
-                      >
-                        {/* Index */}
-                        <td className="px-3 py-3 text-center text-xs text-slate-400 font-mono border-r border-[#E3E9F2]">
-                          {(page - 1) * perPage + idx + 1}
-                        </td>
-
-                        {/* Tabela / Aba */}
-                        <td className="px-3.5 py-3 border-r border-[#E3E9F2]">
-                          <Badge
-                            variant="outline"
+                      return (
+                        <React.Fragment key={row.id}>
+                          <tr
                             className={cn(
-                              'text-[11px] font-bold px-2 py-0.5 gap-1',
-                              isMovel
-                                ? 'bg-[#12365A]/10 text-[#12365A] border-[#12365A]/30'
-                                : 'bg-[#0E9F8A]/10 text-[#0E9F8A] border-[#0E9F8A]/30',
+                              'hover:bg-[#F0F5FC] transition-colors group',
+                              idx % 2 === 1 ? 'bg-[#FAFCFF]' : 'bg-white',
+                              isExpanded && 'bg-[#F0F5FC]/70',
                             )}
                           >
-                            {isMovel ? (
-                              <Smartphone className="w-3 h-3" />
-                            ) : (
-                              <Home className="w-3 h-3" />
-                            )}
-                            {row.aba}
-                          </Badge>
-                        </td>
+                            {/* Index */}
+                            <td className="px-3 py-3 text-center text-xs text-slate-400 font-mono border-r border-[#E3E9F2]">
+                              {(page - 1) * perPage + idx + 1}
+                            </td>
 
-                        {/* Loja */}
-                        <td className="px-3.5 py-3 font-semibold text-[#12365A] border-r border-[#E3E9F2]">
-                          {row.loja ? (
-                            <span className="uppercase tracking-wide text-xs">{row.loja}</span>
-                          ) : (
-                            <span className="text-slate-300 italic text-xs">—</span>
-                          )}
-                        </td>
-
-                        {/* Vendedor */}
-                        <td className="px-3.5 py-3 text-xs text-[#12365A] border-r border-[#E3E9F2]">
-                          {row.vendedor ? (
-                            <span className="font-medium">{row.vendedor}</span>
-                          ) : (
-                            <span className="text-slate-300 italic">—</span>
-                          )}
-                        </td>
-
-                        {/* Cliente */}
-                        <td className="px-3.5 py-3 text-xs text-[#12365A] border-r border-[#E3E9F2]">
-                          {row.cliente ? (
-                            <span className="font-medium line-clamp-1" title={row.cliente}>
-                              {row.cliente}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300 italic">—</span>
-                          )}
-                        </td>
-
-                        {/* Arquivo de Origem */}
-                        <td className="px-3.5 py-3 text-xs text-[#5B6B82] border-r border-[#E3E9F2]">
-                          {row.arquivo ? (
-                            <div
-                              className="flex items-center gap-1.5 max-w-[240px]"
-                              title={row.arquivo}
-                            >
-                              <FileSpreadsheet className="w-3.5 h-3.5 text-[#0E9F8A] shrink-0" />
-                              <span className="truncate font-mono">{row.arquivo}</span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-300 italic">—</span>
-                          )}
-                        </td>
-
-                        {/* Linha */}
-                        <td className="px-3 py-3 text-center text-xs font-mono font-semibold text-[#12365A] border-r border-[#E3E9F2]">
-                          {row.linha !== undefined && row.linha !== null ? (
-                            <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
-                              #{row.linha}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
-                        </td>
-
-                        {/* Dados Preview & Toggle */}
-                        <td className="px-3.5 py-3 border-r border-[#E3E9F2]">
-                          {dadosKeys.length === 0 ? (
-                            <span className="text-xs text-slate-300 italic">
-                              Nenhum campo registrado
-                            </span>
-                          ) : (
-                            <div className="space-y-1.5">
-                              {/* Preview chips of first 3 keys */}
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                {dadosKeys.slice(0, 3).map((key) => {
-                                  const val = String(row.dados?.[key] ?? '')
-                                  return (
-                                    <span
-                                      key={key}
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-[#12365A] text-[11px] border border-slate-200 max-w-[180px]"
-                                      title={`${key}: ${val}`}
-                                    >
-                                      <strong className="text-[#5B6B82] font-mono text-[10px] uppercase truncate max-w-[80px]">
-                                        {key}:
-                                      </strong>
-                                      <span className="truncate font-medium">{val || '—'}</span>
-                                    </span>
-                                  )
-                                })}
-
-                                {dadosKeys.length > 3 && (
-                                  <Badge
-                                    variant="secondary"
-                                    className="text-[10px] px-1.5 h-5 bg-slate-200 text-slate-700"
-                                  >
-                                    +{dadosKeys.length - 3} colunas
-                                  </Badge>
+                            {/* Tabela / Aba */}
+                            <td className="px-3.5 py-3 border-r border-[#E3E9F2]">
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  'text-[11px] font-bold px-2 py-0.5 gap-1',
+                                  isMovel
+                                    ? 'bg-[#12365A]/10 text-[#12365A] border-[#12365A]/30'
+                                    : 'bg-[#0E9F8A]/10 text-[#0E9F8A] border-[#0E9F8A]/30',
                                 )}
-                              </div>
+                              >
+                                {isMovel ? (
+                                  <Smartphone className="w-3 h-3" />
+                                ) : (
+                                  <Home className="w-3 h-3" />
+                                )}
+                                {row.aba}
+                              </Badge>
+                            </td>
 
-                              {/* Toggle expand button */}
-                              <div>
-                                <button
-                                  type="button"
-                                  onClick={() => toggleRowExpanded(row.id)}
-                                  className="inline-flex items-center gap-1 text-[11px] font-medium text-[#0E9F8A] hover:text-[#0c8a77] hover:underline"
-                                >
-                                  {isExpanded ? (
-                                    <>
-                                      <ChevronUp className="w-3.5 h-3.5" />
-                                      <span>Recolher colunas</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <ChevronDown className="w-3.5 h-3.5" />
-                                      <span>Ver todas as {dadosKeys.length} colunas</span>
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </td>
+                            {/* Loja */}
+                            <td className="px-3.5 py-3 font-semibold text-[#12365A] border-r border-[#E3E9F2]">
+                              {row.loja ? (
+                                <span className="uppercase tracking-wide text-xs">{row.loja}</span>
+                              ) : (
+                                <span className="text-slate-300 italic text-xs">—</span>
+                              )}
+                            </td>
 
-                        {/* Ações */}
-                        <td className="px-3 py-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setDetailRow(row)}
-                              className="h-7 w-7 p-0 text-[#5B6B82] hover:text-[#0E9F8A] hover:bg-[#0E9F8A]/10"
-                              title="Visualizar detalhes da linha"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setRowToDelete(row)}
-                              className="h-7 w-7 p-0 text-[#8A97AC] hover:text-red-600 hover:bg-red-50"
-                              title="Excluir esta linha"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
+                            {/* Vendedor */}
+                            <td className="px-3.5 py-3 text-xs text-[#12365A] border-r border-[#E3E9F2]">
+                              {row.vendedor ? (
+                                <span className="font-medium">{row.vendedor}</span>
+                              ) : (
+                                <span className="text-slate-300 italic">—</span>
+                              )}
+                            </td>
 
-                      {/* Expandable JSON Detail View row */}
-                      {isExpanded && (
-                        <tr className="bg-[#F8FAFC] border-b border-[#E3E9F2]">
-                          <td colSpan={9} className="px-6 py-4">
-                            <div className="bg-white rounded-lg border border-[#E3E9F2] p-4 space-y-3 shadow-inner">
-                              <div className="flex items-center justify-between border-b pb-2">
-                                <div className="flex items-center gap-2">
-                                  <Code2 className="w-4 h-4 text-[#0E9F8A]" />
-                                  <span className="text-xs font-bold text-[#12365A] uppercase tracking-wider">
-                                    Todas as Colunas Extraídas da Linha #{row.linha || row.id}{' '}
-                                    (Tabela {row.aba})
-                                  </span>
-                                </div>
-                                <span className="text-[11px] text-[#5B6B82]">
-                                  {dadosKeys.length} colunas capturadas dinamicamente
+                            {/* Cliente */}
+                            <td className="px-3.5 py-3 text-xs text-[#12365A] border-r border-[#E3E9F2]">
+                              {row.cliente ? (
+                                <span className="font-medium line-clamp-1" title={row.cliente}>
+                                  {row.cliente}
                                 </span>
-                              </div>
+                              ) : (
+                                <span className="text-slate-300 italic">—</span>
+                              )}
+                            </td>
 
-                              {/* Key-value grid */}
-                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 max-h-72 overflow-y-auto pr-1">
-                                {dadosKeys.map((k) => {
-                                  const v = row.dados?.[k]
-                                  return (
-                                    <div
-                                      key={k}
-                                      className="p-2.5 rounded-md bg-[#F8FAFC] border border-[#E3E9F2] text-xs space-y-0.5 hover:border-[#0E9F8A]/50 transition-colors"
+                            {/* Arquivo de Origem */}
+                            <td className="px-3.5 py-3 text-xs text-[#5B6B82] border-r border-[#E3E9F2]">
+                              {row.arquivo ? (
+                                <div
+                                  className="flex items-center gap-1.5 max-w-[240px]"
+                                  title={row.arquivo}
+                                >
+                                  <FileSpreadsheet className="w-3.5 h-3.5 text-[#0E9F8A] shrink-0" />
+                                  <span className="truncate font-mono">{row.arquivo}</span>
+                                </div>
+                              ) : (
+                                <span className="text-slate-300 italic">—</span>
+                              )}
+                            </td>
+
+                            {/* Linha */}
+                            <td className="px-3 py-3 text-center text-xs font-mono font-semibold text-[#12365A] border-r border-[#E3E9F2]">
+                              {row.linha !== undefined && row.linha !== null ? (
+                                <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                                  #{row.linha}
+                                </span>
+                              ) : (
+                                <span className="text-slate-300">—</span>
+                              )}
+                            </td>
+
+                            {/* Dados Preview & Toggle */}
+                            <td className="px-3.5 py-3 border-r border-[#E3E9F2]">
+                              {dadosKeys.length === 0 ? (
+                                <span className="text-xs text-slate-300 italic">
+                                  Nenhum campo registrado
+                                </span>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {/* Preview chips of first 3 keys */}
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    {dadosKeys.slice(0, 3).map((key) => {
+                                      const val = String(row.dados?.[key] ?? '')
+                                      return (
+                                        <span
+                                          key={key}
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-[#12365A] text-[11px] border border-slate-200 max-w-[180px]"
+                                          title={`${key}: ${val}`}
+                                        >
+                                          <strong className="text-[#5B6B82] font-mono text-[10px] uppercase truncate max-w-[80px]">
+                                            {key}:
+                                          </strong>
+                                          <span className="truncate font-medium">{val || '—'}</span>
+                                        </span>
+                                      )
+                                    })}
+
+                                    {dadosKeys.length > 3 && (
+                                      <Badge
+                                        variant="secondary"
+                                        className="text-[10px] px-1.5 h-5 bg-slate-200 text-slate-700"
+                                      >
+                                        +{dadosKeys.length - 3} colunas
+                                      </Badge>
+                                    )}
+                                  </div>
+
+                                  {/* Toggle expand button */}
+                                  <div>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleRowExpanded(row.id)}
+                                      className="inline-flex items-center gap-1 text-[11px] font-medium text-[#0E9F8A] hover:text-[#0c8a77] hover:underline"
                                     >
-                                      <span
-                                        className="text-[10px] uppercase font-bold text-[#5B6B82] block truncate"
-                                        title={k}
-                                      >
-                                        {k}
-                                      </span>
-                                      <span
-                                        className="font-semibold text-[#12365A] block truncate font-mono text-xs"
-                                        title={String(v ?? '')}
-                                      >
-                                        {v !== null && v !== undefined && v !== '' ? (
-                                          String(v)
-                                        ) : (
-                                          <span className="text-slate-300 italic font-sans font-normal">
-                                            —
-                                          </span>
-                                        )}
+                                      {isExpanded ? (
+                                        <>
+                                          <ChevronUp className="w-3.5 h-3.5" />
+                                          <span>Recolher colunas</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <ChevronDown className="w-3.5 h-3.5" />
+                                          <span>Ver todas as {dadosKeys.length} colunas</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Ações */}
+                            <td className="px-3 py-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setDetailRow(row)}
+                                  className="h-7 w-7 p-0 text-[#5B6B82] hover:text-[#0E9F8A] hover:bg-[#0E9F8A]/10"
+                                  title="Visualizar detalhes da linha"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setRowToDelete(row)}
+                                  className="h-7 w-7 p-0 text-[#8A97AC] hover:text-red-600 hover:bg-red-50"
+                                  title="Excluir esta linha"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+
+                          {/* Expandable JSON Detail View row */}
+                          {isExpanded && (
+                            <tr className="bg-[#F8FAFC] border-b border-[#E3E9F2]">
+                              <td colSpan={9} className="px-6 py-4">
+                                <div className="bg-white rounded-lg border border-[#E3E9F2] p-4 space-y-3 shadow-inner">
+                                  <div className="flex items-center justify-between border-b pb-2">
+                                    <div className="flex items-center gap-2">
+                                      <Code2 className="w-4 h-4 text-[#0E9F8A]" />
+                                      <span className="text-xs font-bold text-[#12365A] uppercase tracking-wider">
+                                        Todas as Colunas Extraídas da Linha #{row.linha || row.id}{' '}
+                                        (Tabela {row.aba})
                                       </span>
                                     </div>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </React.Fragment>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                                    <span className="text-[11px] text-[#5B6B82]">
+                                      {dadosKeys.length} colunas capturadas dinamicamente
+                                    </span>
+                                  </div>
 
-        {/* Pagination Footer */}
-        {totalPages > 1 && (
-          <div className="p-4 border-t border-[#E3E9F2] bg-white flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#5B6B82]">
-            <div>
-              Mostrando <strong>{(page - 1) * perPage + 1}</strong> a{' '}
-              <strong>{Math.min(page * perPage, totalItems)}</strong> de{' '}
-              <strong>{totalItems.toLocaleString('pt-BR')}</strong> linhas analíticas
+                                  {/* Key-value grid */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 max-h-72 overflow-y-auto pr-1">
+                                    {dadosKeys.map((k) => {
+                                      const v = row.dados?.[k]
+                                      return (
+                                        <div
+                                          key={k}
+                                          className="p-2.5 rounded-md bg-[#F8FAFC] border border-[#E3E9F2] text-xs space-y-0.5 hover:border-[#0E9F8A]/50 transition-colors"
+                                        >
+                                          <span
+                                            className="text-[10px] uppercase font-bold text-[#5B6B82] block truncate"
+                                            title={k}
+                                          >
+                                            {k}
+                                          </span>
+                                          <span
+                                            className="font-semibold text-[#12365A] block truncate font-mono text-xs"
+                                            title={String(v ?? '')}
+                                          >
+                                            {v !== null && v !== undefined && v !== '' ? (
+                                              String(v)
+                                            ) : (
+                                              <span className="text-slate-300 italic font-sans font-normal">
+                                                —
+                                              </span>
+                                            )}
+                                          </span>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
 
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.max(p - 1, 1))}
-                disabled={page <= 1 || loading}
-                className="h-8 px-2.5 text-xs text-[#12365A]"
-              >
-                <ChevronLeft className="w-3.5 h-3.5 mr-1" />
-                <span>Anterior</span>
-              </Button>
+            {/* Pagination Footer */}
+            {totalPages > 1 && (
+              <div className="p-4 border-t border-[#E3E9F2] bg-white flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#5B6B82]">
+                <div>
+                  Mostrando <strong>{(page - 1) * perPage + 1}</strong> a{' '}
+                  <strong>{Math.min(page * perPage, totalItems)}</strong> de{' '}
+                  <strong>{totalItems.toLocaleString('pt-BR')}</strong> linhas analíticas
+                </div>
 
-              <div className="px-2 text-xs font-semibold text-[#12365A]">
-                Página {page} de {totalPages}
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((p) => Math.max(p - 1, 1))}
+                    disabled={page <= 1 || loading}
+                    className="h-8 px-2.5 text-xs text-[#12365A]"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5 mr-1" />
+                    <span>Anterior</span>
+                  </Button>
+
+                  <div className="px-2 text-xs font-semibold text-[#12365A]">
+                    Página {page} de {totalPages}
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
+                    disabled={page >= totalPages || loading}
+                    className="h-8 px-2.5 text-xs text-[#12365A]"
+                  >
+                    <span>Próxima</span>
+                    <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                  </Button>
+                </div>
               </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-                disabled={page >= totalPages || loading}
-                className="h-8 px-2.5 text-xs text-[#12365A]"
-              >
-                <span>Próxima</span>
-                <ChevronRight className="w-3.5 h-3.5 ml-1" />
-              </Button>
-            </div>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Import Modal Dialog */}
       <Dialog
