@@ -4,8 +4,32 @@ routerAdd(
   'POST',
   '/api/custom/relacionamento/clear',
   (e) => {
-    const body = e.requestInfo().body || {}
+    let body = {}
+    try {
+      const rawBody = e.requestInfo().body
+      if (rawBody) {
+        if (typeof rawBody === 'string') {
+          body = JSON.parse(rawBody)
+        } else if (typeof rawBody === 'object') {
+          body = rawBody
+        }
+      }
+    } catch (parseErr) {
+      console.error('[relacionamento_clear] Erro ao parsear JSON do corpo da requisição:', parseErr)
+    }
+
+    if (!body || Object.keys(body).length === 0) {
+      try {
+        const bound = {}
+        e.bindBody(bound)
+        if (bound && Object.keys(bound).length > 0) {
+          body = bound
+        }
+      } catch (_) {}
+    }
+
     const target = body.target // 'movel', 'residencial', or 'TODAS'
+    console.log('[relacionamento_clear] Recebida solicitação para limpar:', { target: target })
 
     let movelCount = 0
     let residencialCount = 0
@@ -31,6 +55,11 @@ routerAdd(
         $app.db().newQuery('DELETE FROM residencial').execute()
       }
     }
+
+    console.log('[relacionamento_clear] Limpeza finalizada:', {
+      movelCount: movelCount,
+      residencialCount: residencialCount,
+    })
 
     return e.json(200, {
       success: true,

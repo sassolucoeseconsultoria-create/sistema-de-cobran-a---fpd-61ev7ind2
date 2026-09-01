@@ -283,42 +283,43 @@ export async function insertMovelBatch(
 
     try {
       // Send chunk to high-speed backend hook
-      await pb.send('/api/custom/relacionamento/batch', {
-        method: 'POST',
-        body: {
-          collection: 'movel',
-          rows: chunk,
+      const response = await pb.send<{ success?: boolean; inserted?: number }>(
+        '/api/custom/relacionamento/batch',
+        {
+          method: 'POST',
+          body: {
+            collection: 'movel',
+            rows: chunk,
+          },
+          requestKey: null,
         },
-        requestKey: null,
-      })
-      insertedTotal += chunk.length
+      )
+      insertedTotal += response?.inserted ?? chunk.length
     } catch (err) {
       console.warn(
-        'Backend custom batch falhou, usando inserção sequencial em lotes controlados:',
+        'Backend custom batch falhou, usando inserção sequencial segura para evitar 429:',
         err,
       )
-      // Fallback: sequential batch of 5 to avoid 429
-      const subBatchSize = 5
-      for (let j = 0; j < chunk.length; j += subBatchSize) {
-        const sub = chunk.slice(j, j + subBatchSize)
-        await Promise.all(
-          sub.map((item) =>
-            pb.collection('movel').create(
-              {
-                arquivo: item.arquivo?.trim() || '',
-                linha: item.linha,
-                loja: item.loja?.trim() || '',
-                vendedor: item.vendedor?.trim() || '',
-                cliente: item.cliente?.trim() || '',
-                dados: item.dados || {},
-              },
-              { requestKey: null },
-            ),
-          ),
+      // Safe serial fallback: insert 1 by 1 with pause between requests to strictly prevent 429
+      for (let j = 0; j < chunk.length; j++) {
+        const item = chunk[j]
+        await pb.collection('movel').create(
+          {
+            arquivo: item.arquivo?.trim() || '',
+            linha: item.linha,
+            loja: item.loja?.trim() || '',
+            vendedor: item.vendedor?.trim() || '',
+            cliente: item.cliente?.trim() || '',
+            dados: item.dados || {},
+          },
+          { requestKey: null },
         )
-        insertedTotal += sub.length
-        // Small 50ms pause between sub-batches
-        await new Promise((resolve) => setTimeout(resolve, 50))
+        insertedTotal++
+        if (onProgress && (j + 1) % 5 === 0) {
+          onProgress(insertedTotal, rows.length)
+        }
+        // 120ms pause between individual creates to respect rate limits
+        await new Promise((resolve) => setTimeout(resolve, 120))
       }
     }
 
@@ -355,41 +356,43 @@ export async function insertResidencialBatch(
     const chunk = rows.slice(i, i + chunkSize)
 
     try {
-      await pb.send('/api/custom/relacionamento/batch', {
-        method: 'POST',
-        body: {
-          collection: 'residencial',
-          rows: chunk,
+      const response = await pb.send<{ success?: boolean; inserted?: number }>(
+        '/api/custom/relacionamento/batch',
+        {
+          method: 'POST',
+          body: {
+            collection: 'residencial',
+            rows: chunk,
+          },
+          requestKey: null,
         },
-        requestKey: null,
-      })
-      insertedTotal += chunk.length
+      )
+      insertedTotal += response?.inserted ?? chunk.length
     } catch (err) {
       console.warn(
-        'Backend custom batch falhou, usando inserção sequencial em lotes controlados:',
+        'Backend custom batch falhou, usando inserção sequencial segura para evitar 429:',
         err,
       )
-      const subBatchSize = 5
-      for (let j = 0; j < chunk.length; j += subBatchSize) {
-        const sub = chunk.slice(j, j + subBatchSize)
-        await Promise.all(
-          sub.map((item) =>
-            pb.collection('residencial').create(
-              {
-                arquivo: item.arquivo?.trim() || '',
-                linha: item.linha,
-                loja: item.loja?.trim() || '',
-                vendedor: item.vendedor?.trim() || '',
-                cliente: item.cliente?.trim() || '',
-                dados: item.dados || {},
-                ...(item.typedFields || {}),
-              },
-              { requestKey: null },
-            ),
-          ),
+      // Safe serial fallback: insert 1 by 1 with pause between requests to strictly prevent 429
+      for (let j = 0; j < chunk.length; j++) {
+        const item = chunk[j]
+        await pb.collection('residencial').create(
+          {
+            arquivo: item.arquivo?.trim() || '',
+            linha: item.linha,
+            loja: item.loja?.trim() || '',
+            vendedor: item.vendedor?.trim() || '',
+            cliente: item.cliente?.trim() || '',
+            dados: item.dados || {},
+            ...(item.typedFields || {}),
+          },
+          { requestKey: null },
         )
-        insertedTotal += sub.length
-        await new Promise((resolve) => setTimeout(resolve, 50))
+        insertedTotal++
+        if (onProgress && (j + 1) % 5 === 0) {
+          onProgress(insertedTotal, rows.length)
+        }
+        await new Promise((resolve) => setTimeout(resolve, 120))
       }
     }
 
@@ -442,33 +445,25 @@ export async function clearAllAnalyticalRows(targetAba?: RelacionamentoAba | 'TO
     let residencialCount = 0
 
     if (!targetAba || targetAba === 'TODAS' || targetAba === 'Móvel') {
-      const movelRecords = await pb.collection('movel').getList<{ id: string }>(1, 500, {
+      const movelRecords = await pb.collection('movel').getList<{ id: string }>(1, 200, {
         fields: 'id',
         requestKey: null,
       })
-      const batchSize = 10
-      for (let i = 0; i < movelRecords.items.length; i += batchSize) {
-        const batch = movelRecords.items.slice(i, i + batchSize)
-        await Promise.all(
-          batch.map((r) => pb.collection('movel').delete(r.id, { requestKey: null })),
-        )
-        await new Promise((resolve) => setTimeout(resolve, 30))
+      for (const r of movelRecords.items) {
+        await pb.collection('movel').delete(r.id, { requestKey: null })
+        await new Promise((resolve) => setTimeout(resolve, 80))
       }
       movelCount = movelRecords.totalItems
     }
 
     if (!targetAba || targetAba === 'TODAS' || targetAba === 'Residencial') {
-      const resRecords = await pb.collection('residencial').getList<{ id: string }>(1, 500, {
+      const resRecords = await pb.collection('residencial').getList<{ id: string }>(1, 200, {
         fields: 'id',
         requestKey: null,
       })
-      const batchSize = 10
-      for (let i = 0; i < resRecords.items.length; i += batchSize) {
-        const batch = resRecords.items.slice(i, i + batchSize)
-        await Promise.all(
-          batch.map((r) => pb.collection('residencial').delete(r.id, { requestKey: null })),
-        )
-        await new Promise((resolve) => setTimeout(resolve, 30))
+      for (const r of resRecords.items) {
+        await pb.collection('residencial').delete(r.id, { requestKey: null })
+        await new Promise((resolve) => setTimeout(resolve, 80))
       }
       residencialCount = resRecords.totalItems
     }
