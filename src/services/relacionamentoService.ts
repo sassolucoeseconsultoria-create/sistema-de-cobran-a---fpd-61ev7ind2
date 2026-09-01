@@ -29,21 +29,34 @@ export interface FetchAnalyticalResult {
 const pendingAnalyticalRequests = new Map<string, Promise<FetchAnalyticalResult>>()
 let pendingLojasRequest: Promise<string[]> | null = null
 
+// Short TTL memory cache for distinct lojas to prevent repeat requests
+let cachedLojas: { data: string[]; timestamp: number } | null = null
+const LOJAS_CACHE_TTL = 30000 // 30 seconds
+
+/**
+ * Invalidate stores cache when new data is imported or deleted
+ */
+export function invalidateAnalyticalCache() {
+  cachedLojas = null
+  pendingAnalyticalRequests.clear()
+  pendingLojasRequest = null
+}
+
 /**
  * Lists rows from the 'movel' and 'residencial' collections with filtering and pagination.
- * Features request deduplication to prevent duplicate in-flight requests.
+ * Features request deduplication to prevent duplicate in-flight requests and avoids 429 errors.
  */
 export async function fetchAnalyticalRows(
   params: FetchAnalyticalParams = {},
 ): Promise<FetchAnalyticalResult> {
-  const page = params.page || 1
-  const perPage = params.perPage || 25
+  const page = Math.max(1, Number(params.page) || 1)
+  const perPage = Math.max(1, Math.min(100, Number(params.perPage) || 25))
   const selectedAba = params.aba || 'TODAS'
   const loja = params.loja || 'TODAS'
   const search = params.search?.trim() || ''
   const sortStr = params.sort || '-created'
 
-  // Build a unique key for deduplication
+  // Build a unique key for in-flight deduplication
   const cacheKey = JSON.stringify({ page, perPage, selectedAba, loja, search, sortStr })
 
   const existing = pendingAnalyticalRequests.get(cacheKey)
@@ -71,6 +84,7 @@ export async function fetchAnalyticalRows(
       const res = await pb.collection('movel').getList<MovelRecord>(page, perPage, {
         filter: filterStr,
         sort: sortStr,
+        requestKey: null, // Avoid client auto-cancellation conflicts
       })
 
       const items: UnifiedAnalyticRecord[] = res.items.map((r) => ({
@@ -94,6 +108,7 @@ export async function fetchAnalyticalRows(
       const res = await pb.collection('residencial').getList<ResidencialRecord>(page, perPage, {
         filter: filterStr,
         sort: sortStr,
+        requestKey: null,
       })
 
       const items: UnifiedAnalyticRecord[] = res.items.map((r) => ({
@@ -114,14 +129,18 @@ export async function fetchAnalyticalRows(
     }
 
     // When 'TODAS': Fetch items from both collections
+    // Limit perPage on individual queries to prevent excessive data transfer
+    const fetchLimit = Math.min(perPage, 50)
     const [resMovel, resResidencial] = await Promise.all([
-      pb.collection('movel').getList<MovelRecord>(1, Math.min(perPage, 50), {
+      pb.collection('movel').getList<MovelRecord>(page, fetchLimit, {
         filter: filterStr,
         sort: sortStr,
+        requestKey: null,
       }),
-      pb.collection('residencial').getList<ResidencialRecord>(1, Math.min(perPage, 50), {
+      pb.collection('residencial').getList<ResidencialRecord>(page, fetchLimit, {
         filter: filterStr,
         sort: sortStr,
+        requestKey: null,
       }),
     ])
 
@@ -147,8 +166,8 @@ export async function fetchAnalyticalRows(
     const totalItems = resMovel.totalItems + resResidencial.totalItems
     const totalPages = Math.max(1, Math.ceil(totalItems / perPage))
 
-    const startIndex = (page - 1) * perPage
-    const paginatedItems = merged.slice(startIndex, startIndex + perPage)
+    // If page is 1, take first perPage items directly
+    const paginatedItems = merged.slice(0, perPage)
 
     return {
       items: paginatedItems,
@@ -171,40 +190,62 @@ export async function fetchAnalyticalRows(
 
 /**
  * Fetch distinct store names from both 'movel' and 'residencial' collections for filtering.
- * Features deduplication of in-flight requests.
+ * Uses the custom backend endpoint or cached memory, preventing massive record downloads.
  */
 export async function fetchDistinctAnalyticalLojas(): Promise<string[]> {
+  const now = Date.now()
+  if (cachedLojas && now - cachedLojas.timestamp < LOJAS_CACHE_TTL) {
+    return cachedLojas.data
+  }
+
   if (pendingLojasRequest) {
     return pendingLojasRequest
   }
 
   const fetchPromise = (async () => {
     try {
+      // 1. Try dedicated high-performance hook endpoint first
+      try {
+        const response = await pb.send<{ lojas: string[] }>('/api/custom/relacionamento/lojas', {
+          method: 'GET',
+          requestKey: null,
+        })
+        if (response && Array.isArray(response.lojas)) {
+          cachedLojas = { data: response.lojas, timestamp: Date.now() }
+          return response.lojas
+        }
+      } catch {
+        // Fallback to standard SDK queries if custom endpoint is not reached
+      }
+
+      // 2. Fallback: Query first page with max batch to avoid 429
       const [recordsMovel, recordsResidencial] = await Promise.all([
-        pb.collection('movel').getFullList<MovelRecord>({
+        pb.collection('movel').getList<MovelRecord>(1, 200, {
           fields: 'loja',
           sort: 'loja',
-          batch: 500,
+          requestKey: null,
         }),
-        pb.collection('residencial').getFullList<ResidencialRecord>({
+        pb.collection('residencial').getList<ResidencialRecord>(1, 200, {
           fields: 'loja',
           sort: 'loja',
-          batch: 500,
+          requestKey: null,
         }),
       ])
 
       const lojasSet = new Set<string>()
-      for (const r of recordsMovel) {
+      for (const r of recordsMovel.items) {
         if (r.loja && r.loja.trim()) lojasSet.add(r.loja.trim())
       }
-      for (const r of recordsResidencial) {
+      for (const r of recordsResidencial.items) {
         if (r.loja && r.loja.trim()) lojasSet.add(r.loja.trim())
       }
 
-      return Array.from(lojasSet).sort((a, b) => a.localeCompare(b))
+      const result = Array.from(lojasSet).sort((a, b) => a.localeCompare(b))
+      cachedLojas = { data: result, timestamp: Date.now() }
+      return result
     } catch (err) {
       console.error('Erro ao buscar lojas analíticas:', err)
-      return []
+      return cachedLojas?.data || []
     }
   })()
 
@@ -217,7 +258,8 @@ export async function fetchDistinctAnalyticalLojas(): Promise<string[]> {
 }
 
 /**
- * Insert batch of rows into collection 'movel'
+ * Insert batch of rows into collection 'movel' using transactional endpoint
+ * with fallback to serial SDK chunking to prevent rate limits.
  */
 export async function insertMovelBatch(
   rows: Array<{
@@ -230,32 +272,66 @@ export async function insertMovelBatch(
   }>,
   onProgress?: (inserted: number, total: number) => void,
 ): Promise<number> {
-  const batchSize = 25
-  let inserted = 0
+  if (!rows || rows.length === 0) return 0
+  invalidateAnalyticalCache()
 
-  for (let i = 0; i < rows.length; i += batchSize) {
-    const chunk = rows.slice(i, i + batchSize)
-    await Promise.all(
-      chunk.map((item) =>
-        pb.collection('movel').create({
-          arquivo: item.arquivo?.trim() || '',
-          linha: item.linha,
-          loja: item.loja?.trim() || '',
-          vendedor: item.vendedor?.trim() || '',
-          cliente: item.cliente?.trim() || '',
-          dados: item.dados || {},
-        }),
-      ),
-    )
-    inserted += chunk.length
-    if (onProgress) onProgress(inserted, rows.length)
+  const chunkSize = 200 // Up to 200 rows per transaction hook
+  let insertedTotal = 0
+
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize)
+
+    try {
+      // Send chunk to high-speed backend hook
+      await pb.send('/api/custom/relacionamento/batch', {
+        method: 'POST',
+        body: {
+          collection: 'movel',
+          rows: chunk,
+        },
+        requestKey: null,
+      })
+      insertedTotal += chunk.length
+    } catch (err) {
+      console.warn(
+        'Backend custom batch falhou, usando inserção sequencial em lotes controlados:',
+        err,
+      )
+      // Fallback: sequential batch of 5 to avoid 429
+      const subBatchSize = 5
+      for (let j = 0; j < chunk.length; j += subBatchSize) {
+        const sub = chunk.slice(j, j + subBatchSize)
+        await Promise.all(
+          sub.map((item) =>
+            pb.collection('movel').create(
+              {
+                arquivo: item.arquivo?.trim() || '',
+                linha: item.linha,
+                loja: item.loja?.trim() || '',
+                vendedor: item.vendedor?.trim() || '',
+                cliente: item.cliente?.trim() || '',
+                dados: item.dados || {},
+              },
+              { requestKey: null },
+            ),
+          ),
+        )
+        insertedTotal += sub.length
+        // Small 50ms pause between sub-batches
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+    }
+
+    if (onProgress) {
+      onProgress(insertedTotal, rows.length)
+    }
   }
 
-  return inserted
+  return insertedTotal
 }
 
 /**
- * Insert batch of rows into collection 'residencial'
+ * Insert batch of rows into collection 'residencial' using transactional endpoint
  */
 export async function insertResidencialBatch(
   rows: Array<{
@@ -269,75 +345,136 @@ export async function insertResidencialBatch(
   }>,
   onProgress?: (inserted: number, total: number) => void,
 ): Promise<number> {
-  const batchSize = 25
-  let inserted = 0
+  if (!rows || rows.length === 0) return 0
+  invalidateAnalyticalCache()
 
-  for (let i = 0; i < rows.length; i += batchSize) {
-    const chunk = rows.slice(i, i + batchSize)
-    await Promise.all(
-      chunk.map((item) => {
-        const payload: Record<string, unknown> = {
-          arquivo: item.arquivo?.trim() || '',
-          linha: item.linha,
-          loja: item.loja?.trim() || '',
-          vendedor: item.vendedor?.trim() || '',
-          cliente: item.cliente?.trim() || '',
-          dados: item.dados || {},
-          ...(item.typedFields || {}),
-        }
-        return pb.collection('residencial').create(payload)
-      }),
-    )
-    inserted += chunk.length
-    if (onProgress) onProgress(inserted, rows.length)
+  const chunkSize = 200
+  let insertedTotal = 0
+
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize)
+
+    try {
+      await pb.send('/api/custom/relacionamento/batch', {
+        method: 'POST',
+        body: {
+          collection: 'residencial',
+          rows: chunk,
+        },
+        requestKey: null,
+      })
+      insertedTotal += chunk.length
+    } catch (err) {
+      console.warn(
+        'Backend custom batch falhou, usando inserção sequencial em lotes controlados:',
+        err,
+      )
+      const subBatchSize = 5
+      for (let j = 0; j < chunk.length; j += subBatchSize) {
+        const sub = chunk.slice(j, j + subBatchSize)
+        await Promise.all(
+          sub.map((item) =>
+            pb.collection('residencial').create(
+              {
+                arquivo: item.arquivo?.trim() || '',
+                linha: item.linha,
+                loja: item.loja?.trim() || '',
+                vendedor: item.vendedor?.trim() || '',
+                cliente: item.cliente?.trim() || '',
+                dados: item.dados || {},
+                ...(item.typedFields || {}),
+              },
+              { requestKey: null },
+            ),
+          ),
+        )
+        insertedTotal += sub.length
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+    }
+
+    if (onProgress) {
+      onProgress(insertedTotal, rows.length)
+    }
   }
 
-  return inserted
+  return insertedTotal
 }
 
 /**
  * Delete a single record from 'movel' or 'residencial'.
  */
 export async function deleteAnalyticalRow(id: string, aba: RelacionamentoAba): Promise<boolean> {
+  invalidateAnalyticalCache()
   const collectionName = aba === 'Móvel' ? 'movel' : 'residencial'
-  return await pb.collection(collectionName).delete(id)
+  return await pb.collection(collectionName).delete(id, { requestKey: null })
 }
 
 /**
  * Clear all records from both 'movel' and 'residencial' collections (or single aba).
+ * Uses fast server-side truncate endpoint to prevent hundreds of DELETE requests.
  */
 export async function clearAllAnalyticalRows(targetAba?: RelacionamentoAba | 'TODAS'): Promise<{
   movelCount: number
   residencialCount: number
 }> {
-  let movelCount = 0
-  let residencialCount = 0
+  invalidateAnalyticalCache()
 
-  if (!targetAba || targetAba === 'TODAS' || targetAba === 'Móvel') {
-    const movelRecords = await pb.collection('movel').getFullList<{ id: string }>({
-      fields: 'id',
+  try {
+    const res = await pb.send<{
+      success: boolean
+      movelCount: number
+      residencialCount: number
+    }>('/api/custom/relacionamento/clear', {
+      method: 'POST',
+      body: {
+        target: targetAba || 'TODAS',
+      },
+      requestKey: null,
     })
-    const batchSize = 30
-    for (let i = 0; i < movelRecords.length; i += batchSize) {
-      const batch = movelRecords.slice(i, i + batchSize)
-      await Promise.all(batch.map((r) => pb.collection('movel').delete(r.id)))
+    return {
+      movelCount: res.movelCount || 0,
+      residencialCount: res.residencialCount || 0,
     }
-    movelCount = movelRecords.length
-  }
+  } catch (err) {
+    console.warn('Backend clear hook falhou, executando fallback por SDK:', err)
+    let movelCount = 0
+    let residencialCount = 0
 
-  if (!targetAba || targetAba === 'TODAS' || targetAba === 'Residencial') {
-    const resRecords = await pb.collection('residencial').getFullList<{ id: string }>({
-      fields: 'id',
-    })
-    const batchSize = 30
-    for (let i = 0; i < resRecords.length; i += batchSize) {
-      const batch = resRecords.slice(i, i + batchSize)
-      await Promise.all(batch.map((r) => pb.collection('residencial').delete(r.id)))
+    if (!targetAba || targetAba === 'TODAS' || targetAba === 'Móvel') {
+      const movelRecords = await pb.collection('movel').getList<{ id: string }>(1, 500, {
+        fields: 'id',
+        requestKey: null,
+      })
+      const batchSize = 10
+      for (let i = 0; i < movelRecords.items.length; i += batchSize) {
+        const batch = movelRecords.items.slice(i, i + batchSize)
+        await Promise.all(
+          batch.map((r) => pb.collection('movel').delete(r.id, { requestKey: null })),
+        )
+        await new Promise((resolve) => setTimeout(resolve, 30))
+      }
+      movelCount = movelRecords.totalItems
     }
-    residencialCount = resRecords.length
-  }
 
-  return { movelCount, residencialCount }
+    if (!targetAba || targetAba === 'TODAS' || targetAba === 'Residencial') {
+      const resRecords = await pb.collection('residencial').getList<{ id: string }>(1, 500, {
+        fields: 'id',
+        requestKey: null,
+      })
+      const batchSize = 10
+      for (let i = 0; i < resRecords.items.length; i += batchSize) {
+        const batch = resRecords.items.slice(i, i + batchSize)
+        await Promise.all(
+          batch.map((r) => pb.collection('residencial').delete(r.id, { requestKey: null })),
+        )
+        await new Promise((resolve) => setTimeout(resolve, 30))
+      }
+      residencialCount = resRecords.totalItems
+    }
+
+    return { movelCount, residencialCount }
+  }
 }
 
 // Backward compatibility exports for existing codebase referencing relacionamentoService

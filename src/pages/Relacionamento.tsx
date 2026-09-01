@@ -4,8 +4,6 @@ import {
   Filter,
   X,
   RotateCcw,
-  Table,
-  Layers,
   ChevronDown,
   ChevronUp,
   ChevronLeft,
@@ -13,23 +11,15 @@ import {
   Database,
   FileSpreadsheet,
   Store,
-  Sparkles,
   RefreshCw,
   Code2,
   Trash2,
   Eye,
-  CheckCircle2,
-  AlertCircle,
   UploadCloud,
-  FileUp,
   Smartphone,
   Home,
   Check,
   User,
-  Phone,
-  FileText,
-  Calendar,
-  DollarSign,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -42,13 +32,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
 import { useToast } from '@/hooks/use-toast'
 import useRealtime from '@/hooks/use-realtime'
@@ -59,6 +43,7 @@ import {
   clearAllAnalyticalRows,
   insertMovelBatch,
   insertResidencialBatch,
+  invalidateAnalyticalCache,
 } from '@/services/relacionamentoService'
 import { parseAnalyticalXlsxFile, ParsedAnalyticalFileData } from '@/lib/analyticalImportParser'
 import type {
@@ -103,12 +88,19 @@ export const Relacionamento: React.FC = () => {
 
   // Import Dialog State
   const [importDialogOpen, setImportDialogOpen] = useState(false)
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [, setSelectedFiles] = useState<File[]>([])
   const [isProcessingFiles, setIsProcessingFiles] = useState(false)
   const [parsedFilesData, setParsedFilesData] = useState<ParsedAnalyticalFileData[]>([])
   const [isImporting, setIsImporting] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
   const [importStatusMessage, setImportStatusMessage] = useState('')
+
+  // Flag to temporarily disable realtime updates during bulk operations
+  const isImportingRef = useRef(false)
+  isImportingRef.current = isImporting
+
+  // Ref to track last request parameters and ignore stale responses
+  const activeRequestIdRef = useRef(0)
 
   // Debounce search input
   useEffect(() => {
@@ -119,7 +111,7 @@ export const Relacionamento: React.FC = () => {
         }
         return search
       })
-    }, 350)
+    }, 400)
     return () => clearTimeout(timer)
   }, [search])
 
@@ -127,16 +119,15 @@ export const Relacionamento: React.FC = () => {
   const loadLojas = useCallback(async () => {
     try {
       const lojas = await fetchDistinctAnalyticalLojas()
-      setAvailableLojas(lojas)
+      if (Array.isArray(lojas)) {
+        setAvailableLojas(lojas)
+      }
     } catch {
       // ignore
     }
   }, [])
 
-  // Ref to track last request parameters and ignore stale responses
-  const activeRequestIdRef = useRef(0)
-
-  // Load rows from backend
+  // Load rows from backend with single execution guarantee
   const loadRows = useCallback(
     async (showLoadingSpinner = true) => {
       const currentRequestId = ++activeRequestIdRef.current
@@ -152,6 +143,7 @@ export const Relacionamento: React.FC = () => {
           loja: selectedLoja,
           sort: '-created',
         })
+
         // Only update state if this is still the latest request
         if (currentRequestId === activeRequestIdRef.current) {
           setRows(res.items)
@@ -162,7 +154,7 @@ export const Relacionamento: React.FC = () => {
         }
       } catch (err) {
         if (currentRequestId === activeRequestIdRef.current) {
-          console.error(err)
+          console.error('Erro ao buscar linhas analíticas:', err)
           toast({
             title: 'Erro ao carregar dados',
             description: 'Não foi possível carregar as linhas analíticas de Inadimplência.',
@@ -191,8 +183,11 @@ export const Relacionamento: React.FC = () => {
   }, [loadRows])
 
   // Real-time subscription to 'movel' and 'residencial':
-  // Perform local state updates for immediate feedback and avoid full refetch loops
+  // Perform purely local state updates for individual modifications
+  // and ignore incoming events while bulk import is running.
   useRealtime<MovelRecord>('movel', (e) => {
+    if (isImportingRef.current) return
+
     if (e.action === 'create') {
       const newUnified: UnifiedAnalyticRecord = {
         ...e.record,
@@ -200,7 +195,6 @@ export const Relacionamento: React.FC = () => {
         rawRecord: e.record,
       }
       setRows((prev) => {
-        // If current filter excludes 'Móvel', don't prepend
         if (selectedAba === 'Residencial') return prev
         if (selectedLoja !== 'TODAS' && e.record.loja && e.record.loja !== selectedLoja) return prev
         if (prev.some((r) => r.id === e.record.id && r.aba === 'Móvel')) return prev
@@ -227,6 +221,8 @@ export const Relacionamento: React.FC = () => {
   })
 
   useRealtime<ResidencialRecord>('residencial', (e) => {
+    if (isImportingRef.current) return
+
     if (e.action === 'create') {
       const newUnified: UnifiedAnalyticRecord = {
         ...e.record,
@@ -234,7 +230,6 @@ export const Relacionamento: React.FC = () => {
         rawRecord: e.record,
       }
       setRows((prev) => {
-        // If current filter excludes 'Residencial', don't prepend
         if (selectedAba === 'Móvel') return prev
         if (selectedLoja !== 'TODAS' && e.record.loja && e.record.loja !== selectedLoja) return prev
         if (prev.some((r) => r.id === e.record.id && r.aba === 'Residencial')) return prev
@@ -289,7 +284,7 @@ export const Relacionamento: React.FC = () => {
         description: `Linha analítica da tabela ${item.aba} removida com sucesso.`,
       })
       setRowToDelete(null)
-      loadRows()
+      loadRows(false)
       loadLojas()
     } catch {
       toast({
@@ -311,7 +306,8 @@ export const Relacionamento: React.FC = () => {
         description: `${counts.movelCount} linha(s) de Móvel e ${counts.residencialCount} linha(s) de Residencial foram removidas.`,
       })
       setClearDialogOpen(false)
-      loadRows()
+      invalidateAnalyticalCache()
+      loadRows(true)
       loadLojas()
     } catch {
       toast({
@@ -367,7 +363,6 @@ export const Relacionamento: React.FC = () => {
       })
     } finally {
       setIsProcessingFiles(false)
-      // Reset input value to allow selecting same file again
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
@@ -461,15 +456,14 @@ export const Relacionamento: React.FC = () => {
         description: `${totalMovelToInsert} linhas gravadas em MÓVEL e ${totalResidencialToInsert} linhas gravadas em RESIDENCIAL.`,
       })
 
-      // Reset and refresh
-      setTimeout(() => {
-        setImportDialogOpen(false)
-        setSelectedFiles([])
-        setParsedFilesData([])
-        setIsImporting(false)
-        loadRows()
-        loadLojas()
-      }, 600)
+      // Reset cache and refresh data cleanly
+      invalidateAnalyticalCache()
+      setImportDialogOpen(false)
+      setSelectedFiles([])
+      setParsedFilesData([])
+      setIsImporting(false)
+      loadRows(true)
+      loadLojas()
     } catch (err: unknown) {
       const error = err as Error
       console.error('Erro na importação:', err)
@@ -566,7 +560,11 @@ export const Relacionamento: React.FC = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => loadRows()}
+            onClick={() => {
+              invalidateAnalyticalCache()
+              loadRows(true)
+              loadLojas()
+            }}
             disabled={loading}
             className="h-9 text-xs text-[#12365A] border-[#E3E9F2] hover:bg-slate-50 gap-1.5"
             title="Atualizar dados"
