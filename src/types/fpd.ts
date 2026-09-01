@@ -35,6 +35,8 @@ export interface MovelRecord extends RecordModel {
   vendedor?: string
   cliente?: string
   dados?: Record<string, unknown>
+  data_promessa_de_pagto?: string
+  comentarios?: string
 }
 
 export interface ResidencialRecord extends RecordModel {
@@ -104,6 +106,8 @@ export interface UnifiedAnalyticRecord extends RecordModel {
   vendedor?: string
   cliente?: string
   dados?: Record<string, unknown>
+  data_promessa_de_pagto?: string
+  comentarios?: string
   rawRecord?: MovelRecord | ResidencialRecord
 }
 

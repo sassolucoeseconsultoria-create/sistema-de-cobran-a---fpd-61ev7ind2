@@ -344,12 +344,68 @@ export interface MovelInsertItem {
   vendedor?: string
   cliente?: string
   dados?: Record<string, unknown>
+  data_promessa_de_pagto?: string
+  comentarios?: string
 }
 
 /**
- * Insert rows sequentially into collection 'movel' one by one with a safe pause between requests.
- * Uses retry with exponential backoff on HTTP 429.
- * Progress callback updates on every individual row.
+ * Fetch existing records for a given filename in a collection to preserve manual fields
+ */
+async function fetchExistingManualFields(
+  collectionName: 'movel' | 'residencial',
+  fileName: string,
+): Promise<Map<number, { data_promessa_de_pagto?: string; comentarios?: string; id: string }>> {
+  const map = new Map<
+    number,
+    { data_promessa_de_pagto?: string; comentarios?: string; id: string }
+  >()
+  if (!fileName) return map
+
+  try {
+    let page = 1
+    const perPage = 200
+    while (true) {
+      const res = await executeWithRetry(
+        () =>
+          pb.collection(collectionName).getList<{
+            id: string
+            linha?: number
+            data_promessa_de_pagto?: string
+            comentarios?: string
+          }>(page, perPage, {
+            filter: `arquivo = "${fileName.replace(/"/g, '\\"')}"`,
+            fields: 'id,linha,data_promessa_de_pagto,comentarios',
+            requestKey: null,
+          }),
+        5,
+        1000,
+      )
+
+      for (const item of res.items) {
+        if (item.linha !== undefined && item.linha !== null) {
+          map.set(item.linha, {
+            id: item.id,
+            data_promessa_de_pagto: item.data_promessa_de_pagto || '',
+            comentarios: item.comentarios || '',
+          })
+        }
+      }
+
+      if (page >= res.totalPages || res.items.length === 0) break
+      page++
+    }
+  } catch (err) {
+    console.warn(
+      `[relacionamentoService] Aviso ao buscar registros existentes em ${collectionName}:`,
+      err,
+    )
+  }
+  return map
+}
+
+/**
+ * Insert or upsert rows into collection 'movel' sequentially one by one with a safe pause.
+ * Preserves existing 'data_promessa_de_pagto' and 'comentarios' when re-importing the same file+linha.
  */
 export async function insertMovelBatch(
   rows: MovelInsertItem[],
@@ -358,29 +414,61 @@ export async function insertMovelBatch(
   if (!rows || rows.length === 0) return 0
   invalidateAnalyticalCache()
 
+  // Pre-load existing manual fields for each distinct file
+  const distinctFiles = Array.from(
+    new Set(rows.map((r) => r.arquivo?.trim()).filter(Boolean)),
+  ) as string[]
+  const existingMapByFile = new Map<
+    string,
+    Map<number, { data_promessa_de_pagto?: string; comentarios?: string; id: string }>
+  >()
+
+  for (const f of distinctFiles) {
+    const map = await fetchExistingManualFields('movel', f)
+    existingMapByFile.set(f, map)
+  }
+
   let insertedTotal = 0
   const accumulatedErrors: string[] = []
 
   for (let idx = 0; idx < rows.length; idx++) {
     const item = rows[idx]
+    const fileKey = item.arquivo?.trim() || ''
+    const existingMap = existingMapByFile.get(fileKey)
+    const existingRecord = item.linha !== undefined ? existingMap?.get(item.linha) : undefined
+
+    // Preserve manual fields from existing record if not explicitly provided in new item
+    const preservedPromessa =
+      item.data_promessa_de_pagto || existingRecord?.data_promessa_de_pagto || ''
+    const preservedComentarios = item.comentarios || existingRecord?.comentarios || ''
+
+    const payload = {
+      arquivo: fileKey,
+      linha: item.linha,
+      loja: item.loja?.trim() || '',
+      vendedor: item.vendedor?.trim() || '',
+      cliente: item.cliente?.trim() || '',
+      dados: item.dados || {},
+      data_promessa_de_pagto: preservedPromessa,
+      comentarios: preservedComentarios,
+    }
 
     try {
-      await executeWithRetry(
-        () =>
-          pb.collection('movel').create(
-            {
-              arquivo: item.arquivo?.trim() || '',
-              linha: item.linha,
-              loja: item.loja?.trim() || '',
-              vendedor: item.vendedor?.trim() || '',
-              cliente: item.cliente?.trim() || '',
-              dados: item.dados || {},
-            },
-            { requestKey: null },
-          ),
-        5,
-        1000,
-      )
+      if (existingRecord) {
+        // Update existing record
+        await executeWithRetry(
+          () => pb.collection('movel').update(existingRecord.id, payload, { requestKey: null }),
+          5,
+          1000,
+        )
+      } else {
+        // Create new record
+        await executeWithRetry(
+          () => pb.collection('movel').create(payload, { requestKey: null }),
+          5,
+          1000,
+        )
+      }
       insertedTotal++
     } catch (err: unknown) {
       const fileInfo = item.arquivo ? `arquivo '${item.arquivo}'` : 'arquivo desconhecido'
@@ -423,12 +511,13 @@ export interface ResidencialInsertItem {
   cliente?: string
   dados?: Record<string, unknown>
   typedFields?: Record<string, string>
+  data_promessa_de_pagto?: string
+  comentarios?: string
 }
 
 /**
- * Insert rows sequentially into collection 'residencial' one by one with a safe pause between requests.
- * Uses retry with exponential backoff on HTTP 429.
- * Progress callback updates on every individual row.
+ * Insert or upsert rows into collection 'residencial' sequentially one by one with a safe pause.
+ * Preserves existing 'data_promessa_de_pagto' and 'comentarios' when re-importing the same file+linha.
  */
 export async function insertResidencialBatch(
   rows: ResidencialInsertItem[],
@@ -437,30 +526,65 @@ export async function insertResidencialBatch(
   if (!rows || rows.length === 0) return 0
   invalidateAnalyticalCache()
 
+  // Pre-load existing manual fields for each distinct file
+  const distinctFiles = Array.from(
+    new Set(rows.map((r) => r.arquivo?.trim()).filter(Boolean)),
+  ) as string[]
+  const existingMapByFile = new Map<
+    string,
+    Map<number, { data_promessa_de_pagto?: string; comentarios?: string; id: string }>
+  >()
+
+  for (const f of distinctFiles) {
+    const map = await fetchExistingManualFields('residencial', f)
+    existingMapByFile.set(f, map)
+  }
+
   let insertedTotal = 0
   const accumulatedErrors: string[] = []
 
   for (let idx = 0; idx < rows.length; idx++) {
     const item = rows[idx]
+    const fileKey = item.arquivo?.trim() || ''
+    const existingMap = existingMapByFile.get(fileKey)
+    const existingRecord = item.linha !== undefined ? existingMap?.get(item.linha) : undefined
+
+    // Preserve manual fields if existing
+    const typedPromessa = item.typedFields?.data_promessa_de_pagto || item.data_promessa_de_pagto
+    const preservedPromessa = typedPromessa || existingRecord?.data_promessa_de_pagto || ''
+
+    const typedComentarios = item.typedFields?.comentarios || item.comentarios
+    const preservedComentarios = typedComentarios || existingRecord?.comentarios || ''
+
+    const payload = {
+      arquivo: fileKey,
+      linha: item.linha,
+      loja: item.loja?.trim() || '',
+      vendedor: item.vendedor?.trim() || '',
+      cliente: item.cliente?.trim() || '',
+      dados: item.dados || {},
+      ...(item.typedFields || {}),
+      data_promessa_de_pagto: preservedPromessa,
+      comentarios: preservedComentarios,
+    }
 
     try {
-      await executeWithRetry(
-        () =>
-          pb.collection('residencial').create(
-            {
-              arquivo: item.arquivo?.trim() || '',
-              linha: item.linha,
-              loja: item.loja?.trim() || '',
-              vendedor: item.vendedor?.trim() || '',
-              cliente: item.cliente?.trim() || '',
-              dados: item.dados || {},
-              ...(item.typedFields || {}),
-            },
-            { requestKey: null },
-          ),
-        5,
-        1000,
-      )
+      if (existingRecord) {
+        // Update existing record
+        await executeWithRetry(
+          () =>
+            pb.collection('residencial').update(existingRecord.id, payload, { requestKey: null }),
+          5,
+          1000,
+        )
+      } else {
+        // Create new record
+        await executeWithRetry(
+          () => pb.collection('residencial').create(payload, { requestKey: null }),
+          5,
+          1000,
+        )
+      }
       insertedTotal++
     } catch (err: unknown) {
       const fileInfo = item.arquivo ? `arquivo '${item.arquivo}'` : 'arquivo desconhecido'
@@ -493,6 +617,25 @@ export async function insertResidencialBatch(
   }
 
   return insertedTotal
+}
+
+/**
+ * Update manual fields (data_promessa_de_pagto and comentarios) for a single row in 'movel' or 'residencial'.
+ */
+export async function updateClientManualFields(
+  id: string,
+  aba: RelacionamentoAba,
+  fields: { data_promessa_de_pagto?: string; comentarios?: string },
+): Promise<boolean> {
+  const collectionName = aba === 'Móvel' ? 'movel' : 'residencial'
+  return await executeWithRetry(
+    async () => {
+      await pb.collection(collectionName).update(id, fields, { requestKey: null })
+      return true
+    },
+    5,
+    1000,
+  )
 }
 
 /**
