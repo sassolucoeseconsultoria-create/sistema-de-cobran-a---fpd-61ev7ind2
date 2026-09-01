@@ -28,6 +28,85 @@ export interface AnalyticRowRecord extends RecordModel {
 
 export type RelacionamentoAba = 'Móvel' | 'Residencial'
 
+export interface MovelRecord extends RecordModel {
+  arquivo?: string
+  linha?: number
+  loja?: string
+  vendedor?: string
+  cliente?: string
+  dados?: Record<string, unknown>
+}
+
+export interface ResidencialRecord extends RecordModel {
+  arquivo?: string
+  linha?: number
+  loja?: string
+  vendedor?: string
+  cliente?: string
+  dados?: Record<string, unknown>
+
+  // Colunas tipadas residenciais
+  nr_ano_mes?: string
+  data_instalacao?: string
+  nm_mercado?: string
+  nm_marca?: string
+  cod_municipio?: string
+  canal?: string
+  produto_atual?: string
+  nm_indicador_negocio?: string
+  nm_tipo_ass_domicilio?: string
+  uf?: string
+  nm_visao_analise?: string
+  nm_linha_negocio?: string
+  nm_cidade?: string
+  nm_bairro?: string
+  parceiro_resumido?: string
+  cod_amx?: string
+  coordenador?: string
+  executivo?: string
+  nr_contrato?: string
+  dsc_status_contrato?: string
+  dat_vencimento?: string
+  dat_pagamento?: string
+  vlr_total?: string
+  vlr_pago?: string
+  vlr_aberto?: string
+  nm_forma_pagamento?: string
+  nr_cep?: string
+  qtde_instalada?: string
+  fatura?: string
+  devendo?: string
+  data_relatorio?: string
+  qtd_dias_pag_x_venc?: string
+  indicador?: string
+  pago?: string
+  preventiva_fpd?: string
+  virou_fpd?: string
+  nao_vencidas?: string
+  indefinido?: string
+  desprezar?: string
+  qtd_dias_venc_x_data_atual?: string
+  canal_2?: string
+  bcc_tipo_rede?: string
+  coordenador_2?: string
+  cpf?: string
+  fone?: string
+  ocorrencias?: string
+  data_promessa_de_pagto?: string
+  comentarios?: string
+}
+
+export interface UnifiedAnalyticRecord extends RecordModel {
+  aba: RelacionamentoAba
+  arquivo?: string
+  linha?: number
+  loja?: string
+  vendedor?: string
+  cliente?: string
+  dados?: Record<string, unknown>
+  rawRecord?: MovelRecord | ResidencialRecord
+}
+
 export interface RelacionamentoRecord extends RecordModel {
   aba: RelacionamentoAba
   loja?: string

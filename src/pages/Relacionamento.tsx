@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import {
   Search,
   Filter,
@@ -20,6 +20,16 @@ import {
   Eye,
   CheckCircle2,
   AlertCircle,
+  UploadCloud,
+  FileUp,
+  Smartphone,
+  Home,
+  Check,
+  User,
+  Phone,
+  FileText,
+  Calendar,
+  DollarSign,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,24 +49,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Progress } from '@/components/ui/progress'
 import { useToast } from '@/hooks/use-toast'
 import useRealtime from '@/hooks/use-realtime'
 import {
-  fetchRelacionamentoRows,
-  fetchDistinctRelacionamentoLojas,
-  deleteRelacionamentoRow,
-  clearAllRelacionamentoRows,
+  fetchAnalyticalRows,
+  fetchDistinctAnalyticalLojas,
+  deleteAnalyticalRow,
+  clearAllAnalyticalRows,
+  insertMovelBatch,
+  insertResidencialBatch,
 } from '@/services/relacionamentoService'
-import type { RelacionamentoRecord, RelacionamentoAba } from '@/types/fpd'
+import { parseAnalyticalXlsxFile, ParsedAnalyticalFileData } from '@/lib/analyticalImportParser'
+import type {
+  RelacionamentoAba,
+  UnifiedAnalyticRecord,
+  MovelRecord,
+  ResidencialRecord,
+} from '@/types/fpd'
 import { cn } from '@/lib/utils'
 
 export const Relacionamento: React.FC = () => {
   const { toast } = useToast()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Data state
-  const [rows, setRows] = useState<RelacionamentoRecord[]>([])
+  const [rows, setRows] = useState<UnifiedAnalyticRecord[]>([])
   const [totalItems, setTotalItems] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
+  const [totalMovel, setTotalMovel] = useState(0)
+  const [totalResidencial, setTotalResidencial] = useState(0)
   const [page, setPage] = useState(1)
   const [perPage, setPerPage] = useState(25)
   const [loading, setLoading] = useState(true)
@@ -71,13 +93,22 @@ export const Relacionamento: React.FC = () => {
   // Expanded row IDs for JSON inspection
   const [expandedRowIds, setExpandedRowIds] = useState<Record<string, boolean>>({})
 
-  // Modal dialog for detailed JSON view
-  const [detailRow, setDetailRow] = useState<RelacionamentoRecord | null>(null)
+  // Modal dialog for detailed JSON / typed attributes view
+  const [detailRow, setDetailRow] = useState<UnifiedAnalyticRecord | null>(null)
 
   // Delete single / clear all dialogs
-  const [rowToDelete, setRowToDelete] = useState<RelacionamentoRecord | null>(null)
+  const [rowToDelete, setRowToDelete] = useState<UnifiedAnalyticRecord | null>(null)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
+
+  // Import Dialog State
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [isProcessingFiles, setIsProcessingFiles] = useState(false)
+  const [parsedFilesData, setParsedFilesData] = useState<ParsedAnalyticalFileData[]>([])
+  const [isImporting, setIsImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState(0)
+  const [importStatusMessage, setImportStatusMessage] = useState('')
 
   // Debounce search input
   useEffect(() => {
@@ -91,7 +122,7 @@ export const Relacionamento: React.FC = () => {
   // Load distinct store names
   const loadLojas = useCallback(async () => {
     try {
-      const lojas = await fetchDistinctRelacionamentoLojas()
+      const lojas = await fetchDistinctAnalyticalLojas()
       setAvailableLojas(lojas)
     } catch {
       // ignore
@@ -102,7 +133,7 @@ export const Relacionamento: React.FC = () => {
   const loadRows = useCallback(async () => {
     try {
       setLoading(true)
-      const res = await fetchRelacionamentoRows({
+      const res = await fetchAnalyticalRows({
         page,
         perPage,
         search: debouncedSearch,
@@ -113,6 +144,8 @@ export const Relacionamento: React.FC = () => {
       setRows(res.items)
       setTotalItems(res.totalItems)
       setTotalPages(res.totalPages)
+      setTotalMovel(res.totalMovel)
+      setTotalResidencial(res.totalResidencial)
     } catch (err) {
       console.error(err)
       toast({
@@ -134,8 +167,12 @@ export const Relacionamento: React.FC = () => {
     loadRows()
   }, [loadRows])
 
-  // Real-time subscription to 'relacionamento'
-  useRealtime<RelacionamentoRecord>('relacionamento', () => {
+  // Real-time subscription to 'movel' and 'residencial'
+  useRealtime<MovelRecord>('movel', () => {
+    loadRows()
+    loadLojas()
+  })
+  useRealtime<ResidencialRecord>('residencial', () => {
     loadRows()
     loadLojas()
   })
@@ -161,12 +198,12 @@ export const Relacionamento: React.FC = () => {
   }
 
   // Handle single deletion
-  const handleDeleteRow = async (id: string) => {
+  const handleDeleteRow = async (item: UnifiedAnalyticRecord) => {
     try {
-      await deleteRelacionamentoRow(id)
+      await deleteAnalyticalRow(item.id, item.aba)
       toast({
         title: 'Linha excluída',
-        description: 'A linha analítica foi removida com sucesso.',
+        description: `Linha analítica da tabela ${item.aba} removida com sucesso.`,
       })
       setRowToDelete(null)
       loadRows()
@@ -184,10 +221,11 @@ export const Relacionamento: React.FC = () => {
   const handleClearAll = async () => {
     try {
       setIsClearing(true)
-      const count = await clearAllRelacionamentoRows()
+      const target = selectedAba === 'TODAS' ? undefined : selectedAba
+      const counts = await clearAllAnalyticalRows(target)
       toast({
-        title: 'Base analítica limpa',
-        description: `${count} registro(s) de inadimplência foram removidos com sucesso.`,
+        title: 'Tabelas analíticas limpas',
+        description: `${counts.movelCount} linha(s) de Móvel e ${counts.residencialCount} linha(s) de Residencial foram removidas.`,
       })
       setClearDialogOpen(false)
       loadRows()
@@ -195,7 +233,7 @@ export const Relacionamento: React.FC = () => {
     } catch {
       toast({
         title: 'Erro ao limpar dados',
-        description: 'Não foi possível limpar a base de Inadimplência.',
+        description: 'Não foi possível limpar as tabelas analíticas.',
         variant: 'destructive',
       })
     } finally {
@@ -203,42 +241,245 @@ export const Relacionamento: React.FC = () => {
     }
   }
 
+  // Handle files selection for import
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    const validFiles: File[] = []
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      if (file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls')) {
+        validFiles.push(file)
+      }
+    }
+
+    if (validFiles.length === 0) {
+      toast({
+        title: 'Formato não suportado',
+        description: 'Por favor, selecione arquivos de planilha no formato Excel (.xlsx).',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setSelectedFiles(validFiles)
+    setImportDialogOpen(true)
+    setIsProcessingFiles(true)
+    setParsedFilesData([])
+
+    try {
+      const parsedResults: ParsedAnalyticalFileData[] = []
+      for (const file of validFiles) {
+        const parsed = await parseAnalyticalXlsxFile(file)
+        parsedResults.push(parsed)
+      }
+      setParsedFilesData(parsedResults)
+    } catch (err: unknown) {
+      const error = err as Error
+      toast({
+        title: 'Erro na leitura do arquivo',
+        description: error?.message || 'Falha ao processar as abas do arquivo.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsProcessingFiles(false)
+      // Reset input value to allow selecting same file again
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  // Execute import to Móvel and Residencial collections
+  const handleConfirmImport = async () => {
+    if (parsedFilesData.length === 0) return
+
+    setIsImporting(true)
+    setImportProgress(0)
+
+    let totalMovelToInsert = 0
+    let totalResidencialToInsert = 0
+    parsedFilesData.forEach((pf) => {
+      totalMovelToInsert += pf.totalMovelRows
+      totalResidencialToInsert += pf.totalResidencialRows
+    })
+
+    const totalLinesAll = totalMovelToInsert + totalResidencialToInsert
+    if (totalLinesAll === 0) {
+      toast({
+        title: 'Nenhum dado encontrado',
+        description:
+          'Não foram encontradas linhas de dados nas abas Móvel e Residencial dos arquivos selecionados.',
+        variant: 'destructive',
+      })
+      setIsImporting(false)
+      return
+    }
+
+    let insertedGlobalCount = 0
+
+    try {
+      for (let i = 0; i < parsedFilesData.length; i++) {
+        const pf = parsedFilesData[i]
+        setImportStatusMessage(
+          `Importando arquivo ${i + 1} de ${parsedFilesData.length}: ${pf.fileName}...`,
+        )
+
+        // 1. Insert Móvel rows
+        if (pf.movelSheet && pf.movelSheet.rows.length > 0) {
+          setImportStatusMessage(
+            `Gravando ${pf.movelSheet.rows.length} linhas na tabela MÓVEL (${pf.fileName})...`,
+          )
+          const movelBatchData = pf.movelSheet.rows.map((r) => ({
+            arquivo: pf.fileName,
+            linha: r.linha,
+            loja: r.loja,
+            vendedor: r.vendedor,
+            cliente: r.cliente,
+            dados: r.dados,
+          }))
+
+          await insertMovelBatch(movelBatchData, (insertedInBatch) => {
+            const currentDone = insertedGlobalCount + insertedInBatch
+            setImportProgress(Math.min(95, Math.round((currentDone / totalLinesAll) * 100)))
+          })
+          insertedGlobalCount += pf.movelSheet.rows.length
+        }
+
+        // 2. Insert Residencial rows
+        if (pf.residencialSheet && pf.residencialSheet.rows.length > 0) {
+          setImportStatusMessage(
+            `Gravando ${pf.residencialSheet.rows.length} linhas na tabela RESIDENCIAL (${pf.fileName})...`,
+          )
+          const resBatchData = pf.residencialSheet.rows.map((r) => ({
+            arquivo: pf.fileName,
+            linha: r.linha,
+            loja: r.loja,
+            vendedor: r.vendedor,
+            cliente: r.cliente,
+            dados: r.dados,
+            typedFields: r.typedFields,
+          }))
+
+          await insertResidencialBatch(resBatchData, (insertedInBatch) => {
+            const currentDone = insertedGlobalCount + insertedInBatch
+            setImportProgress(Math.min(95, Math.round((currentDone / totalLinesAll) * 100)))
+          })
+          insertedGlobalCount += pf.residencialSheet.rows.length
+        }
+      }
+
+      setImportProgress(100)
+      setImportStatusMessage('Importação analítica concluída com sucesso!')
+
+      toast({
+        title: 'Importação realizada com sucesso!',
+        description: `${totalMovelToInsert} linhas gravadas em MÓVEL e ${totalResidencialToInsert} linhas gravadas em RESIDENCIAL.`,
+      })
+
+      // Reset and refresh
+      setTimeout(() => {
+        setImportDialogOpen(false)
+        setSelectedFiles([])
+        setParsedFilesData([])
+        setIsImporting(false)
+        loadRows()
+        loadLojas()
+      }, 600)
+    } catch (err: unknown) {
+      const error = err as Error
+      console.error('Erro na importação:', err)
+      toast({
+        title: 'Erro durante a importação',
+        description: error?.message || 'Ocorreu uma falha ao salvar as linhas no banco de dados.',
+        variant: 'destructive',
+      })
+      setIsImporting(false)
+    }
+  }
+
+  // Summary counts of parsed files
+  const importSummary = useMemo(() => {
+    let movelCount = 0
+    let residencialCount = 0
+    parsedFilesData.forEach((p) => {
+      movelCount += p.totalMovelRows
+      residencialCount += p.totalResidencialRows
+    })
+    return {
+      movelCount,
+      residencialCount,
+      total: movelCount + residencialCount,
+    }
+  }, [parsedFilesData])
+
   return (
     <div className="space-y-6">
+      {/* Hidden File Input for .xlsx import */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelect}
+        accept=".xlsx,.xls"
+        multiple
+        className="hidden"
+      />
+
       {/* Top Banner Context Card */}
-      <div className="bg-white rounded-xl p-5 border border-[#E3E9F2] shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
+      <div className="bg-white rounded-xl p-5 border border-[#E3E9F2] shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="p-1.5 rounded-lg bg-[#12365A]/5 text-[#12365A]">
               <Database className="w-5 h-5 text-[#0E9F8A]" />
             </span>
             <h2 className="text-base font-bold text-[#12365A] tracking-tight">
-              Banco Analítico de Inadimplência (Móvel & Residencial)
+              Banco Analítico de Inadimplência
             </h2>
             <Badge
               variant="outline"
-              className="bg-[#0E9F8A]/10 text-[#0E9F8A] border-[#0E9F8A]/30 text-[11px] font-semibold"
+              className="bg-[#12365A]/10 text-[#12365A] border-[#12365A]/25 text-[11px] font-semibold gap-1"
             >
-              Linha a Linha
+              <Smartphone className="w-3 h-3" /> Tabela MÓVEL
+            </Badge>
+            <Badge
+              variant="outline"
+              className="bg-[#0E9F8A]/10 text-[#0E9F8A] border-[#0E9F8A]/30 text-[11px] font-semibold gap-1"
+            >
+              <Home className="w-3 h-3" /> Tabela RESIDENCIAL
             </Badge>
           </div>
           <p className="text-xs text-[#5B6B82] max-w-3xl leading-relaxed">
-            Armazenamento analítico detalhado das planilhas de Móvel e Residencial com layout
-            flexível (JSON). Permite consultar e auditar cada linha individual e seus atributos de
-            origem.
+            Armazenamento analítico separado para as tabelas <strong>Móvel</strong> e{' '}
+            <strong>Residencial</strong>. Importe planilhas .xlsx com extração dinâmica de
+            cabeçalhos e visualização linha a linha com layout flexível.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="px-3.5 py-2 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] text-right">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-[#5B6B82] block">
-              Total de Linhas
-            </span>
-            <span className="text-lg font-bold text-[#12365A] tabular-nums">
-              {totalItems.toLocaleString('pt-BR')}
-            </span>
+        {/* Action Controls & Totals */}
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
+          {/* Quick Counter Badges */}
+          <div className="flex items-center gap-2">
+            <div className="px-3 py-1.5 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] text-right">
+              <span className="text-[9px] uppercase font-bold tracking-wider text-[#5B6B82] block">
+                Total Geral
+              </span>
+              <span className="text-base font-bold text-[#12365A] tabular-nums">
+                {totalItems.toLocaleString('pt-BR')}
+              </span>
+            </div>
           </div>
 
+          {/* Import Button */}
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            className="h-9 px-3.5 text-xs font-semibold bg-[#0E9F8A] hover:bg-[#0c8a77] text-white shadow-xs gap-1.5 transition-all"
+          >
+            <UploadCloud className="w-4 h-4" />
+            <span>Importar Planilha</span>
+          </Button>
+
+          {/* Refresh Button */}
           <Button
             variant="outline"
             size="sm"
@@ -251,6 +492,7 @@ export const Relacionamento: React.FC = () => {
             <span className="hidden sm:inline">Atualizar</span>
           </Button>
 
+          {/* Clear Button */}
           {totalItems > 0 && (
             <Button
               variant="outline"
@@ -259,7 +501,7 @@ export const Relacionamento: React.FC = () => {
               className="h-9 text-xs border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 gap-1.5"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Limpar Linhas</span>
+              <span className="hidden sm:inline">Limpar Base</span>
             </Button>
           )}
         </div>
@@ -274,7 +516,7 @@ export const Relacionamento: React.FC = () => {
             <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 text-[#8A97AC] absolute left-3 top-1/2 -translate-y-1/2" />
               <Input
-                placeholder="Buscar por loja ou arquivo..."
+                placeholder="Buscar por loja, vendedor, cliente ou arquivo..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9 h-9 text-xs sm:text-sm bg-[#F8FAFC] border-[#E3E9F2] focus:border-[#0E9F8A]"
@@ -289,8 +531,8 @@ export const Relacionamento: React.FC = () => {
               )}
             </div>
 
-            {/* Select Aba Filter */}
-            <div className="w-full sm:w-44">
+            {/* Select Aba / Origem Filter (Tabela Móvel / Residencial) */}
+            <div className="w-full sm:w-52">
               <Select
                 value={selectedAba}
                 onValueChange={(val) => {
@@ -302,20 +544,26 @@ export const Relacionamento: React.FC = () => {
                   <div className="flex items-center gap-2 truncate">
                     <Filter className="w-3.5 h-3.5 text-[#8A97AC] shrink-0" />
                     <span>
-                      Aba:{' '}
-                      <strong>{selectedAba === 'TODAS' ? 'Todas as Abas' : selectedAba}</strong>
+                      Tabela:{' '}
+                      <strong>
+                        {selectedAba === 'TODAS'
+                          ? 'Todas (Móvel + Res.)'
+                          : selectedAba === 'Móvel'
+                            ? 'Móvel'
+                            : 'Residencial'}
+                      </strong>
                     </span>
                   </div>
                 </SelectTrigger>
                 <SelectContent className="bg-white">
                   <SelectItem value="TODAS" className="text-xs">
-                    Todas as Abas
+                    Todas as Tabelas
                   </SelectItem>
-                  <SelectItem value="Móvel" className="text-xs font-medium text-[#12365A]">
-                    Móvel
+                  <SelectItem value="Móvel" className="text-xs font-semibold text-[#12365A]">
+                    Tabela Móvel
                   </SelectItem>
-                  <SelectItem value="Residencial" className="text-xs font-medium text-[#0E9F8A]">
-                    Residencial
+                  <SelectItem value="Residencial" className="text-xs font-semibold text-[#0E9F8A]">
+                    Tabela Residencial
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -392,15 +640,17 @@ export const Relacionamento: React.FC = () => {
             {/* Table Head */}
             <thead className="sticky top-0 z-20 bg-[#12365A] text-white shadow-sm font-semibold tracking-wider uppercase text-[11px]">
               <tr>
-                <th className="px-3.5 py-3.5 w-12 text-center border-r border-[#1e456f]">#</th>
-                <th className="px-3.5 py-3.5 min-w-[130px] border-r border-[#1e456f]">Aba</th>
-                <th className="px-3.5 py-3.5 min-w-[180px] border-r border-[#1e456f]">Loja</th>
-                <th className="px-3.5 py-3.5 min-w-[200px] border-r border-[#1e456f]">
+                <th className="px-3 py-3.5 w-12 text-center border-r border-[#1e456f]">#</th>
+                <th className="px-3.5 py-3.5 min-w-[120px] border-r border-[#1e456f]">Tabela</th>
+                <th className="px-3.5 py-3.5 min-w-[160px] border-r border-[#1e456f]">Loja</th>
+                <th className="px-3.5 py-3.5 min-w-[160px] border-r border-[#1e456f]">Vendedor</th>
+                <th className="px-3.5 py-3.5 min-w-[180px] border-r border-[#1e456f]">Cliente</th>
+                <th className="px-3.5 py-3.5 min-w-[190px] border-r border-[#1e456f]">
                   Arquivo de Origem
                 </th>
-                <th className="px-3 py-3.5 w-24 text-center border-r border-[#1e456f]">Linha</th>
-                <th className="px-3.5 py-3.5 min-w-[320px] border-r border-[#1e456f]">
-                  Dados (Campos Flexíveis)
+                <th className="px-3 py-3.5 w-20 text-center border-r border-[#1e456f]">Linha</th>
+                <th className="px-3.5 py-3.5 min-w-[300px] border-r border-[#1e456f]">
+                  Campos Extraídos (JSON)
                 </th>
                 <th className="px-3 py-3.5 w-24 text-center">Ações</th>
               </tr>
@@ -410,7 +660,7 @@ export const Relacionamento: React.FC = () => {
             <tbody className="divide-y divide-[#E3E9F2]">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center text-[#5B6B82]">
+                  <td colSpan={9} className="py-16 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-7 h-7 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
                       <span className="text-xs sm:text-sm">
@@ -421,7 +671,7 @@ export const Relacionamento: React.FC = () => {
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center text-[#5B6B82]">
+                  <td colSpan={9} className="py-16 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-3 max-w-md mx-auto">
                       <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-[#8A97AC]">
                         <Database className="w-6 h-6" />
@@ -430,13 +680,13 @@ export const Relacionamento: React.FC = () => {
                         <p className="font-bold text-[#12365A] text-sm">
                           Nenhuma linha analítica cadastrada ainda.
                         </p>
-                        <p className="text-xs text-[#5B6B82]">
+                        <p className="text-xs text-[#5B6B82] leading-relaxed">
                           {hasActiveFilters
                             ? 'Nenhum registro corresponde aos filtros selecionados. Tente ajustar os filtros ou a busca.'
-                            : 'O modelo de dados de Inadimplência está pronto para receber as linhas analíticas das planilhas Móvel e Residencial.'}
+                            : 'Clique em "Importar Planilha" acima para carregar o arquivo Excel com as abas Móvel e Residencial.'}
                         </p>
                       </div>
-                      {hasActiveFilters && (
+                      {hasActiveFilters ? (
                         <Button
                           variant="outline"
                           size="sm"
@@ -444,6 +694,15 @@ export const Relacionamento: React.FC = () => {
                           className="text-xs mt-1"
                         >
                           Limpar Filtros
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={() => fileInputRef.current?.click()}
+                          size="sm"
+                          className="text-xs mt-1 bg-[#0E9F8A] hover:bg-[#0c8a77] text-white gap-1.5"
+                        >
+                          <UploadCloud className="w-3.5 h-3.5" />
+                          <span>Importar Planilha Agora</span>
                         </Button>
                       )}
                     </div>
@@ -465,21 +724,26 @@ export const Relacionamento: React.FC = () => {
                         )}
                       >
                         {/* Index */}
-                        <td className="px-3.5 py-3 text-center text-xs text-slate-400 font-mono border-r border-[#E3E9F2]">
+                        <td className="px-3 py-3 text-center text-xs text-slate-400 font-mono border-r border-[#E3E9F2]">
                           {(page - 1) * perPage + idx + 1}
                         </td>
 
-                        {/* Aba */}
+                        {/* Tabela / Aba */}
                         <td className="px-3.5 py-3 border-r border-[#E3E9F2]">
                           <Badge
                             variant="outline"
                             className={cn(
-                              'text-[11px] font-bold px-2 py-0.5',
+                              'text-[11px] font-bold px-2 py-0.5 gap-1',
                               isMovel
                                 ? 'bg-[#12365A]/10 text-[#12365A] border-[#12365A]/30'
                                 : 'bg-[#0E9F8A]/10 text-[#0E9F8A] border-[#0E9F8A]/30',
                             )}
                           >
+                            {isMovel ? (
+                              <Smartphone className="w-3 h-3" />
+                            ) : (
+                              <Home className="w-3 h-3" />
+                            )}
                             {row.aba}
                           </Badge>
                         </td>
@@ -489,7 +753,27 @@ export const Relacionamento: React.FC = () => {
                           {row.loja ? (
                             <span className="uppercase tracking-wide text-xs">{row.loja}</span>
                           ) : (
-                            <span className="text-slate-300 italic text-xs">Não informada</span>
+                            <span className="text-slate-300 italic text-xs">—</span>
+                          )}
+                        </td>
+
+                        {/* Vendedor */}
+                        <td className="px-3.5 py-3 text-xs text-[#12365A] border-r border-[#E3E9F2]">
+                          {row.vendedor ? (
+                            <span className="font-medium">{row.vendedor}</span>
+                          ) : (
+                            <span className="text-slate-300 italic">—</span>
+                          )}
+                        </td>
+
+                        {/* Cliente */}
+                        <td className="px-3.5 py-3 text-xs text-[#12365A] border-r border-[#E3E9F2]">
+                          {row.cliente ? (
+                            <span className="font-medium line-clamp-1" title={row.cliente}>
+                              {row.cliente}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 italic">—</span>
                           )}
                         </td>
 
@@ -497,7 +781,7 @@ export const Relacionamento: React.FC = () => {
                         <td className="px-3.5 py-3 text-xs text-[#5B6B82] border-r border-[#E3E9F2]">
                           {row.arquivo ? (
                             <div
-                              className="flex items-center gap-1.5 max-w-[280px]"
+                              className="flex items-center gap-1.5 max-w-[240px]"
                               title={row.arquivo}
                             >
                               <FileSpreadsheet className="w-3.5 h-3.5 text-[#0E9F8A] shrink-0" />
@@ -511,7 +795,7 @@ export const Relacionamento: React.FC = () => {
                         {/* Linha */}
                         <td className="px-3 py-3 text-center text-xs font-mono font-semibold text-[#12365A] border-r border-[#E3E9F2]">
                           {row.linha !== undefined && row.linha !== null ? (
-                            <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                            <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
                               #{row.linha}
                             </span>
                           ) : (
@@ -550,7 +834,7 @@ export const Relacionamento: React.FC = () => {
                                     variant="secondary"
                                     className="text-[10px] px-1.5 h-5 bg-slate-200 text-slate-700"
                                   >
-                                    +{dadosKeys.length - 3} campos
+                                    +{dadosKeys.length - 3} colunas
                                   </Badge>
                                 )}
                               </div>
@@ -565,12 +849,12 @@ export const Relacionamento: React.FC = () => {
                                   {isExpanded ? (
                                     <>
                                       <ChevronUp className="w-3.5 h-3.5" />
-                                      <span>Recolher campos</span>
+                                      <span>Recolher colunas</span>
                                     </>
                                   ) : (
                                     <>
                                       <ChevronDown className="w-3.5 h-3.5" />
-                                      <span>Ver todos os {dadosKeys.length} campos</span>
+                                      <span>Ver todas as {dadosKeys.length} colunas</span>
                                     </>
                                   )}
                                 </button>
@@ -587,9 +871,9 @@ export const Relacionamento: React.FC = () => {
                               size="sm"
                               onClick={() => setDetailRow(row)}
                               className="h-7 w-7 p-0 text-[#5B6B82] hover:text-[#0E9F8A] hover:bg-[#0E9F8A]/10"
-                              title="Visualizar JSON completo"
+                              title="Visualizar detalhes da linha"
                             >
-                              <Code2 className="w-3.5 h-3.5" />
+                              <Eye className="w-3.5 h-3.5" />
                             </Button>
                             <Button
                               variant="ghost"
@@ -607,17 +891,18 @@ export const Relacionamento: React.FC = () => {
                       {/* Expandable JSON Detail View row */}
                       {isExpanded && (
                         <tr className="bg-[#F8FAFC] border-b border-[#E3E9F2]">
-                          <td colSpan={7} className="px-6 py-4">
+                          <td colSpan={9} className="px-6 py-4">
                             <div className="bg-white rounded-lg border border-[#E3E9F2] p-4 space-y-3 shadow-inner">
                               <div className="flex items-center justify-between border-b pb-2">
                                 <div className="flex items-center gap-2">
                                   <Code2 className="w-4 h-4 text-[#0E9F8A]" />
                                   <span className="text-xs font-bold text-[#12365A] uppercase tracking-wider">
-                                    Mapa de Colunas e Valores (Layout Flexível)
+                                    Todas as Colunas Extraídas da Linha #{row.linha || row.id}{' '}
+                                    (Tabela {row.aba})
                                   </span>
                                 </div>
                                 <span className="text-[11px] text-[#5B6B82]">
-                                  {dadosKeys.length} colunas registradas
+                                  {dadosKeys.length} colunas capturadas dinamicamente
                                 </span>
                               </div>
 
@@ -704,16 +989,176 @@ export const Relacionamento: React.FC = () => {
         )}
       </div>
 
-      {/* Detail JSON Dialog */}
+      {/* Import Modal Dialog */}
+      <Dialog
+        open={importDialogOpen}
+        onOpenChange={(open) => {
+          if (!isImporting) {
+            setImportDialogOpen(open)
+            if (!open) {
+              setSelectedFiles([])
+              setParsedFilesData([])
+            }
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl bg-white max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-[#12365A] flex items-center gap-2">
+              <UploadCloud className="w-5 h-5 text-[#0E9F8A]" />
+              <span>Importação Analítica de Inadimplência</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-[#5B6B82]">
+              Os dados serão gravados de forma separada nas tabelas <strong>Móvel</strong> e{' '}
+              <strong>Residencial</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 overflow-y-auto flex-1 pr-1 py-2">
+            {isProcessingFiles ? (
+              <div className="py-12 text-center space-y-3">
+                <div className="w-8 h-8 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-xs text-[#5B6B82]">Lendo estrutura e colunas das planilhas...</p>
+              </div>
+            ) : parsedFilesData.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400">
+                Nenhum arquivo válido processado.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Summary Banner */}
+                <div className="grid grid-cols-3 gap-3 p-3.5 bg-slate-50 border border-[#E3E9F2] rounded-xl text-center">
+                  <div className="p-2 bg-white rounded-lg border border-slate-100 shadow-2xs">
+                    <span className="text-[10px] uppercase font-bold text-[#5B6B82] block">
+                      Total de Linhas
+                    </span>
+                    <span className="text-lg font-bold text-[#12365A]">
+                      {importSummary.total.toLocaleString('pt-BR')}
+                    </span>
+                  </div>
+                  <div className="p-2 bg-white rounded-lg border border-slate-100 shadow-2xs">
+                    <span className="text-[10px] uppercase font-bold text-[#12365A] block flex items-center justify-center gap-1">
+                      <Smartphone className="w-3 h-3" /> Aba Móvel
+                    </span>
+                    <span className="text-lg font-bold text-[#12365A]">
+                      {importSummary.movelCount.toLocaleString('pt-BR')}
+                    </span>
+                  </div>
+                  <div className="p-2 bg-white rounded-lg border border-slate-100 shadow-2xs">
+                    <span className="text-[10px] uppercase font-bold text-[#0E9F8A] block flex items-center justify-center gap-1">
+                      <Home className="w-3 h-3" /> Aba Residencial
+                    </span>
+                    <span className="text-lg font-bold text-[#0E9F8A]">
+                      {importSummary.residencialCount.toLocaleString('pt-BR')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Per-file breakdown */}
+                <div className="space-y-2.5">
+                  <span className="text-xs font-bold text-[#12365A] uppercase tracking-wider block">
+                    Arquivos Selecionados ({parsedFilesData.length})
+                  </span>
+                  {parsedFilesData.map((fileData, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 bg-white border border-[#E3E9F2] rounded-lg shadow-2xs space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <FileSpreadsheet className="w-4 h-4 text-[#0E9F8A] shrink-0" />
+                          <span className="font-semibold text-xs text-[#12365A] font-mono">
+                            {fileData.fileName}
+                          </span>
+                        </div>
+                        <Badge variant="outline" className="text-[10px] bg-slate-50">
+                          {fileData.totalMovelRows + fileData.totalResidencialRows} linhas
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-100">
+                        <div className="flex items-center justify-between px-2 py-1 bg-slate-50 rounded">
+                          <span className="text-[#5B6B82] flex items-center gap-1">
+                            <Smartphone className="w-3 h-3 text-[#12365A]" /> Móvel:
+                          </span>
+                          <span className="font-bold text-[#12365A]">
+                            {fileData.totalMovelRows} linhas
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between px-2 py-1 bg-slate-50 rounded">
+                          <span className="text-[#5B6B82] flex items-center gap-1">
+                            <Home className="w-3 h-3 text-[#0E9F8A]" /> Residencial:
+                          </span>
+                          <span className="font-bold text-[#0E9F8A]">
+                            {fileData.totalResidencialRows} linhas
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Progress bar when importing */}
+                {isImporting && (
+                  <div className="space-y-2 p-3 bg-[#F0F5FC] rounded-lg border border-[#0E9F8A]/30">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-[#12365A] flex items-center gap-1.5">
+                        <RefreshCw className="w-3.5 h-3.5 text-[#0E9F8A] animate-spin" />
+                        {importStatusMessage || 'Processando gravação no banco de dados...'}
+                      </span>
+                      <span className="font-bold text-[#0E9F8A]">{importProgress}%</span>
+                    </div>
+                    <Progress value={importProgress} className="h-2 bg-slate-200" />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0 mt-4 border-t pt-3">
+            <Button
+              variant="outline"
+              onClick={() => setImportDialogOpen(false)}
+              disabled={isImporting}
+              className="text-xs"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmImport}
+              disabled={isImporting || isProcessingFiles || importSummary.total === 0}
+              className="text-xs bg-[#0E9F8A] hover:bg-[#0c8a77] text-white gap-1.5"
+            >
+              {isImporting ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Importando...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>
+                    Confirmar e Importar {importSummary.total.toLocaleString('pt-BR')} Linhas
+                  </span>
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detail JSON / Attributes Dialog */}
       <Dialog open={!!detailRow} onOpenChange={(open) => !open && setDetailRow(null)}>
         <DialogContent className="sm:max-w-2xl bg-white max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-[#12365A] flex items-center gap-2">
               <Database className="w-5 h-5 text-[#0E9F8A]" />
-              <span>Registro Analítico #{detailRow?.linha || detailRow?.id}</span>
+              <span>
+                Registro #{detailRow?.linha || detailRow?.id} — Tabela {detailRow?.aba}
+              </span>
             </DialogTitle>
             <DialogDescription className="text-xs text-[#5B6B82]">
-              Detalhes completos e estrutura de dados JSON da linha analítica.
+              Detalhes cadastrais e todas as colunas capturadas na importação.
             </DialogDescription>
           </DialogHeader>
 
@@ -722,7 +1167,9 @@ export const Relacionamento: React.FC = () => {
               {/* Metadata strip */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-3 bg-slate-50 rounded-lg border border-[#E3E9F2] text-xs">
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-[#5B6B82] block">Aba</span>
+                  <span className="text-[10px] uppercase font-bold text-[#5B6B82] block">
+                    Tabela
+                  </span>
                   <span className="font-semibold text-[#12365A]">{detailRow.aba}</span>
                 </div>
                 <div>
@@ -733,37 +1180,52 @@ export const Relacionamento: React.FC = () => {
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-bold text-[#5B6B82] block">
+                    Vendedor
+                  </span>
+                  <span className="font-semibold text-[#12365A]">{detailRow.vendedor || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-[#5B6B82] block">
                     Linha Orig.
                   </span>
                   <span className="font-semibold text-[#12365A] font-mono">
                     #{detailRow.linha ?? '—'}
                   </span>
                 </div>
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-[#5B6B82] block">
-                    Criado em
-                  </span>
-                  <span className="font-semibold text-[#12365A]">
-                    {detailRow.created ? new Date(detailRow.created).toLocaleString('pt-BR') : '—'}
-                  </span>
-                </div>
               </div>
 
-              {/* Arquivo info */}
-              {detailRow.arquivo && (
-                <div className="p-2.5 bg-[#F8FAFC] rounded-lg border border-[#E3E9F2] text-xs flex items-center gap-2">
-                  <FileSpreadsheet className="w-4 h-4 text-[#0E9F8A]" />
-                  <span className="text-[#5B6B82]">Arquivo:</span>
-                  <span className="font-semibold font-mono text-[#12365A]">
-                    {detailRow.arquivo}
-                  </span>
-                </div>
-              )}
+              {/* Cliente & Arquivo info */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                {detailRow.cliente && (
+                  <div className="p-2.5 bg-[#F8FAFC] rounded-lg border border-[#E3E9F2] flex items-center gap-2">
+                    <User className="w-4 h-4 text-[#0E9F8A] shrink-0" />
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-[#5B6B82] block">
+                        Cliente
+                      </span>
+                      <span className="font-semibold text-[#12365A]">{detailRow.cliente}</span>
+                    </div>
+                  </div>
+                )}
+                {detailRow.arquivo && (
+                  <div className="p-2.5 bg-[#F8FAFC] rounded-lg border border-[#E3E9F2] flex items-center gap-2">
+                    <FileSpreadsheet className="w-4 h-4 text-[#0E9F8A] shrink-0" />
+                    <div className="truncate">
+                      <span className="text-[10px] uppercase font-bold text-[#5B6B82] block">
+                        Arquivo
+                      </span>
+                      <span className="font-semibold font-mono text-[#12365A] truncate block">
+                        {detailRow.arquivo}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* JSON code block */}
               <div>
                 <span className="text-xs font-bold text-[#12365A] block mb-1">
-                  Conteúdo do Campo 'dados' (JSON):
+                  Conteúdo do Campo 'dados' (Mapa Coluna → Valor):
                 </span>
                 <pre className="p-3.5 rounded-lg bg-[#0E2A47] text-slate-100 text-xs font-mono overflow-x-auto max-h-72 shadow-inner">
                   {JSON.stringify(detailRow.dados || {}, null, 2)}
@@ -788,7 +1250,8 @@ export const Relacionamento: React.FC = () => {
               Excluir Linha Analítica?
             </DialogTitle>
             <DialogDescription className="text-xs text-[#5B6B82]">
-              Esta ação removerá permanentemente esta linha da base analítica de Inadimplência.
+              Esta ação removerá permanentemente esta linha da tabela{' '}
+              <strong>{rowToDelete?.aba}</strong> de Inadimplência.
             </DialogDescription>
           </DialogHeader>
 
@@ -798,7 +1261,7 @@ export const Relacionamento: React.FC = () => {
             </Button>
             <Button
               variant="destructive"
-              onClick={() => rowToDelete && handleDeleteRow(rowToDelete.id)}
+              onClick={() => rowToDelete && handleDeleteRow(rowToDelete)}
               className="text-xs bg-red-600 hover:bg-red-700"
             >
               Sim, excluir
@@ -818,11 +1281,12 @@ export const Relacionamento: React.FC = () => {
               <Trash2 className="w-5 h-5" />
             </div>
             <DialogTitle className="text-lg font-bold text-[#12365A]">
-              Limpar todas as linhas de Inadimplência?
+              Limpar tabelas de Inadimplência?
             </DialogTitle>
             <DialogDescription className="text-xs text-[#5B6B82] leading-relaxed">
-              Tem certeza que deseja apagar todas as {totalItems.toLocaleString('pt-BR')} linhas
-              analíticas da base de Inadimplência? Esta ação não pode ser desfeita.
+              Tem certeza que deseja apagar todas as {totalItems.toLocaleString('pt-BR')} linhas das
+              tabelas <strong>Móvel</strong> e <strong>Residencial</strong>? Esta ação não pode ser
+              desfeita.
             </DialogDescription>
           </DialogHeader>
 
