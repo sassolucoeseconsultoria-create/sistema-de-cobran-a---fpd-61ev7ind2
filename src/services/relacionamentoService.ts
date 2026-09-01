@@ -270,174 +270,290 @@ function extractErrorMessage(err: unknown): string {
 }
 
 /**
- * Insert rows into collection 'movel' using throttled individual requests (pb.collection('movel').create).
- * Uses concurrency throttling (5 concurrent requests) with a small delay between batches
- * to strictly prevent 429 Too Many Requests and avoids server batch limitations.
- * Accurately tracks and reports any failed rows by file name and line number.
+ * Execute a create operation with exponential backoff on 429 errors.
+ */
+async function createWithRetry<T>(
+  action: () => Promise<T>,
+  maxRetries = 5,
+  initialDelayMs = 500,
+): Promise<T> {
+  let attempt = 0
+  let delay = initialDelayMs
+
+  while (attempt < maxRetries) {
+    try {
+      return await action()
+    } catch (err: unknown) {
+      const status = (err as { status?: number })?.status
+      if (status === 429 && attempt < maxRetries - 1) {
+        attempt++
+        // Jittered exponential backoff
+        const jitter = Math.floor(Math.random() * 200)
+        await sleep(delay + jitter)
+        delay *= 2
+      } else {
+        throw err
+      }
+    }
+  }
+  return await action()
+}
+
+export interface MovelInsertItem {
+  arquivo?: string
+  linha?: number
+  loja?: string
+  vendedor?: string
+  cliente?: string
+  dados?: Record<string, unknown>
+}
+
+/**
+ * Insert rows into collection 'movel'.
+ * Primary: uses custom server batch endpoint (/api/custom/movel/batch) in chunks of 50 for ultra-fast and reliable import.
+ * Fallback: sequential individual creations with retry on 429.
  */
 export async function insertMovelBatch(
-  rows: Array<{
-    arquivo?: string
-    linha?: number
-    loja?: string
-    vendedor?: string
-    cliente?: string
-    dados?: Record<string, unknown>
-  }>,
+  rows: MovelInsertItem[],
   onProgress?: (inserted: number, total: number) => void,
 ): Promise<number> {
   if (!rows || rows.length === 0) return 0
   invalidateAnalyticalCache()
 
-  const CONCURRENCY = 5
-  const DELAY_MS = 100
+  const BATCH_CHUNK_SIZE = 50
   let insertedTotal = 0
-  const accumulatedErrors: string[] = []
+  let useBatchEndpoint = true
 
-  for (let i = 0; i < rows.length; i += CONCURRENCY) {
-    const chunk = rows.slice(i, i + CONCURRENCY)
+  // Try custom batch endpoint first
+  for (let i = 0; i < rows.length; i += BATCH_CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + BATCH_CHUNK_SIZE)
 
-    const promises = chunk.map(async (item) => {
+    if (useBatchEndpoint) {
       try {
-        await pb.collection('movel').create(
+        const response = await pb.send<{ inserted: number; errors: string[] }>(
+          '/api/custom/movel/batch',
           {
-            arquivo: item.arquivo?.trim() || '',
-            linha: item.linha,
-            loja: item.loja?.trim() || '',
-            vendedor: item.vendedor?.trim() || '',
-            cliente: item.cliente?.trim() || '',
-            dados: item.dados || {},
+            method: 'POST',
+            body: { items: chunk },
+            requestKey: null,
           },
-          { requestKey: null },
         )
-        return { success: true, item, error: null }
-      } catch (err) {
-        return { success: false, item, error: extractErrorMessage(err) }
+
+        insertedTotal += response.inserted || chunk.length
+        if (onProgress) {
+          onProgress(insertedTotal, rows.length)
+        }
+        continue
+      } catch (batchErr: unknown) {
+        const status = (batchErr as { status?: number })?.status
+        // If 404/405 (endpoint not ready), fall back to individual inserts for remaining items
+        if (status === 404 || status === 405) {
+          console.warn(
+            'Batch endpoint /api/custom/movel/batch unavailable, switching to individual inserts',
+          )
+          useBatchEndpoint = false
+        } else {
+          // If the batch endpoint returned a validation error or failure, throw detailed message
+          const msg = extractErrorMessage(batchErr)
+          throw new Error(msg)
+        }
       }
-    })
-
-    const results = await Promise.all(promises)
-
-    for (const res of results) {
-      if (res.success) {
-        insertedTotal++
-      } else {
-        const fileInfo = res.item.arquivo ? `arquivo '${res.item.arquivo}'` : 'arquivo desconhecido'
-        const lineInfo =
-          res.item.linha !== undefined && res.item.linha !== null ? `, linha ${res.item.linha}` : ''
-        const errorDetail = res.error ? ` (${res.error})` : ''
-        accumulatedErrors.push(`[Móvel] ${fileInfo}${lineInfo}${errorDetail}`)
-      }
     }
 
-    if (onProgress) {
-      onProgress(insertedTotal, rows.length)
-    }
+    // Fallback: Individual inserts with concurrency and retry
+    const CONCURRENCY = 3
+    const accumulatedErrors: string[] = []
 
-    // Delay between concurrent chunks to respect server rate limits
-    if (i + CONCURRENCY < rows.length) {
-      await sleep(DELAY_MS)
-    }
-  }
+    for (let j = 0; j < chunk.length; j += CONCURRENCY) {
+      const subChunk = chunk.slice(j, j + CONCURRENCY)
+      const results = await Promise.all(
+        subChunk.map(async (item) => {
+          try {
+            await createWithRetry(() =>
+              pb.collection('movel').create(
+                {
+                  arquivo: item.arquivo?.trim() || '',
+                  linha: item.linha,
+                  loja: item.loja?.trim() || '',
+                  vendedor: item.vendedor?.trim() || '',
+                  cliente: item.cliente?.trim() || '',
+                  dados: item.dados || {},
+                },
+                { requestKey: null },
+              ),
+            )
+            return { success: true, item, error: null }
+          } catch (err) {
+            return { success: false, item, error: extractErrorMessage(err) }
+          }
+        }),
+      )
 
-  if (accumulatedErrors.length > 0) {
-    const summary =
-      accumulatedErrors.length === 1
-        ? `Falha ao importar: ${accumulatedErrors[0]}`
-        : `Falha ao importar ${accumulatedErrors.length} registro(s):\n• ${accumulatedErrors.slice(0, 5).join('\n• ')}${
-            accumulatedErrors.length > 5
-              ? `\n... e mais ${accumulatedErrors.length - 5} falha(s).`
+      for (const res of results) {
+        if (res.success) {
+          insertedTotal++
+        } else {
+          const fileInfo = res.item.arquivo
+            ? `arquivo '${res.item.arquivo}'`
+            : 'arquivo desconhecido'
+          const lineInfo =
+            res.item.linha !== undefined && res.item.linha !== null
+              ? `, linha ${res.item.linha}`
               : ''
-          }`
-    throw new Error(summary)
+          const errorDetail = res.error ? ` (${res.error})` : ''
+          accumulatedErrors.push(`[Móvel] ${fileInfo}${lineInfo}${errorDetail}`)
+        }
+      }
+
+      if (onProgress) {
+        onProgress(insertedTotal, rows.length)
+      }
+
+      await sleep(150)
+    }
+
+    if (accumulatedErrors.length > 0) {
+      const summary =
+        accumulatedErrors.length === 1
+          ? `Falha ao importar: ${accumulatedErrors[0]}`
+          : `Falha ao importar ${accumulatedErrors.length} registro(s):\n• ${accumulatedErrors.slice(0, 5).join('\n• ')}${
+              accumulatedErrors.length > 5
+                ? `\n... e mais ${accumulatedErrors.length - 5} falha(s).`
+                : ''
+            }`
+      throw new Error(summary)
+    }
   }
 
   return insertedTotal
 }
 
+export interface ResidencialInsertItem {
+  arquivo?: string
+  linha?: number
+  loja?: string
+  vendedor?: string
+  cliente?: string
+  dados?: Record<string, unknown>
+  typedFields?: Record<string, string>
+}
+
 /**
- * Insert rows into collection 'residencial' using throttled individual requests (pb.collection('residencial').create).
- * Uses concurrency throttling (5 concurrent requests) with a small delay between batches
- * to strictly prevent 429 Too Many Requests and avoids server batch limitations.
- * Accurately tracks and reports any failed rows by file name and line number.
+ * Insert rows into collection 'residencial'.
+ * Primary: uses custom server batch endpoint (/api/custom/residencial/batch) in chunks of 50 for ultra-fast and reliable import.
+ * Fallback: sequential individual creations with retry on 429.
  */
 export async function insertResidencialBatch(
-  rows: Array<{
-    arquivo?: string
-    linha?: number
-    loja?: string
-    vendedor?: string
-    cliente?: string
-    dados?: Record<string, unknown>
-    typedFields?: Record<string, string>
-  }>,
+  rows: ResidencialInsertItem[],
   onProgress?: (inserted: number, total: number) => void,
 ): Promise<number> {
   if (!rows || rows.length === 0) return 0
   invalidateAnalyticalCache()
 
-  const CONCURRENCY = 5
-  const DELAY_MS = 100
+  const BATCH_CHUNK_SIZE = 50
   let insertedTotal = 0
-  const accumulatedErrors: string[] = []
+  let useBatchEndpoint = true
 
-  for (let i = 0; i < rows.length; i += CONCURRENCY) {
-    const chunk = rows.slice(i, i + CONCURRENCY)
+  // Try custom batch endpoint first
+  for (let i = 0; i < rows.length; i += BATCH_CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + BATCH_CHUNK_SIZE)
 
-    const promises = chunk.map(async (item) => {
+    if (useBatchEndpoint) {
       try {
-        await pb.collection('residencial').create(
+        const response = await pb.send<{ inserted: number; errors: string[] }>(
+          '/api/custom/residencial/batch',
           {
-            arquivo: item.arquivo?.trim() || '',
-            linha: item.linha,
-            loja: item.loja?.trim() || '',
-            vendedor: item.vendedor?.trim() || '',
-            cliente: item.cliente?.trim() || '',
-            dados: item.dados || {},
-            ...(item.typedFields || {}),
+            method: 'POST',
+            body: { items: chunk },
+            requestKey: null,
           },
-          { requestKey: null },
         )
-        return { success: true, item, error: null }
-      } catch (err) {
-        return { success: false, item, error: extractErrorMessage(err) }
+
+        insertedTotal += response.inserted || chunk.length
+        if (onProgress) {
+          onProgress(insertedTotal, rows.length)
+        }
+        continue
+      } catch (batchErr: unknown) {
+        const status = (batchErr as { status?: number })?.status
+        // If 404/405 (endpoint not ready), fall back to individual inserts for remaining items
+        if (status === 404 || status === 405) {
+          console.warn(
+            'Batch endpoint /api/custom/residencial/batch unavailable, switching to individual inserts',
+          )
+          useBatchEndpoint = false
+        } else {
+          // If the batch endpoint returned a validation error or failure, throw detailed message
+          const msg = extractErrorMessage(batchErr)
+          throw new Error(msg)
+        }
       }
-    })
-
-    const results = await Promise.all(promises)
-
-    for (const res of results) {
-      if (res.success) {
-        insertedTotal++
-      } else {
-        const fileInfo = res.item.arquivo ? `arquivo '${res.item.arquivo}'` : 'arquivo desconhecido'
-        const lineInfo =
-          res.item.linha !== undefined && res.item.linha !== null ? `, linha ${res.item.linha}` : ''
-        const errorDetail = res.error ? ` (${res.error})` : ''
-        accumulatedErrors.push(`[Residencial] ${fileInfo}${lineInfo}${errorDetail}`)
-      }
     }
 
-    if (onProgress) {
-      onProgress(insertedTotal, rows.length)
-    }
+    // Fallback: Individual inserts with concurrency and retry
+    const CONCURRENCY = 3
+    const accumulatedErrors: string[] = []
 
-    // Delay between concurrent chunks to respect server rate limits
-    if (i + CONCURRENCY < rows.length) {
-      await sleep(DELAY_MS)
-    }
-  }
+    for (let j = 0; j < chunk.length; j += CONCURRENCY) {
+      const subChunk = chunk.slice(j, j + CONCURRENCY)
+      const results = await Promise.all(
+        subChunk.map(async (item) => {
+          try {
+            await createWithRetry(() =>
+              pb.collection('residencial').create(
+                {
+                  arquivo: item.arquivo?.trim() || '',
+                  linha: item.linha,
+                  loja: item.loja?.trim() || '',
+                  vendedor: item.vendedor?.trim() || '',
+                  cliente: item.cliente?.trim() || '',
+                  dados: item.dados || {},
+                  ...(item.typedFields || {}),
+                },
+                { requestKey: null },
+              ),
+            )
+            return { success: true, item, error: null }
+          } catch (err) {
+            return { success: false, item, error: extractErrorMessage(err) }
+          }
+        }),
+      )
 
-  if (accumulatedErrors.length > 0) {
-    const summary =
-      accumulatedErrors.length === 1
-        ? `Falha ao importar: ${accumulatedErrors[0]}`
-        : `Falha ao importar ${accumulatedErrors.length} registro(s):\n• ${accumulatedErrors.slice(0, 5).join('\n• ')}${
-            accumulatedErrors.length > 5
-              ? `\n... e mais ${accumulatedErrors.length - 5} falha(s).`
+      for (const res of results) {
+        if (res.success) {
+          insertedTotal++
+        } else {
+          const fileInfo = res.item.arquivo
+            ? `arquivo '${res.item.arquivo}'`
+            : 'arquivo desconhecido'
+          const lineInfo =
+            res.item.linha !== undefined && res.item.linha !== null
+              ? `, linha ${res.item.linha}`
               : ''
-          }`
-    throw new Error(summary)
+          const errorDetail = res.error ? ` (${res.error})` : ''
+          accumulatedErrors.push(`[Residencial] ${fileInfo}${lineInfo}${errorDetail}`)
+        }
+      }
+
+      if (onProgress) {
+        onProgress(insertedTotal, rows.length)
+      }
+
+      await sleep(150)
+    }
+
+    if (accumulatedErrors.length > 0) {
+      const summary =
+        accumulatedErrors.length === 1
+          ? `Falha ao importar: ${accumulatedErrors[0]}`
+          : `Falha ao importar ${accumulatedErrors.length} registro(s):\n• ${accumulatedErrors.slice(0, 5).join('\n• ')}${
+              accumulatedErrors.length > 5
+                ? `\n... e mais ${accumulatedErrors.length - 5} falha(s).`
+                : ''
+            }`
+      throw new Error(summary)
+    }
   }
 
   return insertedTotal
@@ -454,8 +570,8 @@ export async function deleteAnalyticalRow(id: string, aba: RelacionamentoAba): P
 
 /**
  * Clear all records from both 'movel' and 'residencial' collections (or single aba).
- * Uses throttled individual delete requests in small concurrent groups (concurrency = 5) with delays,
- * strictly without batch endpoints, to prevent 429 Too Many Requests and handle large datasets reliably.
+ * Primary: uses server endpoint /api/custom/analytical/clear for instant transactional deletion.
+ * Fallback: paginated batch deletion.
  */
 export async function clearAllAnalyticalRows(targetAba?: RelacionamentoAba | 'TODAS'): Promise<{
   movelCount: number
@@ -463,14 +579,38 @@ export async function clearAllAnalyticalRows(targetAba?: RelacionamentoAba | 'TO
 }> {
   invalidateAnalyticalCache()
 
+  const target = targetAba || 'TODAS'
+
+  // Try custom backend endpoint first
+  try {
+    const res = await pb.send<{ success: boolean; movelCount: number; residencialCount: number }>(
+      '/api/custom/analytical/clear',
+      {
+        method: 'POST',
+        body: { targetAba: target },
+        requestKey: null,
+      },
+    )
+    return {
+      movelCount: res.movelCount || 0,
+      residencialCount: res.residencialCount || 0,
+    }
+  } catch (err: unknown) {
+    const status = (err as { status?: number })?.status
+    if (status !== 404 && status !== 405) {
+      console.warn('Clear custom endpoint returned error, proceeding to fallback:', err)
+    }
+  }
+
+  // Fallback: paginated individual deletes
   let movelCount = 0
   let residencialCount = 0
 
-  const shouldClearMovel = !targetAba || targetAba === 'TODAS' || targetAba === 'Móvel'
-  const shouldClearResidencial = !targetAba || targetAba === 'TODAS' || targetAba === 'Residencial'
+  const shouldClearMovel = target === 'TODAS' || target === 'Móvel'
+  const shouldClearResidencial = target === 'TODAS' || target === 'Residencial'
   const FETCH_PAGE_SIZE = 50
-  const CONCURRENCY = 5
-  const DELAY_MS = 100
+  const CONCURRENCY = 4
+  const DELAY_MS = 150
 
   // 1. Clear Móvel using throttled individual deletes
   if (shouldClearMovel) {
@@ -504,9 +644,7 @@ export async function clearAllAnalyticalRows(targetAba?: RelacionamentoAba | 'TO
           }
         }
 
-        // Small delay between page fetches
         await sleep(DELAY_MS)
-
         if (page.items.length < FETCH_PAGE_SIZE) break
       }
     } catch (err) {
@@ -549,9 +687,7 @@ export async function clearAllAnalyticalRows(targetAba?: RelacionamentoAba | 'TO
           }
         }
 
-        // Small delay between page fetches
         await sleep(DELAY_MS)
-
         if (page.items.length < FETCH_PAGE_SIZE) break
       }
     } catch (err) {
