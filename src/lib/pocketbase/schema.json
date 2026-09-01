@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-01T18:19:29.977Z",
+  "generatedAt": "2026-09-01T18:28:17.692Z",
   "collections": [
     {
       "name": "users",
@@ -703,7 +703,8 @@
         "CREATE INDEX idx_movel_vendedor ON movel (vendedor)",
         "CREATE INDEX idx_movel_cliente ON movel (cliente)",
         "CREATE INDEX idx_movel_arquivo ON movel (arquivo)",
-        "CREATE INDEX idx_movel_linha ON movel (linha)"
+        "CREATE INDEX idx_movel_linha ON movel (linha)",
+        "CREATE UNIQUE INDEX `idx_movel_arquivo_linha_unique` ON `movel` (arquivo, linha)"
       ]
     },
     {
@@ -1063,7 +1064,8 @@
         "CREATE INDEX idx_residencial_arquivo ON residencial (arquivo)",
         "CREATE INDEX idx_residencial_linha ON residencial (linha)",
         "CREATE INDEX idx_residencial_cpf ON residencial (cpf)",
-        "CREATE INDEX idx_residencial_nr_contrato ON residencial (nr_contrato)"
+        "CREATE INDEX idx_residencial_nr_contrato ON residencial (nr_contrato)",
+        "CREATE UNIQUE INDEX `idx_residencial_arquivo_linha_unique` ON `residencial` (arquivo, linha)"
       ]
     }
   ]
