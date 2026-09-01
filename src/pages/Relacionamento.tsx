@@ -113,9 +113,13 @@ export const Relacionamento: React.FC = () => {
   // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedSearch(search)
-      setPage(1)
-    }, 250)
+      setDebouncedSearch((prev) => {
+        if (prev !== search) {
+          setPage(1)
+        }
+        return search
+      })
+    }, 350)
     return () => clearTimeout(timer)
   }, [search])
 
@@ -129,52 +133,131 @@ export const Relacionamento: React.FC = () => {
     }
   }, [])
 
-  // Load rows from backend
-  const loadRows = useCallback(async () => {
-    try {
-      setLoading(true)
-      const res = await fetchAnalyticalRows({
-        page,
-        perPage,
-        search: debouncedSearch,
-        aba: selectedAba,
-        loja: selectedLoja,
-        sort: '-created',
-      })
-      setRows(res.items)
-      setTotalItems(res.totalItems)
-      setTotalPages(res.totalPages)
-      setTotalMovel(res.totalMovel)
-      setTotalResidencial(res.totalResidencial)
-    } catch (err) {
-      console.error(err)
-      toast({
-        title: 'Erro ao carregar dados',
-        description: 'Não foi possível carregar as linhas analíticas de Inadimplência.',
-        variant: 'destructive',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }, [page, perPage, debouncedSearch, selectedAba, selectedLoja, toast])
+  // Ref to track last request parameters and ignore stale responses
+  const activeRequestIdRef = useRef(0)
 
-  // Initial load
+  // Load rows from backend
+  const loadRows = useCallback(
+    async (showLoadingSpinner = true) => {
+      const currentRequestId = ++activeRequestIdRef.current
+      if (showLoadingSpinner) {
+        setLoading(true)
+      }
+      try {
+        const res = await fetchAnalyticalRows({
+          page,
+          perPage,
+          search: debouncedSearch,
+          aba: selectedAba,
+          loja: selectedLoja,
+          sort: '-created',
+        })
+        // Only update state if this is still the latest request
+        if (currentRequestId === activeRequestIdRef.current) {
+          setRows(res.items)
+          setTotalItems(res.totalItems)
+          setTotalPages(res.totalPages)
+          setTotalMovel(res.totalMovel)
+          setTotalResidencial(res.totalResidencial)
+        }
+      } catch (err) {
+        if (currentRequestId === activeRequestIdRef.current) {
+          console.error(err)
+          toast({
+            title: 'Erro ao carregar dados',
+            description: 'Não foi possível carregar as linhas analíticas de Inadimplência.',
+            variant: 'destructive',
+          })
+        }
+      } finally {
+        if (currentRequestId === activeRequestIdRef.current) {
+          setLoading(false)
+        }
+      }
+    },
+    // Note: toast is omitted from deps to guarantee stable callback identity
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [page, perPage, debouncedSearch, selectedAba, selectedLoja],
+  )
+
+  // Initial load for lojas - once on mount
   useEffect(() => {
     loadLojas()
   }, [loadLojas])
 
+  // Load rows when pagination or filter params change
   useEffect(() => {
-    loadRows()
+    loadRows(true)
   }, [loadRows])
 
-  // Real-time subscription to 'movel' and 'residencial'
-  useRealtime<MovelRecord>('movel', () => {
-    loadRows()
-    loadLojas()
+  // Real-time subscription to 'movel' and 'residencial':
+  // Perform local state updates for immediate feedback and avoid full refetch loops
+  useRealtime<MovelRecord>('movel', (e) => {
+    if (e.action === 'create') {
+      const newUnified: UnifiedAnalyticRecord = {
+        ...e.record,
+        aba: 'Móvel',
+        rawRecord: e.record,
+      }
+      setRows((prev) => {
+        // If current filter excludes 'Móvel', don't prepend
+        if (selectedAba === 'Residencial') return prev
+        if (selectedLoja !== 'TODAS' && e.record.loja && e.record.loja !== selectedLoja) return prev
+        if (prev.some((r) => r.id === e.record.id && r.aba === 'Móvel')) return prev
+        return [newUnified, ...prev].slice(0, perPage)
+      })
+      setTotalMovel((prev) => prev + 1)
+      setTotalItems((prev) => prev + 1)
+      if (e.record.loja && !availableLojas.includes(e.record.loja)) {
+        setAvailableLojas((prev) => [...prev, e.record.loja].sort((a, b) => a.localeCompare(b)))
+      }
+    } else if (e.action === 'update') {
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === e.record.id && r.aba === 'Móvel'
+            ? { ...e.record, aba: 'Móvel', rawRecord: e.record }
+            : r,
+        ),
+      )
+    } else if (e.action === 'delete') {
+      setRows((prev) => prev.filter((r) => !(r.id === e.record.id && r.aba === 'Móvel')))
+      setTotalMovel((prev) => Math.max(0, prev - 1))
+      setTotalItems((prev) => Math.max(0, prev - 1))
+    }
   })
-  useRealtime<ResidencialRecord>('residencial', () => {
-    loadRows()
-    loadLojas()
+
+  useRealtime<ResidencialRecord>('residencial', (e) => {
+    if (e.action === 'create') {
+      const newUnified: UnifiedAnalyticRecord = {
+        ...e.record,
+        aba: 'Residencial',
+        rawRecord: e.record,
+      }
+      setRows((prev) => {
+        // If current filter excludes 'Residencial', don't prepend
+        if (selectedAba === 'Móvel') return prev
+        if (selectedLoja !== 'TODAS' && e.record.loja && e.record.loja !== selectedLoja) return prev
+        if (prev.some((r) => r.id === e.record.id && r.aba === 'Residencial')) return prev
+        return [newUnified, ...prev].slice(0, perPage)
+      })
+      setTotalResidencial((prev) => prev + 1)
+      setTotalItems((prev) => prev + 1)
+      if (e.record.loja && !availableLojas.includes(e.record.loja)) {
+        setAvailableLojas((prev) => [...prev, e.record.loja].sort((a, b) => a.localeCompare(b)))
+      }
+    } else if (e.action === 'update') {
+      setRows((prev) =>
+        prev.map((r) =>
+          r.id === e.record.id && r.aba === 'Residencial'
+            ? { ...e.record, aba: 'Residencial', rawRecord: e.record }
+            : r,
+        ),
+      )
+    } else if (e.action === 'delete') {
+      setRows((prev) => prev.filter((r) => !(r.id === e.record.id && r.aba === 'Residencial')))
+      setTotalResidencial((prev) => Math.max(0, prev - 1))
+      setTotalItems((prev) => Math.max(0, prev - 1))
+    }
   })
 
   // Toggle JSON expansion inline

@@ -25,8 +25,13 @@ export interface FetchAnalyticalResult {
   totalResidencial: number
 }
 
+// In-flight request deduplication map
+const pendingAnalyticalRequests = new Map<string, Promise<FetchAnalyticalResult>>()
+let pendingLojasRequest: Promise<string[]> | null = null
+
 /**
  * Lists rows from the 'movel' and 'residencial' collections with filtering and pagination.
+ * Features request deduplication to prevent duplicate in-flight requests.
  */
 export async function fetchAnalyticalRows(
   params: FetchAnalyticalParams = {},
@@ -34,143 +39,180 @@ export async function fetchAnalyticalRows(
   const page = params.page || 1
   const perPage = params.perPage || 25
   const selectedAba = params.aba || 'TODAS'
-
-  const filterParts: string[] = []
-
-  if (params.loja && params.loja !== 'TODAS' && params.loja.trim() !== '') {
-    filterParts.push(`loja = "${params.loja.replace(/"/g, '\\"')}"`)
-  }
-
-  if (params.search && params.search.trim() !== '') {
-    const s = params.search.trim().replace(/"/g, '\\"')
-    filterParts.push(`(loja ~ "${s}" || arquivo ~ "${s}" || vendedor ~ "${s}" || cliente ~ "${s}")`)
-  }
-
-  const filterStr = filterParts.length > 0 ? filterParts.join(' && ') : undefined
+  const loja = params.loja || 'TODAS'
+  const search = params.search?.trim() || ''
   const sortStr = params.sort || '-created'
 
-  if (selectedAba === 'Móvel') {
-    const res = await pb.collection('movel').getList<MovelRecord>(page, perPage, {
-      filter: filterStr,
-      sort: sortStr,
-    })
+  // Build a unique key for deduplication
+  const cacheKey = JSON.stringify({ page, perPage, selectedAba, loja, search, sortStr })
 
-    const items: UnifiedAnalyticRecord[] = res.items.map((r) => ({
+  const existing = pendingAnalyticalRequests.get(cacheKey)
+  if (existing) {
+    return existing
+  }
+
+  const fetchPromise = (async (): Promise<FetchAnalyticalResult> => {
+    const filterParts: string[] = []
+
+    if (loja && loja !== 'TODAS' && loja.trim() !== '') {
+      filterParts.push(`loja = "${loja.replace(/"/g, '\\"')}"`)
+    }
+
+    if (search) {
+      const s = search.replace(/"/g, '\\"')
+      filterParts.push(
+        `(loja ~ "${s}" || arquivo ~ "${s}" || vendedor ~ "${s}" || cliente ~ "${s}")`,
+      )
+    }
+
+    const filterStr = filterParts.length > 0 ? filterParts.join(' && ') : undefined
+
+    if (selectedAba === 'Móvel') {
+      const res = await pb.collection('movel').getList<MovelRecord>(page, perPage, {
+        filter: filterStr,
+        sort: sortStr,
+      })
+
+      const items: UnifiedAnalyticRecord[] = res.items.map((r) => ({
+        ...r,
+        aba: 'Móvel',
+        rawRecord: r,
+      }))
+
+      return {
+        items,
+        totalItems: res.totalItems,
+        totalPages: res.totalPages,
+        page: res.page,
+        perPage: res.perPage,
+        totalMovel: res.totalItems,
+        totalResidencial: 0,
+      }
+    }
+
+    if (selectedAba === 'Residencial') {
+      const res = await pb.collection('residencial').getList<ResidencialRecord>(page, perPage, {
+        filter: filterStr,
+        sort: sortStr,
+      })
+
+      const items: UnifiedAnalyticRecord[] = res.items.map((r) => ({
+        ...r,
+        aba: 'Residencial',
+        rawRecord: r,
+      }))
+
+      return {
+        items,
+        totalItems: res.totalItems,
+        totalPages: res.totalPages,
+        page: res.page,
+        perPage: res.perPage,
+        totalMovel: 0,
+        totalResidencial: res.totalItems,
+      }
+    }
+
+    // When 'TODAS': Fetch items from both collections
+    const [resMovel, resResidencial] = await Promise.all([
+      pb.collection('movel').getList<MovelRecord>(1, Math.min(perPage, 50), {
+        filter: filterStr,
+        sort: sortStr,
+      }),
+      pb.collection('residencial').getList<ResidencialRecord>(1, Math.min(perPage, 50), {
+        filter: filterStr,
+        sort: sortStr,
+      }),
+    ])
+
+    const movelUnified: UnifiedAnalyticRecord[] = resMovel.items.map((r) => ({
       ...r,
       aba: 'Móvel',
       rawRecord: r,
     }))
 
-    return {
-      items,
-      totalItems: res.totalItems,
-      totalPages: res.totalPages,
-      page: res.page,
-      perPage: res.perPage,
-      totalMovel: res.totalItems,
-      totalResidencial: 0,
-    }
-  }
-
-  if (selectedAba === 'Residencial') {
-    const res = await pb.collection('residencial').getList<ResidencialRecord>(page, perPage, {
-      filter: filterStr,
-      sort: sortStr,
-    })
-
-    const items: UnifiedAnalyticRecord[] = res.items.map((r) => ({
+    const residencialUnified: UnifiedAnalyticRecord[] = resResidencial.items.map((r) => ({
       ...r,
       aba: 'Residencial',
       rawRecord: r,
     }))
 
+    // Merge and sort by created descending
+    const merged = [...movelUnified, ...residencialUnified].sort((a, b) => {
+      const dateA = new Date(a.created || 0).getTime()
+      const dateB = new Date(b.created || 0).getTime()
+      return dateB - dateA
+    })
+
+    const totalItems = resMovel.totalItems + resResidencial.totalItems
+    const totalPages = Math.max(1, Math.ceil(totalItems / perPage))
+
+    const startIndex = (page - 1) * perPage
+    const paginatedItems = merged.slice(startIndex, startIndex + perPage)
+
     return {
-      items,
-      totalItems: res.totalItems,
-      totalPages: res.totalPages,
-      page: res.page,
-      perPage: res.perPage,
-      totalMovel: 0,
-      totalResidencial: res.totalItems,
+      items: paginatedItems,
+      totalItems,
+      totalPages,
+      page,
+      perPage,
+      totalMovel: resMovel.totalItems,
+      totalResidencial: resResidencial.totalItems,
     }
-  }
+  })()
 
-  // When 'TODAS': Fetch counts or items from both
-  const [resMovel, resResidencial] = await Promise.all([
-    pb.collection('movel').getList<MovelRecord>(1, Math.min(perPage, 50), {
-      filter: filterStr,
-      sort: sortStr,
-    }),
-    pb.collection('residencial').getList<ResidencialRecord>(1, Math.min(perPage, 50), {
-      filter: filterStr,
-      sort: sortStr,
-    }),
-  ])
-
-  const movelUnified: UnifiedAnalyticRecord[] = resMovel.items.map((r) => ({
-    ...r,
-    aba: 'Móvel',
-    rawRecord: r,
-  }))
-
-  const residencialUnified: UnifiedAnalyticRecord[] = resResidencial.items.map((r) => ({
-    ...r,
-    aba: 'Residencial',
-    rawRecord: r,
-  }))
-
-  // Merge and sort by created descending
-  const merged = [...movelUnified, ...residencialUnified].sort((a, b) => {
-    const dateA = new Date(a.created || 0).getTime()
-    const dateB = new Date(b.created || 0).getTime()
-    return dateB - dateA
-  })
-
-  const totalItems = resMovel.totalItems + resResidencial.totalItems
-  const totalPages = Math.max(1, Math.ceil(totalItems / perPage))
-
-  const startIndex = (page - 1) * perPage
-  const paginatedItems = merged.slice(startIndex, startIndex + perPage)
-
-  return {
-    items: paginatedItems,
-    totalItems,
-    totalPages,
-    page,
-    perPage,
-    totalMovel: resMovel.totalItems,
-    totalResidencial: resResidencial.totalItems,
+  pendingAnalyticalRequests.set(cacheKey, fetchPromise)
+  try {
+    return await fetchPromise
+  } finally {
+    pendingAnalyticalRequests.delete(cacheKey)
   }
 }
 
 /**
  * Fetch distinct store names from both 'movel' and 'residencial' collections for filtering.
+ * Features deduplication of in-flight requests.
  */
 export async function fetchDistinctAnalyticalLojas(): Promise<string[]> {
+  if (pendingLojasRequest) {
+    return pendingLojasRequest
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      const [recordsMovel, recordsResidencial] = await Promise.all([
+        pb.collection('movel').getFullList<MovelRecord>({
+          fields: 'loja',
+          sort: 'loja',
+          batch: 500,
+        }),
+        pb.collection('residencial').getFullList<ResidencialRecord>({
+          fields: 'loja',
+          sort: 'loja',
+          batch: 500,
+        }),
+      ])
+
+      const lojasSet = new Set<string>()
+      for (const r of recordsMovel) {
+        if (r.loja && r.loja.trim()) lojasSet.add(r.loja.trim())
+      }
+      for (const r of recordsResidencial) {
+        if (r.loja && r.loja.trim()) lojasSet.add(r.loja.trim())
+      }
+
+      return Array.from(lojasSet).sort((a, b) => a.localeCompare(b))
+    } catch (err) {
+      console.error('Erro ao buscar lojas analíticas:', err)
+      return []
+    }
+  })()
+
+  pendingLojasRequest = fetchPromise
   try {
-    const [recordsMovel, recordsResidencial] = await Promise.all([
-      pb.collection('movel').getFullList<MovelRecord>({
-        fields: 'loja',
-        sort: 'loja',
-      }),
-      pb.collection('residencial').getFullList<ResidencialRecord>({
-        fields: 'loja',
-        sort: 'loja',
-      }),
-    ])
-
-    const lojasSet = new Set<string>()
-    for (const r of recordsMovel) {
-      if (r.loja && r.loja.trim()) lojasSet.add(r.loja.trim())
-    }
-    for (const r of recordsResidencial) {
-      if (r.loja && r.loja.trim()) lojasSet.add(r.loja.trim())
-    }
-
-    return Array.from(lojasSet).sort((a, b) => a.localeCompare(b))
-  } catch (err) {
-    console.error('Erro ao buscar lojas analíticas:', err)
-    return []
+    return await fetchPromise
+  } finally {
+    pendingLojasRequest = null
   }
 }
 
