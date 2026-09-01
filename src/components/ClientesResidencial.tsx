@@ -27,7 +27,7 @@ import { OCORRENCIAS_OPTIONS, type ResidencialRecord, type OcorrenciaType } from
 import {
   applyDateMask,
   formatCpf,
-  formatExcelOrIsoDate,
+  formatExcelOrIsoDateShort,
   formatPhone,
   getDadosField,
 } from '@/lib/clientFormatters'
@@ -453,9 +453,15 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({ availa
                       'DAT VENCIMENTO',
                       'Vencimento',
                       'Data Vencimento',
+                      'Maior atraso',
+                      'MAIOR ATRASO',
+                      'Maior Atraso',
+                      'Atraso',
                     ) ||
                     ''
-                  const datVencimento = rawVencimento ? formatExcelOrIsoDate(rawVencimento) : '—'
+                  const datVencimento = rawVencimento
+                    ? formatExcelOrIsoDateShort(rawVencimento) || String(rawVencimento)
+                    : '—'
 
                   const pagoVal =
                     row.pago || getDadosField(d, 'Pago', 'PAGO', 'Paga', 'Fatura Paga') || '—'

@@ -24,7 +24,12 @@ import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import pb from '@/lib/pocketbase/client'
 import { OCORRENCIAS_OPTIONS, type MovelRecord, type OcorrenciaType } from '@/types/fpd'
-import { applyDateMask, formatCpf, getDadosField } from '@/lib/clientFormatters'
+import {
+  applyDateMask,
+  formatCpf,
+  formatExcelOrIsoDateShort,
+  getDadosField,
+} from '@/lib/clientFormatters'
 import { updateClientManualFields } from '@/services/relacionamentoService'
 import { cn } from '@/lib/utils'
 
@@ -456,7 +461,7 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas }) 
                   const adimplente =
                     getDadosField(d, 'Adimplente', 'ADIMPLENTE', 'Adimplência', 'Pago') || '—'
 
-                  const maiorAtraso =
+                  const rawMaiorAtraso =
                     getDadosField(
                       d,
                       'Maior atraso',
@@ -464,7 +469,11 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas }) 
                       'Maior Atraso',
                       'Atraso',
                       'Qtd Dias Venc',
-                    ) || '—'
+                    ) || ''
+
+                  const maiorAtraso = rawMaiorAtraso
+                    ? formatExcelOrIsoDateShort(rawMaiorAtraso) || rawMaiorAtraso
+                    : '—'
 
                   const edit = editValues[row.id] || {
                     ocorrencias: row.ocorrencias || 'Não Tratados',

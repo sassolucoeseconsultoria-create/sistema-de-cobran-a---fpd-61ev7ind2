@@ -18,6 +18,58 @@ export function applyDateMask(value: string): string {
 }
 
 /**
+ * Formats Excel serial date number, ISO date or existing date string to DD/MM/AA (2-digit year).
+ * Secure against empty, null, undefined, non-numeric or out-of-range inputs.
+ * If already formatted as DD/MM/AA, preserves it.
+ * If formatted as DD/MM/AAAA, converts to DD/MM/AA.
+ */
+export function formatExcelOrIsoDateShort(value: unknown): string {
+  if (value === null || value === undefined || value === '') return ''
+  const strVal = String(value).trim()
+  if (!strVal) return ''
+
+  // Already formatted as DD/MM/AA (e.g. 13/06/26)
+  if (/^\d{2}\/\d{2}\/\d{2}$/.test(strVal)) {
+    return strVal
+  }
+
+  // Formatted as DD/MM/YYYY (e.g. 13/06/2026) -> convert to DD/MM/AA
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(strVal)) {
+    const parts = strVal.split('/')
+    return `${parts[0]}/${parts[1]}/${parts[2].slice(-2)}`
+  }
+
+  // Excel serial date number (e.g. 46188, 46237)
+  // Supports typical Excel date serials between 1 (Jan 1, 1900) and ~100000 (year 2173)
+  const num = Number(strVal)
+  if (!Number.isNaN(num) && num >= 1 && num < 100000) {
+    // Excel epoch base: Dec 30, 1899 (due to Excel's 1900 leap year bug)
+    // Using UTC to prevent timezone shifts
+    const utcMillis = (num - 25569) * 86400000
+    const targetDate = new Date(utcMillis)
+    if (!Number.isNaN(targetDate.getTime())) {
+      const day = String(targetDate.getUTCDate()).padStart(2, '0')
+      const month = String(targetDate.getUTCMonth() + 1).padStart(2, '0')
+      const year = String(targetDate.getUTCFullYear()).slice(-2)
+      return `${day}/${month}/${year}`
+    }
+  }
+
+  // If ISO date string: YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(strVal)) {
+    const parts = strVal.split('T')[0].split('-')
+    if (parts.length === 3) {
+      const day = parts[2].padStart(2, '0')
+      const month = parts[1].padStart(2, '0')
+      const year = parts[0].slice(-2)
+      return `${day}/${month}/${year}`
+    }
+  }
+
+  return strVal
+}
+
+/**
  * Format Excel serial number or standard ISO/date string to dd/mm/yyyy
  */
 export function formatExcelOrIsoDate(value: unknown): string {
@@ -25,21 +77,26 @@ export function formatExcelOrIsoDate(value: unknown): string {
   const strVal = String(value).trim()
   if (!strVal) return ''
 
-  // Already formatted as DD/MM/YYYY or DD/MM/YY
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(strVal) || /^\d{2}\/\d{2}\/\d{2}$/.test(strVal)) {
+  // Already formatted as DD/MM/YYYY
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(strVal)) {
     return strVal
+  }
+
+  // If formatted as DD/MM/YY -> expand to DD/MM/20YY
+  if (/^\d{2}\/\d{2}\/\d{2}$/.test(strVal)) {
+    const parts = strVal.split('/')
+    return `${parts[0]}/${parts[1]}/20${parts[2]}`
   }
 
   // Check if it's an Excel serial date number (e.g. 46188, 46237)
   const num = Number(strVal)
-  if (!Number.isNaN(num) && num > 30000 && num < 60000) {
-    // Excel base date: Dec 30, 1899 due to the leap year 1900 bug
-    const excelEpoch = new Date(1899, 11, 30)
-    const targetDate = new Date(excelEpoch.getTime() + num * 86400000)
+  if (!Number.isNaN(num) && num >= 1 && num < 100000) {
+    const utcMillis = (num - 25569) * 86400000
+    const targetDate = new Date(utcMillis)
     if (!Number.isNaN(targetDate.getTime())) {
-      const day = String(targetDate.getDate()).padStart(2, '0')
-      const month = String(targetDate.getMonth() + 1).padStart(2, '0')
-      const year = targetDate.getFullYear()
+      const day = String(targetDate.getUTCDate()).padStart(2, '0')
+      const month = String(targetDate.getUTCMonth() + 1).padStart(2, '0')
+      const year = targetDate.getUTCFullYear()
       return `${day}/${month}/${year}`
     }
   }

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   applyDateMask,
   formatExcelOrIsoDate,
+  formatExcelOrIsoDateShort,
   formatCpf,
   formatPhone,
   getDadosField,
@@ -23,6 +24,44 @@ describe('clientFormatters', () => {
     })
   })
 
+  describe('formatExcelOrIsoDateShort', () => {
+    it('returns empty string for null/undefined/empty', () => {
+      expect(formatExcelOrIsoDateShort(null)).toBe('')
+      expect(formatExcelOrIsoDateShort(undefined)).toBe('')
+      expect(formatExcelOrIsoDateShort('')).toBe('')
+    })
+
+    it('preserves existing DD/MM/AA', () => {
+      expect(formatExcelOrIsoDateShort('13/06/26')).toBe('13/06/26')
+    })
+
+    it('converts DD/MM/YYYY to DD/MM/AA', () => {
+      expect(formatExcelOrIsoDateShort('13/06/2026')).toBe('13/06/26')
+    })
+
+    it('converts Excel serial number 46237 correctly to DD/MM/AA', () => {
+      // 46237 is 02/08/26 (August 2, 2026) in 1900 date system (base 30/12/1899)
+      const formatted = formatExcelOrIsoDateShort(46237)
+      expect(formatted).toMatch(/^\d{2}\/\d{2}\/\d{2}$/)
+      expect(formatted.length).toBe(8)
+    })
+
+    it('converts Excel serial number 46188 (14/06/26)', () => {
+      expect(formatExcelOrIsoDateShort(46188)).toBe('14/06/26')
+      expect(formatExcelOrIsoDateShort('46188')).toBe('14/06/26')
+    })
+
+    it('converts ISO date strings to DD/MM/AA', () => {
+      expect(formatExcelOrIsoDateShort('2026-08-15T00:00:00.000Z')).toBe('15/08/26')
+      expect(formatExcelOrIsoDateShort('2026-08-15')).toBe('15/08/26')
+    })
+
+    it('returns non-convertible text safely without throwing', () => {
+      expect(formatExcelOrIsoDateShort('Sem atraso')).toBe('Sem atraso')
+      expect(formatExcelOrIsoDateShort('N/A')).toBe('N/A')
+    })
+  })
+
   describe('formatExcelOrIsoDate', () => {
     it('returns empty string for null/undefined/empty', () => {
       expect(formatExcelOrIsoDate(null)).toBe('')
@@ -34,10 +73,9 @@ describe('clientFormatters', () => {
       expect(formatExcelOrIsoDate('15/08/2026')).toBe('15/08/2026')
     })
 
-    it('converts Excel serial numbers', () => {
-      // 46188 is in June 2026
+    it('converts Excel serial numbers to DD/MM/YYYY', () => {
       const formatted = formatExcelOrIsoDate('46188')
-      expect(formatted).toMatch(/^\d{2}\/\d{2}\/\d{4}$/)
+      expect(formatted).toBe('14/06/2026')
     })
 
     it('converts ISO date strings', () => {
