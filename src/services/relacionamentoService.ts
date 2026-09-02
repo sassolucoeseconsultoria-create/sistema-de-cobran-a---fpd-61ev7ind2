@@ -90,11 +90,9 @@ export async function fetchAnalyticalRows(
         .trim()
         .replace(/"/g, '\\"')
       if (unaccented && unaccented.toLowerCase() !== escaped.toLowerCase()) {
-        filterParts.push(
-          `(loja = "${escaped}" || loja ~ "${escaped}" || loja = "${unaccented}" || loja ~ "${unaccented}")`,
-        )
+        filterParts.push(`(loja = "${escaped}" || loja = "${unaccented}")`)
       } else {
-        filterParts.push(`(loja = "${escaped}" || loja ~ "${escaped}")`)
+        filterParts.push(`loja = "${escaped}"`)
       }
     } else if (allowedStoreNames !== undefined) {
       if (allowedStoreNames.length === 0) {
@@ -122,7 +120,7 @@ export async function fetchAnalyticalRows(
         }
 
         const storeFilters = Array.from(expandedStoreNames).map(
-          (st) => `loja = "${st.replace(/"/g, '\\"')}" || loja ~ "${st.replace(/"/g, '\\"')}"`,
+          (st) => `loja = "${st.replace(/"/g, '\\"')}"`,
         )
         if (storeFilters.length > 0) {
           filterParts.push(`(${storeFilters.join(' || ')})`)

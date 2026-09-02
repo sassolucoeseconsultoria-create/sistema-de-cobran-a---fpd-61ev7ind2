@@ -234,15 +234,38 @@ export const Relacionamento: React.FC = () => {
 
         // Only update state if this is still the latest request
         if (currentRequestId === activeRequestIdRef.current) {
-          const filteredItems = userAccess.isAdm
+          let filteredItems = userAccess.isAdm
             ? res.items
             : res.items.filter((r) => userAccess.isStoreNameAllowed(r.loja, stores))
 
+          if (selectedLoja && selectedLoja !== 'TODAS') {
+            const selNorm = selectedLoja.trim().toLowerCase()
+            filteredItems = filteredItems.filter(
+              (r) => (r.loja || '').trim().toLowerCase() === selNorm,
+            )
+          }
+
           setRows(filteredItems)
-          setTotalItems(res.totalItems)
-          setTotalPages(res.totalPages)
-          setTotalMovel(res.totalMovel)
-          setTotalResidencial(res.totalResidencial)
+          setTotalItems(selectedLoja !== 'TODAS' ? filteredItems.length : res.totalItems)
+          setTotalPages(
+            selectedLoja !== 'TODAS'
+              ? Math.max(1, Math.ceil(filteredItems.length / perPage))
+              : res.totalPages,
+          )
+          setTotalMovel(
+            selectedAba === 'Residencial'
+              ? 0
+              : selectedLoja !== 'TODAS'
+                ? filteredItems.filter((r) => r.aba === 'Móvel').length
+                : res.totalMovel,
+          )
+          setTotalResidencial(
+            selectedAba === 'Móvel'
+              ? 0
+              : selectedLoja !== 'TODAS'
+                ? filteredItems.filter((r) => r.aba === 'Residencial').length
+                : res.totalResidencial,
+          )
         }
       } catch (err) {
         if (currentRequestId === activeRequestIdRef.current) {

@@ -102,32 +102,31 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
 
       const filterParts: string[] = []
 
-      // If user is not ADM, build store filter constraints
-      if (!userAccess.isAdm) {
-        if (selectedLoja && selectedLoja !== 'TODAS') {
-          // If a specific store is selected, ensure it's allowed
-          if (userAccess.isStoreNameAllowed(selectedLoja, stores)) {
-            const escaped = selectedLoja.replace(/"/g, '\\"')
-            const unaccented = selectedLoja
-              .normalize('NFD')
-              .replace(/[\u0300-\u036f]/g, '')
-              .trim()
-              .replace(/"/g, '\\"')
+      // If user selected a specific store
+      if (selectedLoja && selectedLoja !== 'TODAS') {
+        // Non-ADM users can only select stores they have access to
+        if (!userAccess.isAdm && !userAccess.isStoreNameAllowed(selectedLoja, stores)) {
+          setRecords([])
+          setTotalItems(0)
+          setTotalPages(1)
+          return
+        }
 
-            if (unaccented && unaccented.toLowerCase() !== escaped.toLowerCase()) {
-              filterParts.push(
-                `(loja = "${escaped}" || loja ~ "${escaped}" || loja = "${unaccented}" || loja ~ "${unaccented}")`,
-              )
-            } else {
-              filterParts.push(`(loja = "${escaped}" || loja ~ "${escaped}")`)
-            }
-          } else {
-            setRecords([])
-            setTotalItems(0)
-            setTotalPages(1)
-            return
-          }
-        } else if (availableLojas.length > 0) {
+        const escaped = selectedLoja.replace(/"/g, '\\"')
+        const unaccented = selectedLoja
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .trim()
+          .replace(/"/g, '\\"')
+
+        if (unaccented && unaccented.toLowerCase() !== escaped.toLowerCase()) {
+          filterParts.push(`(loja = "${escaped}" || loja = "${unaccented}")`)
+        } else {
+          filterParts.push(`loja = "${escaped}"`)
+        }
+      } else if (!userAccess.isAdm) {
+        // User is not ADM and has "TODAS" selected -> filter by all allowed stores
+        if (availableLojas.length > 0) {
           const expandedStoreNames = new Set<string>()
           for (const l of availableLojas) {
             if (!l || !l.trim()) continue
@@ -142,7 +141,7 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
           }
 
           const storeFilters = Array.from(expandedStoreNames).map(
-            (l) => `loja = "${l.replace(/"/g, '\\"')}" || loja ~ "${l.replace(/"/g, '\\"')}"`,
+            (l) => `loja = "${l.replace(/"/g, '\\"')}"`,
           )
           if (storeFilters.length > 0) {
             filterParts.push(`(${storeFilters.join(' || ')})`)
@@ -153,21 +152,6 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
           setTotalItems(0)
           setTotalPages(1)
           return
-        }
-      } else if (selectedLoja && selectedLoja !== 'TODAS') {
-        const escaped = selectedLoja.replace(/"/g, '\\"')
-        const unaccented = selectedLoja
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .trim()
-          .replace(/"/g, '\\"')
-
-        if (unaccented && unaccented.toLowerCase() !== escaped.toLowerCase()) {
-          filterParts.push(
-            `(loja = "${escaped}" || loja ~ "${escaped}" || loja = "${unaccented}" || loja ~ "${unaccented}")`,
-          )
-        } else {
-          filterParts.push(`(loja = "${escaped}" || loja ~ "${escaped}")`)
         }
       }
 
@@ -187,13 +171,25 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
       })
 
       // If non-ADM, only retain records whose store is allowed
-      const filteredItems = userAccess.isAdm
+      let filteredItems = userAccess.isAdm
         ? res.items
         : res.items.filter((item) => userAccess.isStoreNameAllowed(item.loja, stores))
 
+      // Extra safeguard: if a specific store is selected, ensure every returned item strictly matches it
+      if (selectedLoja && selectedLoja !== 'TODAS') {
+        const selNorm = selectedLoja.trim().toLowerCase()
+        filteredItems = filteredItems.filter(
+          (item) => (item.loja || '').trim().toLowerCase() === selNorm,
+        )
+      }
+
       setRecords(filteredItems)
-      setTotalItems(res.totalItems)
-      setTotalPages(res.totalPages)
+      setTotalItems(selectedLoja !== 'TODAS' ? filteredItems.length : res.totalItems)
+      setTotalPages(
+        selectedLoja !== 'TODAS'
+          ? Math.max(1, Math.ceil(filteredItems.length / perPage))
+          : res.totalPages,
+      )
 
       // Initialize edit values
       const initialEdits: Record<
