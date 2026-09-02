@@ -82,12 +82,23 @@ export async function fetchAnalyticalRows(
     const filterParts: string[] = []
 
     if (loja && loja !== 'TODAS' && loja.trim() !== '') {
-      filterParts.push(`loja = "${loja.replace(/"/g, '\\"')}"`)
+      const escaped = loja.replace(/"/g, '\\"')
+      filterParts.push(`(loja = "${escaped}" || loja ~ "${escaped}")`)
     } else if (allowedStoreNames !== undefined) {
       if (allowedStoreNames.length === 0) {
-        filterParts.push(`id = "none_match"`)
+        return {
+          items: [],
+          totalItems: 0,
+          totalPages: 1,
+          page,
+          perPage,
+          totalMovel: 0,
+          totalResidencial: 0,
+        }
       } else {
-        const storeFilters = allowedStoreNames.map((st) => `loja ~ "${st.replace(/"/g, '\\"')}"`)
+        const storeFilters = allowedStoreNames.map(
+          (st) => `loja = "${st.replace(/"/g, '\\"')}" || loja ~ "${st.replace(/"/g, '\\"')}"`,
+        )
         filterParts.push(`(${storeFilters.join(' || ')})`)
       }
     }

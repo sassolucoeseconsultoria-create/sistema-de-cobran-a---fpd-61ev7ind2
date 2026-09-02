@@ -34,11 +34,18 @@ import {
 import { updateClientManualFields } from '@/services/relacionamentoService'
 import { cn } from '@/lib/utils'
 
+import type { StoreRecord } from '@/types/fpd'
+import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
+
 interface ClientesResidencialProps {
   availableLojas: string[]
+  stores?: StoreRecord[]
 }
 
-export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({ availableLojas }) => {
+export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
+  availableLojas,
+  stores = [],
+}) => {
   const { toast } = useToast()
 
   const [records, setRecords] = useState<ResidencialRecord[]>([])
@@ -69,13 +76,50 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({ availa
     return () => clearTimeout(timer)
   }, [search])
 
+  const userAccess = useUserStoreAccess()
+
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const filterParts: string[] = []
-      if (selectedLoja && selectedLoja !== 'TODAS') {
-        filterParts.push(`loja = "${selectedLoja.replace(/"/g, '\\"')}"`)
+      if (userAccess.hasNoStoreAssigned) {
+        setRecords([])
+        setTotalItems(0)
+        setTotalPages(1)
+        return
       }
+
+      const filterParts: string[] = []
+
+      // If user is not ADM, build store filter constraints
+      if (!userAccess.isAdm) {
+        if (selectedLoja && selectedLoja !== 'TODAS') {
+          // If a specific store is selected, ensure it's allowed
+          if (userAccess.isStoreNameAllowed(selectedLoja, stores)) {
+            const escaped = selectedLoja.replace(/"/g, '\\"')
+            filterParts.push(`(loja = "${escaped}" || loja ~ "${escaped}")`)
+          } else {
+            setRecords([])
+            setTotalItems(0)
+            setTotalPages(1)
+            return
+          }
+        } else if (availableLojas.length > 0) {
+          const storeFilters = availableLojas.map(
+            (l) => `loja = "${l.replace(/"/g, '\\"')}" || loja ~ "${l.replace(/"/g, '\\"')}"`,
+          )
+          filterParts.push(`(${storeFilters.join(' || ')})`)
+        } else {
+          // No allowed store names identified
+          setRecords([])
+          setTotalItems(0)
+          setTotalPages(1)
+          return
+        }
+      } else if (selectedLoja && selectedLoja !== 'TODAS') {
+        const escaped = selectedLoja.replace(/"/g, '\\"')
+        filterParts.push(`(loja = "${escaped}" || loja ~ "${escaped}")`)
+      }
+
       if (debouncedSearch.trim()) {
         const s = debouncedSearch.trim().replace(/"/g, '\\"')
         filterParts.push(
@@ -91,8 +135,13 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({ availa
         requestKey: null,
       })
 
-      setRecords(res.items)
-      setTotalItems(res.totalItems)
+      // If non-ADM, also allow any rows where store check passes (or fallback to unfiltered list if filterStr already scoped it)
+      const filteredItems = userAccess.isAdm
+        ? res.items
+        : res.items.filter((item) => !item.loja || userAccess.isStoreNameAllowed(item.loja, stores))
+
+      setRecords(filteredItems)
+      setTotalItems(userAccess.isAdm ? res.totalItems : res.totalItems)
       setTotalPages(res.totalPages)
 
       // Initialize edit values
@@ -100,7 +149,7 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({ availa
         string,
         { ocorrencias: string; data_promessa_de_pagto: string; comentarios: string }
       > = {}
-      res.items.forEach((item) => {
+      filteredItems.forEach((item) => {
         const itemOcorrencia = item.ocorrencias || 'Não Tratados'
         initialEdits[item.id] = {
           ocorrencias: itemOcorrencia,
@@ -119,7 +168,7 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({ availa
     } finally {
       setLoading(false)
     }
-  }, [page, perPage, debouncedSearch, selectedLoja, toast])
+  }, [page, perPage, debouncedSearch, selectedLoja, availableLojas, stores, userAccess, toast])
 
   useEffect(() => {
     loadData()

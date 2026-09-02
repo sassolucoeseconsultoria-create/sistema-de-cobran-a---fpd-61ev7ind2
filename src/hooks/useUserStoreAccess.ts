@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import type { StoreRecord } from '@/types/fpd'
+import { matchStore, normalizeStoreString } from '@/services/fpdService'
 
 export interface UserStoreAccess {
   /**
@@ -89,43 +90,58 @@ export function useUserStoreAccess(): UserStoreAccess {
 
     const isStoreNameAllowed = (storeName?: string | null, allStores?: StoreRecord[]): boolean => {
       if (isAdm) return true
-      if (hasNoStoreAssigned || !storeName || !storeName.trim()) return false
+      if (hasNoStoreAssigned || !storeName || !String(storeName).trim()) return false
 
-      const cleanName = storeName.trim().toUpperCase()
+      const raw = String(storeName).trim()
+
+      // Direct ID check
+      if (effectiveAllowedIds.includes(raw)) return true
 
       // Se temos a lista de todas as lojas para conferir IDs -> nomes
       if (allStores && allStores.length > 0) {
-        const allowedNames = allStores
-          .filter((s) => effectiveAllowedIds.includes(s.id))
-          .map((s) => s.name.trim().toUpperCase())
+        const allowedStores = allStores.filter((s) => effectiveAllowedIds.includes(s.id))
+        if (allowedStores.length === 0) return false
 
-        if (allowedNames.length === 0) return false
+        // 1. Check if direct matchStore against allowedStores matches
+        const matchedAllowed = matchStore(raw, allowedStores)
+        if (matchedAllowed && effectiveAllowedIds.includes(matchedAllowed.id)) {
+          return true
+        }
 
-        // Checagem exata
-        if (allowedNames.includes(cleanName)) return true
+        // 2. Check if matchStore against allStores matches an allowed store
+        const matchedAll = matchStore(raw, allStores)
+        if (matchedAll && effectiveAllowedIds.includes(matchedAll.id)) {
+          return true
+        }
 
-        // Checagem normalizada (remover pontuações/espaços duplicados)
-        const normalizeSimple = (str: string) =>
-          str
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^A-Z0-9]/g, '')
+        // 3. Robust normalized token and string comparisons
+        const normInput = normalizeStoreString(raw)
+        if (!normInput) return false
 
-        const normClean = normalizeSimple(cleanName)
-        if (!normClean) return false
+        const cleanTokens = (str: string) =>
+          normalizeStoreString(str)
+            .replace(/\b(celnet|loja|lj|shopping|shp|shop|mall|galeria|posto|call)\b/gi, ' ')
+            .replace(/[^a-z0-9]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
 
-        return allowedNames.some((allowed) => {
-          const normAllowed = normalizeSimple(allowed)
-          if (!normAllowed) return false
-          return (
-            normClean === normAllowed ||
-            normClean.includes(normAllowed) ||
-            normAllowed.includes(normClean)
-          )
+        const inputTokens = cleanTokens(normInput)
+
+        return allowedStores.some((store) => {
+          const normStore = normalizeStoreString(store.name)
+          if (normStore === normInput) return true
+          if (normInput.includes(normStore) || normStore.includes(normInput)) return true
+
+          const storeTokens = cleanTokens(store.name)
+          if (inputTokens && storeTokens) {
+            if (inputTokens === storeTokens) return true
+            if (inputTokens.includes(storeTokens) || storeTokens.includes(inputTokens)) return true
+          }
+
+          return false
         })
       }
 
-      // Se não temos allStores, não podemos mapear storeId para storeName com certeza
       return false
     }
 

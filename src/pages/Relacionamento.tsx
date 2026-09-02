@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import { Progress } from '@/components/ui/progress'
+import pb from '@/lib/pocketbase/client'
 import { useToast } from '@/hooks/use-toast'
 import useRealtime from '@/hooks/use-realtime'
 import {
@@ -133,13 +134,26 @@ export const Relacionamento: React.FC = () => {
   // Load distinct store names and registered stores
   const loadLojas = useCallback(async () => {
     try {
-      const [lojas, registeredStores] = await Promise.all([
+      const [lojas, registeredStores, movelList, resList] = await Promise.all([
         fetchDistinctAnalyticalLojas(),
         fetchStores().catch(() => []),
+        pb
+          .collection('movel')
+          .getList(1, 200, { fields: 'loja', requestKey: null })
+          .catch(() => ({ items: [] })),
+        pb
+          .collection('residencial')
+          .getList(1, 200, { fields: 'loja', requestKey: null })
+          .catch(() => ({ items: [] })),
       ])
-      if (Array.isArray(lojas)) {
-        setRawAvailableLojas(lojas)
+      const set = new Set<string>(Array.isArray(lojas) ? lojas : [])
+      for (const item of (movelList as { items: Array<{ loja?: string }> }).items) {
+        if (item.loja && String(item.loja).trim()) set.add(String(item.loja).trim())
       }
+      for (const item of (resList as { items: Array<{ loja?: string }> }).items) {
+        if (item.loja && String(item.loja).trim()) set.add(String(item.loja).trim())
+      }
+      setRawAvailableLojas(Array.from(set).sort((a, b) => a.localeCompare(b)))
       setStores(registeredStores)
     } catch {
       // ignore
@@ -148,9 +162,21 @@ export const Relacionamento: React.FC = () => {
 
   // Filtered available lojas based on user profile and linked stores
   const availableLojas = useMemo(() => {
-    if (userAccess.isAdm) return rawAvailableLojas
+    if (userAccess.isAdm) {
+      return rawAvailableLojas.length > 0
+        ? rawAvailableLojas.sort((a, b) => a.localeCompare(b))
+        : stores.map((s) => s.name).sort((a, b) => a.localeCompare(b))
+    }
     if (userAccess.hasNoStoreAssigned) return []
-    return rawAvailableLojas.filter((l) => userAccess.isStoreNameAllowed(l, stores))
+
+    // 1. Find which analytical loja strings belong to the user's stores
+    const allowed = rawAvailableLojas.filter((l) => userAccess.isStoreNameAllowed(l, stores))
+
+    // 2. Also retrieve registered store names for assigned stores
+    const userRegisteredStoreNames = userAccess.getAllowedStoreNames(stores)
+
+    const combined = Array.from(new Set([...allowed, ...userRegisteredStoreNames])).filter(Boolean)
+    return combined.sort((a, b) => a.localeCompare(b))
   }, [rawAvailableLojas, stores, userAccess])
 
   // Allowed store names array to send to backend or filter
@@ -193,10 +219,10 @@ export const Relacionamento: React.FC = () => {
         if (currentRequestId === activeRequestIdRef.current) {
           const filteredItems = userAccess.isAdm
             ? res.items
-            : res.items.filter((r) => userAccess.isStoreNameAllowed(r.loja, stores))
+            : res.items.filter((r) => !r.loja || userAccess.isStoreNameAllowed(r.loja, stores))
 
           setRows(filteredItems)
-          setTotalItems(userAccess.isAdm ? res.totalItems : filteredItems.length)
+          setTotalItems(userAccess.isAdm ? res.totalItems : res.totalItems)
           setTotalPages(res.totalPages)
           setTotalMovel(res.totalMovel)
           setTotalResidencial(res.totalResidencial)
@@ -378,7 +404,7 @@ export const Relacionamento: React.FC = () => {
         setTotalItems(0)
         setTotalMovel(0)
         setTotalResidencial(0)
-        setAvailableLojas([])
+        setRawAvailableLojas([])
       }
 
       toast({
