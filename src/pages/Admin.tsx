@@ -23,6 +23,7 @@ import {
 import pb from '@/lib/pocketbase/client'
 import { useAuth, type UserRole, type User } from '@/contexts/AuthContext'
 import { FIXED_STORE_NAMES, fixedStoresAsRecords } from '@/services/fixedStores'
+import { fetchStores, normalizeStoreString } from '@/services/fpdService'
 import type { StoreRecord } from '@/types/fpd'
 
 import { Button } from '@/components/ui/button'
@@ -93,6 +94,31 @@ export const Admin: React.FC = () => {
   const [userToDelete, setUserToDelete] = useState<User | null>(null)
   const [deleting, setDeleting] = useState(false)
 
+  // Carrega as lojas REAIS do backend na ordem da lista fixa. Os vínculos de
+  // usuários (users.lojas) são relations por ID do PocketBase — usar os IDs
+  // falsos (id = nome) da lista fixa quebra o salvamento. Se a busca falhar,
+  // cai no fallback local (somente leitura/visual).
+  const loadStores = async () => {
+    try {
+      const records = await fetchStores()
+      const byName = new Map<string, StoreRecord>()
+      records.forEach((s) => {
+        if (!byName.has(s.name)) byName.set(s.name, s)
+      })
+      const ordered: StoreRecord[] = []
+      FIXED_STORE_NAMES.forEach((name) => {
+        const match = byName.get(name)
+        if (match && !ordered.some((s) => s.id === match.id)) {
+          ordered.push(match)
+        }
+      })
+      setStores(ordered.length > 0 ? ordered : fixedStoresAsRecords())
+    } catch (err) {
+      console.error('Falha ao carregar lojas do backend, usando lista fixa local:', err)
+      setStores(fixedStoresAsRecords())
+    }
+  }
+
   // Fetch Users and Stores
   const loadData = async () => {
     try {
@@ -101,17 +127,17 @@ export const Admin: React.FC = () => {
         sort: '-created',
       })
       setUsers(userList)
-      setStores(fixedStoresAsRecords())
     } catch (err: unknown) {
       console.error(err)
       toast({
         title: 'Erro ao carregar dados',
-        description: 'Não foi possível buscar os usuários e lojas cadastrados.',
+        description: 'Não foi possível buscar os usuários cadastrados.',
         variant: 'destructive',
       })
     } finally {
       setLoading(false)
     }
+    await loadStores()
   }
 
   useEffect(() => {
@@ -132,23 +158,24 @@ export const Admin: React.FC = () => {
         return [e.record, ...prev]
       })
     } else if (e.action === 'update') {
-      setUsers((prev) =>
-        prev.map((u) => {
-          if (u.id === e.record.id) {
-            // Preserva e-mail/campos existentes se o evento de realtime vier com campo vazio por visibilidade
-            return {
-              ...u,
-              ...e.record,
-              email: e.record.email || u.email,
-              name: e.record.name || u.name,
-              fone: e.record.fone !== undefined ? e.record.fone : u.fone,
-              role: e.record.role || u.role,
-              lojas: e.record.lojas !== undefined ? e.record.lojas : u.lojas,
-            }
-          }
-          return u
-        }),
-      )
+      setUsers((prev) => {
+        const current = prev.find((u) => u.id === e.record.id)
+        if (!current) return prev
+        // Preserva e-mail/campos existentes se o evento de realtime vier com campo vazio por visibilidade
+        const merged: User = {
+          ...current,
+          ...e.record,
+          email: e.record.email || current.email,
+          name: e.record.name || current.name,
+          fone: e.record.fone !== undefined ? e.record.fone : current.fone,
+          role: e.record.role || current.role,
+          lojas: e.record.lojas !== undefined ? e.record.lojas : current.lojas,
+        }
+        // Ignora eventos que não alteram nada (ex.: eco do próprio save),
+        // evitando que um payload defasado sobrescreva o estado recém-salvo
+        if (JSON.stringify(merged) === JSON.stringify(current)) return prev
+        return prev.map((u) => (u.id === merged.id ? merged : u))
+      })
     } else if (e.action === 'delete') {
       setUsers((prev) => prev.filter((u) => u.id !== e.record.id))
     }
@@ -190,6 +217,18 @@ export const Admin: React.FC = () => {
     setStoreSearchQuery('')
     const resolvedRole = normalizeRole(user.role)
     const initialLojas = Array.isArray(user.lojas) ? user.lojas : []
+    // Mapeia os vínculos salvos para os IDs da lista carregada (aceita também
+    // valores legados gravados como nome da loja)
+    const resolvedInitialLojas = initialLojas.map((value) => {
+      if (stores.some((s) => s.id === value)) return value
+      const byName = stores.find((s) => s.name === value)
+      if (byName) return byName.id
+      // Comparação sem acentos (ex.: "SUIÇA" x "SUIÇA" com normalização distinta)
+      const normalized = stores.find(
+        (s) => normalizeStoreString(s.name) === normalizeStoreString(value),
+      )
+      return normalized ? normalized.id : value
+    })
     setFormData({
       name: user.name || '',
       email: user.email || '',
@@ -197,7 +236,7 @@ export const Admin: React.FC = () => {
       password: '',
       passwordConfirm: '',
       role: resolvedRole,
-      lojas: resolvedRole === 'Gerente' ? initialLojas.slice(0, 1) : initialLojas,
+      lojas: resolvedRole === 'Gerente' ? resolvedInitialLojas.slice(0, 1) : resolvedInitialLojas,
     })
     setShowPassword(false)
     setShowPasswordConfirm(false)
@@ -324,6 +363,29 @@ export const Admin: React.FC = () => {
     return codeOrMsg
   }
 
+  // Converte a seleção do formulário para os IDs reais da coleção stores.
+  // O backend grava users.lojas como relation por ID — nunca pelo nome.
+  const resolveLojasForSubmit = (selected: string[]): string[] => {
+    const resolved: string[] = []
+    selected.forEach((value) => {
+      if (storeMap.has(value)) {
+        if (!resolved.includes(value)) resolved.push(value)
+        return
+      }
+      const byName = stores.find((s) => s.name === value)
+      if (byName) {
+        if (!resolved.includes(byName.id)) resolved.push(byName.id)
+        return
+      }
+      // Comparação sem acentos (nomes com Ç/acentos podem divergir na codificação)
+      const normalized = stores.find(
+        (s) => normalizeStoreString(s.name) === normalizeStoreString(value),
+      )
+      if (normalized && !resolved.includes(normalized.id)) resolved.push(normalized.id)
+    })
+    return resolved
+  }
+
   // Handle Form Submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -354,7 +416,7 @@ export const Admin: React.FC = () => {
           emailVisibility: true,
           fone: formData.fone.trim(),
           role: formData.role,
-          lojas: resolvedLojas,
+          lojas: resolveLojasForSubmit(resolvedLojas),
         }
 
         // Só enviar password e passwordConfirm se forem preenchidas
@@ -373,6 +435,15 @@ export const Admin: React.FC = () => {
           fone: payload.fone,
           role: payload.role,
           lojas: payload.lojas,
+        }
+
+        // Se o usuário editou o próprio cadastro, sincroniza o authStore
+        if (editingUser.id === currentUser?.id) {
+          try {
+            await pb.collection('users').authRefresh()
+          } catch {
+            // ignora falha de refresh
+          }
         }
 
         setUsers((prev) => {
@@ -401,7 +472,7 @@ export const Admin: React.FC = () => {
           emailVisibility: true,
           fone: formData.fone.trim(),
           role: formData.role,
-          lojas: resolvedLojas,
+          lojas: resolveLojasForSubmit(resolvedLojas),
           password: trimmedPassword,
           passwordConfirm: trimmedPasswordConfirm,
         }
@@ -563,7 +634,7 @@ export const Admin: React.FC = () => {
     }
   }
 
-  // Store dictionary for lookup by ID (a partir da lista fixa de lojas)
+  // Store dictionary for lookup por ID (IDs reais da coleção stores)
   const storeMap = useMemo(() => {
     const map = new Map<string, StoreRecord>()
     stores.forEach((s) => map.set(s.id, s))
@@ -619,9 +690,10 @@ export const Admin: React.FC = () => {
 
   // Filtered stores for modal search (busca rápida na lista fixa de lojas)
   const modalFilteredStores = useMemo(() => {
-    if (!storeSearchQuery.trim()) return stores
-    const q = storeSearchQuery.toLowerCase().trim()
-    return stores.filter((s) => s.name.toLowerCase().includes(q))
+    const query = storeSearchQuery.trim()
+    if (!query) return stores
+    // Busca sem sensibilidade a acentos (ex.: "SUIÇA" encontra "SUICA")
+    return stores.filter((s) => normalizeStoreString(s.name).includes(normalizeStoreString(query)))
   }, [stores, storeSearchQuery])
 
   // Helper badge for role
@@ -687,10 +759,11 @@ export const Admin: React.FC = () => {
 
   const handleSelectAllStores = () => {
     if (formData.role === 'Gerente') return
-    const allIds = FIXED_STORE_NAMES
+    // Usa os IDs reais da lista carregada (a lista fixa define apenas a ordem)
+    const allIds = stores.map((s) => s.id)
     setFormData((prev) => ({
       ...prev,
-      lojas: prev.lojas.length === stores.length ? [] : [...allIds],
+      lojas: prev.lojas.length === stores.length && stores.length > 0 ? [] : allIds,
     }))
   }
 
