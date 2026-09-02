@@ -19,11 +19,10 @@ import {
   CheckCircle2,
   RefreshCw,
   Check,
-  ChevronsUpDown,
 } from 'lucide-react'
 import pb from '@/lib/pocketbase/client'
 import { useAuth, type UserRole, type User } from '@/contexts/AuthContext'
-import { fetchStores } from '@/services/fpdService'
+import { FIXED_STORE_NAMES, fixedStoresAsRecords } from '@/services/fixedStores'
 import type { StoreRecord } from '@/types/fpd'
 
 import { Button } from '@/components/ui/button'
@@ -98,14 +97,11 @@ export const Admin: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [userList, storeList] = await Promise.all([
-        pb.collection('users').getFullList<User>({
-          sort: '-created',
-        }),
-        fetchStores().catch(() => [] as StoreRecord[]),
-      ])
+      const userList = await pb.collection('users').getFullList<User>({
+        sort: '-created',
+      })
       setUsers(userList)
-      setStores(storeList)
+      setStores(fixedStoresAsRecords())
     } catch (err: unknown) {
       console.error(err)
       toast({
@@ -567,7 +563,7 @@ export const Admin: React.FC = () => {
     }
   }
 
-  // Store dictionary for lookup by ID
+  // Store dictionary for lookup by ID (a partir da lista fixa de lojas)
   const storeMap = useMemo(() => {
     const map = new Map<string, StoreRecord>()
     stores.forEach((s) => map.set(s.id, s))
@@ -621,16 +617,11 @@ export const Admin: React.FC = () => {
     })
   }, [users, roleFilter, search, storeMap])
 
-  // Filtered stores for modal search
+  // Filtered stores for modal search (busca rápida na lista fixa de lojas)
   const modalFilteredStores = useMemo(() => {
     if (!storeSearchQuery.trim()) return stores
     const q = storeSearchQuery.toLowerCase().trim()
-    return stores.filter(
-      (s) =>
-        s.name.toLowerCase().includes(q) ||
-        (s.coordenacao && s.coordenacao.toLowerCase().includes(q)) ||
-        (s.supervisao && s.supervisao.toLowerCase().includes(q)),
-    )
+    return stores.filter((s) => s.name.toLowerCase().includes(q))
   }, [stores, storeSearchQuery])
 
   // Helper badge for role
@@ -696,10 +687,10 @@ export const Admin: React.FC = () => {
 
   const handleSelectAllStores = () => {
     if (formData.role === 'Gerente') return
-    const allIds = stores.map((s) => s.id)
+    const allIds = FIXED_STORE_NAMES
     setFormData((prev) => ({
       ...prev,
-      lojas: prev.lojas.length === stores.length ? [] : allIds,
+      lojas: prev.lojas.length === stores.length ? [] : [...allIds],
     }))
   }
 
@@ -1315,16 +1306,9 @@ export const Admin: React.FC = () => {
                   </div>
                 )}
 
-                {/* Lista selecionável de lojas */}
+                {/* Lista selecionável de lojas (lista fixa) */}
                 <div className="max-h-48 overflow-y-auto border border-[#E3E9F2] rounded-lg bg-white divide-y divide-slate-100">
-                  {stores.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-[#5B6B82]">
-                      Nenhuma loja cadastrada no sistema.{' '}
-                      <span className="text-[#0E9F8A]">
-                        Cadastre lojas na aba Lojas ou via importação.
-                      </span>
-                    </div>
-                  ) : modalFilteredStores.length === 0 ? (
+                  {modalFilteredStores.length === 0 ? (
                     <div className="p-3 text-center text-xs text-[#8A97AC]">
                       Nenhuma loja encontrada para "{storeSearchQuery}".
                     </div>
@@ -1357,12 +1341,6 @@ export const Admin: React.FC = () => {
                             </div>
                             <span className="truncate">{store.name}</span>
                           </div>
-
-                          {(store.coordenacao || store.supervisao) && (
-                            <span className="text-[10px] text-[#8A97AC] font-normal truncate shrink-0 ml-2">
-                              {[store.coordenacao, store.supervisao].filter(Boolean).join(' • ')}
-                            </span>
-                          )}
                         </div>
                       )
                     })
