@@ -83,7 +83,19 @@ export async function fetchAnalyticalRows(
 
     if (loja && loja !== 'TODAS' && loja.trim() !== '') {
       const escaped = loja.replace(/"/g, '\\"')
-      filterParts.push(`(loja = "${escaped}" || loja ~ "${escaped}")`)
+      // Also generate unaccented version if different for query filter fallback
+      const unaccented = loja
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .replace(/"/g, '\\"')
+      if (unaccented && unaccented.toLowerCase() !== escaped.toLowerCase()) {
+        filterParts.push(
+          `(loja = "${escaped}" || loja ~ "${escaped}" || loja = "${unaccented}" || loja ~ "${unaccented}")`,
+        )
+      } else {
+        filterParts.push(`(loja = "${escaped}" || loja ~ "${escaped}")`)
+      }
     } else if (allowedStoreNames !== undefined) {
       if (allowedStoreNames.length === 0) {
         return {
@@ -96,10 +108,25 @@ export async function fetchAnalyticalRows(
           totalResidencial: 0,
         }
       } else {
-        const storeFilters = allowedStoreNames.map(
+        const expandedStoreNames = new Set<string>()
+        for (const st of allowedStoreNames) {
+          if (!st || !st.trim()) continue
+          expandedStoreNames.add(st.trim())
+          const unaccented = st
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+          if (unaccented) {
+            expandedStoreNames.add(unaccented)
+          }
+        }
+
+        const storeFilters = Array.from(expandedStoreNames).map(
           (st) => `loja = "${st.replace(/"/g, '\\"')}" || loja ~ "${st.replace(/"/g, '\\"')}"`,
         )
-        filterParts.push(`(${storeFilters.join(' || ')})`)
+        if (storeFilters.length > 0) {
+          filterParts.push(`(${storeFilters.join(' || ')})`)
+        }
       }
     }
 

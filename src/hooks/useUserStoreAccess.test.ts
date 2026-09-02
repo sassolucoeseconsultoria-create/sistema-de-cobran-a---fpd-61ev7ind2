@@ -59,7 +59,10 @@ describe('useUserStoreAccess', () => {
     expect(result.current.isStoreNameAllowed('Aguas Claras', mockStores)).toBe(true)
     expect(result.current.isStoreNameAllowed('Águas Claras', mockStores)).toBe(true)
     expect(result.current.isStoreNameAllowed('Qualquer Loja', mockStores)).toBe(true)
-    expect(result.current.getAllowedStoreNames(mockStores)).toEqual(['Águas Claras', 'Taguatinga Shopping'])
+    expect(result.current.getAllowedStoreNames(mockStores)).toEqual([
+      'Águas Claras',
+      'Taguatinga Shopping',
+    ])
   })
 
   it('permite correspondência normalizada (acentos, maiúsculas) para Gerente vinculado à loja Águas Claras', () => {

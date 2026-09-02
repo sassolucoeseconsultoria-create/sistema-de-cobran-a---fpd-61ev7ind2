@@ -97,6 +97,18 @@ export function useUserStoreAccess(): UserStoreAccess {
       // Direct ID check
       if (effectiveAllowedIds.includes(raw)) return true
 
+      const normInput = normalizeStoreString(raw)
+      if (!normInput) return false
+
+      const cleanTokens = (str: string) =>
+        normalizeStoreString(str)
+          .replace(/\b(celnet|loja|lj|shopping|shp|shop|mall|galeria|posto|call)\b/gi, ' ')
+          .replace(/[^a-z0-9]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+
+      const inputTokens = cleanTokens(normInput)
+
       // Se temos a lista de todas as lojas para conferir IDs -> nomes
       if (allStores && allStores.length > 0) {
         const allowedStores = allStores.filter((s) => effectiveAllowedIds.includes(s.id))
@@ -114,19 +126,7 @@ export function useUserStoreAccess(): UserStoreAccess {
           return true
         }
 
-        // 3. Robust normalized token and string comparisons
-        const normInput = normalizeStoreString(raw)
-        if (!normInput) return false
-
-        const cleanTokens = (str: string) =>
-          normalizeStoreString(str)
-            .replace(/\b(celnet|loja|lj|shopping|shp|shop|mall|galeria|posto|call)\b/gi, ' ')
-            .replace(/[^a-z0-9]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim()
-
-        const inputTokens = cleanTokens(normInput)
-
+        // 3. Robust normalized token and string comparisons against allowedStores
         return allowedStores.some((store) => {
           const normStore = normalizeStoreString(store.name)
           if (normStore === normInput) return true
@@ -142,7 +142,20 @@ export function useUserStoreAccess(): UserStoreAccess {
         })
       }
 
-      return false
+      // Fallback if allStores was not supplied but effectiveAllowedIds might match normalized store strings
+      return effectiveAllowedIds.some((allowedId) => {
+        const normAllowed = normalizeStoreString(allowedId)
+        if (normAllowed === normInput) return true
+        if (normInput.includes(normAllowed) || normAllowed.includes(normInput)) return true
+
+        const allowedTokens = cleanTokens(allowedId)
+        if (inputTokens && allowedTokens) {
+          if (inputTokens === allowedTokens) return true
+          if (inputTokens.includes(allowedTokens) || allowedTokens.includes(inputTokens))
+            return true
+        }
+        return false
+      })
     }
 
     return {
