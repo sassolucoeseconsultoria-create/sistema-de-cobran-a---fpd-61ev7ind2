@@ -307,7 +307,11 @@ export const Admin: React.FC = () => {
         }
 
         const updated = await pb.collection('users').update<User>(editingUser.id, payload)
-        setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)))
+        setUsers((prev) => {
+          const exists = prev.some((u) => u.id === updated.id)
+          if (!exists) return [updated, ...prev]
+          return prev.map((u) => (u.id === updated.id ? updated : u))
+        })
 
         toast({
           title: 'Usuário atualizado com sucesso',
@@ -340,9 +344,7 @@ export const Admin: React.FC = () => {
     } catch (err: any) {
       console.error('Erro ao salvar usuário no PocketBase:', err)
 
-      // Extração robusta de erros de validação no PocketBase SDK 0.26.x
-      // No SDK 0.26.x, erros de validação vêm em err.response como objeto plano { [field]: { code, message } }
-      // ou em err.response.data / err.data
+      // Extração robusta de erros de validação no PocketBase SDK
       const rawSources: any[] = []
       if (
         err?.response &&
@@ -359,6 +361,12 @@ export const Admin: React.FC = () => {
           rawSources.push(err.data.data)
         }
         rawSources.push(err.data)
+      }
+      if (err?.originalError?.data && typeof err.originalError.data === 'object') {
+        rawSources.push(err.originalError.data)
+      }
+      if (err?.cause?.data && typeof err.cause.data === 'object') {
+        rawSources.push(err.cause.data)
       }
 
       const fieldErrors: Record<string, string> = {}
@@ -396,7 +404,7 @@ export const Admin: React.FC = () => {
             continue
           }
 
-          let mappedKey = key === 'username' ? 'email' : key
+          const mappedKey = key === 'username' ? 'email' : key
 
           if (!fieldErrors[mappedKey]) {
             fieldErrors[mappedKey] = translateErrorMessage(itemCode || itemMsg, mappedKey)
@@ -408,21 +416,24 @@ export const Admin: React.FC = () => {
       setFormErrors(fieldErrors)
 
       const hasFieldErrors = Object.keys(fieldErrors).length > 0
+      let fallbackMsg = ''
       if (hasFieldErrors) {
         setGeneralError('Verifique os campos destacados abaixo.')
       } else {
-        const fallbackMsg =
+        fallbackMsg =
           typeof err?.message === 'string' && err.message.trim().length > 0
             ? translateErrorMessage(err.message)
             : 'Erro ao salvar usuário. Tente novamente.'
         setGeneralError(fallbackMsg)
       }
 
+      const errorMsg = hasFieldErrors
+        ? 'Verifique os campos destacados abaixo.'
+        : fallbackMsg || 'Erro ao salvar usuário. Tente novamente.'
+
       toast({
         title: editingUser ? 'Erro ao atualizar usuário' : 'Erro ao cadastrar usuário',
-        description: hasFieldErrors
-          ? 'Verifique os campos destacados abaixo.'
-          : 'Erro ao salvar usuário. Tente novamente.',
+        description: errorMsg,
         variant: 'destructive',
       })
     } finally {
