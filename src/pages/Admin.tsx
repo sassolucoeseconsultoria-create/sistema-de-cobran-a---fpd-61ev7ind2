@@ -114,11 +114,32 @@ export const Admin: React.FC = () => {
   useRealtime<User>('users', (e) => {
     if (e.action === 'create') {
       setUsers((prev) => {
-        if (prev.some((u) => u.id === e.record.id)) return prev
+        const existing = prev.find((u) => u.id === e.record.id)
+        if (existing) {
+          // Se já existe localmente, faz merge preservando campos locais caso o evento venha sem email
+          return prev.map((u) =>
+            u.id === e.record.id ? { ...u, ...e.record, email: e.record.email || u.email } : u,
+          )
+        }
         return [e.record, ...prev]
       })
     } else if (e.action === 'update') {
-      setUsers((prev) => prev.map((u) => (u.id === e.record.id ? e.record : u)))
+      setUsers((prev) =>
+        prev.map((u) => {
+          if (u.id === e.record.id) {
+            // Preserva e-mail/campos existentes se o evento de realtime vier com campo vazio por visibilidade
+            return {
+              ...u,
+              ...e.record,
+              email: e.record.email || u.email,
+              name: e.record.name || u.name,
+              fone: e.record.fone !== undefined ? e.record.fone : u.fone,
+              role: e.record.role || u.role,
+            }
+          }
+          return u
+        }),
+      )
     } else if (e.action === 'delete') {
       setUsers((prev) => prev.filter((u) => u.id !== e.record.id))
     }
@@ -294,9 +315,11 @@ export const Admin: React.FC = () => {
     try {
       if (editingUser) {
         // Update user
+        const normalizedEmail = (formData.email || '').trim().toLowerCase()
         const payload: Record<string, any> = {
           name: formData.name.trim(),
-          email: (formData.email || '').trim().toLowerCase(),
+          email: normalizedEmail,
+          emailVisibility: true,
           fone: formData.fone.trim(),
           role: formData.role,
         }
@@ -308,10 +331,20 @@ export const Admin: React.FC = () => {
         }
 
         const updated = await pb.collection('users').update<User>(editingUser.id, payload)
+        // Garante que os dados editados (incluindo email e fone) permaneçam no registro local
+        const mergedUpdated: User = {
+          ...editingUser,
+          ...updated,
+          name: payload.name,
+          email: payload.email || updated.email || editingUser.email,
+          fone: payload.fone,
+          role: payload.role,
+        }
+
         setUsers((prev) => {
-          const exists = prev.some((u) => u.id === updated.id)
-          if (!exists) return [updated, ...prev]
-          return prev.map((u) => (u.id === updated.id ? updated : u))
+          const exists = prev.some((u) => u.id === mergedUpdated.id)
+          if (!exists) return [mergedUpdated, ...prev]
+          return prev.map((u) => (u.id === mergedUpdated.id ? mergedUpdated : u))
         })
 
         toast({
@@ -320,9 +353,11 @@ export const Admin: React.FC = () => {
         })
       } else {
         // Create user - NOTE: verified and emailVisibility omitted so non-superuser Admins can create records
+        const normalizedEmail = (formData.email || '').trim().toLowerCase()
         const payload: Record<string, any> = {
           name: formData.name.trim(),
-          email: (formData.email || '').trim().toLowerCase(),
+          email: normalizedEmail,
+          emailVisibility: true,
           fone: formData.fone.trim(),
           role: formData.role,
           password: trimmedPassword,
@@ -330,9 +365,17 @@ export const Admin: React.FC = () => {
         }
 
         const created = await pb.collection('users').create<User>(payload)
+        const mergedCreated: User = {
+          ...created,
+          name: payload.name,
+          email: payload.email || created.email,
+          fone: payload.fone,
+          role: payload.role,
+        }
+
         setUsers((prev) => {
-          if (prev.some((u) => u.id === created.id)) return prev
-          return [created, ...prev]
+          if (prev.some((u) => u.id === mergedCreated.id)) return prev
+          return [mergedCreated, ...prev]
         })
 
         toast({
