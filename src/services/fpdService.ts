@@ -188,6 +188,62 @@ export async function fetchImportedFiles(): Promise<ImportedFileRecord[]> {
   })
 }
 
+export async function fetchDistinctReferenceDates(): Promise<string[]> {
+  try {
+    const [files, fpdRecords, vendorRecords] = await Promise.all([
+      fetchImportedFiles(),
+      fetchFpdRecords(),
+      fetchVendorConsolidations().catch(() => []),
+    ])
+
+    const set = new Set<string>()
+
+    for (const f of files) {
+      if (f.reference_date && f.reference_date.trim() !== '') {
+        set.add(f.reference_date.trim())
+      } else if (f.data_referencia && f.data_referencia.trim() !== '') {
+        set.add(f.data_referencia.trim())
+      }
+    }
+
+    for (const r of fpdRecords) {
+      if (r.referente && r.referente.trim() !== '') {
+        set.add(r.referente.trim())
+      }
+    }
+
+    for (const v of vendorRecords) {
+      if (v.data_referencia && v.data_referencia.trim() !== '') {
+        set.add(v.data_referencia.trim())
+      }
+    }
+
+    // Sort descending by parsed date (DD/MM/YYYY) or string
+    return Array.from(set).sort((a, b) => {
+      const partsA = a.split('/')
+      const partsB = b.split('/')
+      if (partsA.length === 3 && partsB.length === 3) {
+        const dateA = new Date(
+          Number(partsA[2]),
+          Number(partsA[1]) - 1,
+          Number(partsA[0]),
+        ).getTime()
+        const dateB = new Date(
+          Number(partsB[2]),
+          Number(partsB[1]) - 1,
+          Number(partsB[0]),
+        ).getTime()
+        if (!isNaN(dateA) && !isNaN(dateB)) {
+          return dateB - dateA
+        }
+      }
+      return b.localeCompare(a)
+    })
+  } catch {
+    return []
+  }
+}
+
 export async function getImportedFiles(): Promise<ImportedFileRecord[]> {
   return fetchImportedFiles()
 }
@@ -465,17 +521,18 @@ export async function saveVendorConsolidationsFromLines(
     }
   }
 
-  // Now for each aggregated vendor, check if a record with same vendedor + loja (+ referenceDate if present) exists
+  // Now for each aggregated vendor, check if a record with same vendedor + loja + data_referencia exists
   const existingRecords = await fetchVendorConsolidations()
   const existingMap = new Map<string, VendorConsolidationRecord>()
   for (const r of existingRecords) {
-    const k = `${r.vendedor.trim().toUpperCase()}__${(r.loja || '').trim().toUpperCase()}`
+    const k = `${r.vendedor.trim().toUpperCase()}__${(r.loja || '').trim().toUpperCase()}__${(r.data_referencia || '').trim()}`
     existingMap.set(k, r)
   }
 
   let savedCount = 0
-  for (const [key, item] of map.entries()) {
-    const existing = existingMap.get(key)
+  for (const [, item] of map.entries()) {
+    const matchKey = `${item.vendedor.trim().toUpperCase()}__${item.loja.trim().toUpperCase()}__${(item.data_referencia || '').trim()}`
+    const existing = existingMap.get(matchKey)
     const payload = {
       vendedor: item.vendedor,
       loja: item.loja,

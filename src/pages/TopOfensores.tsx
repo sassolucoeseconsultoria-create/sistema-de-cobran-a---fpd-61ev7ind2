@@ -19,7 +19,12 @@ import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import useRealtime from '@/hooks/use-realtime'
 import { useCountUp } from '@/hooks/useCountUp'
-import { fetchVendorConsolidations, fetchStores, matchStore } from '@/services/fpdService'
+import {
+  fetchVendorConsolidations,
+  fetchStores,
+  matchStore,
+  fetchDistinctReferenceDates,
+} from '@/services/fpdService'
 import { exportVendorsToXlsx } from '@/lib/xlsxExport'
 import {
   FPD_STATUSES,
@@ -40,6 +45,8 @@ export const TopOfensores: React.FC = () => {
   // Filters
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [availableReferenceDates, setAvailableReferenceDates] = useState<string[]>([])
+  const [selectedReferenceDate, setSelectedReferenceDate] = useState<string>('all')
   const [selectedLoja, setSelectedLoja] = useState<string>('all')
 
   // Debounce search
@@ -54,12 +61,14 @@ export const TopOfensores: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [fetchedVendors, fetchedStores] = await Promise.all([
+      const [fetchedVendors, fetchedStores, fetchedRefDates] = await Promise.all([
         fetchVendorConsolidations(),
         fetchStores(),
+        fetchDistinctReferenceDates(),
       ])
       setRecords(fetchedVendors)
       setStores(fetchedStores)
+      setAvailableReferenceDates(fetchedRefDates)
     } catch (err: unknown) {
       console.error(err)
       toast({
@@ -143,6 +152,15 @@ export const TopOfensores: React.FC = () => {
   const filteredAndSorted = useMemo(() => {
     let rows = [...allVendorRows]
 
+    // Apply reference date filter
+    if (selectedReferenceDate !== 'all') {
+      if (selectedReferenceDate === 'none') {
+        rows = rows.filter((r) => !r.dataReferencia || r.dataReferencia.trim() === '')
+      } else {
+        rows = rows.filter((r) => r.dataReferencia === selectedReferenceDate)
+      }
+    }
+
     // Apply store filter first if selected
     if (selectedLoja !== 'all') {
       rows = rows.filter((r) => r.loja === selectedLoja)
@@ -169,7 +187,7 @@ export const TopOfensores: React.FC = () => {
 
     // Take top 20
     return rows.slice(0, 20)
-  }, [allVendorRows, debouncedSearch, selectedLoja])
+  }, [allVendorRows, debouncedSearch, selectedLoja, selectedReferenceDate])
 
   // Summary Totals for Top 20
   const totals = useMemo(() => {
@@ -225,11 +243,21 @@ export const TopOfensores: React.FC = () => {
     return ((totals.totalLinhas / grandTotalLinhas) * 100).toFixed(1)
   }, [totals.totalLinhas, grandTotalLinhas])
 
-  // Latest Referente (only from permitted vendor rows)
-  const latestReferente = useMemo(() => {
+  // Effective Referente
+  const effectiveReferente = useMemo(() => {
+    if (
+      selectedReferenceDate &&
+      selectedReferenceDate !== 'all' &&
+      selectedReferenceDate !== 'none'
+    ) {
+      return selectedReferenceDate
+    }
+    if (selectedReferenceDate === 'none') {
+      return 'Sem referência'
+    }
     const withRef = allVendorRows.find((r) => r.dataReferencia && r.dataReferencia.trim() !== '')
     return withRef?.dataReferencia || null
-  }, [allVendorRows])
+  }, [allVendorRows, selectedReferenceDate])
 
   // Export Top 20 to Excel
   const handleExportXlsx = () => {
@@ -240,7 +268,7 @@ export const TopOfensores: React.FC = () => {
       })
       return
     }
-    exportVendorsToXlsx(filteredAndSorted, totals, latestReferente || undefined, {
+    exportVendorsToXlsx(filteredAndSorted, totals, effectiveReferente || undefined, {
       sheetName: 'Top_20_Ofensores',
       filePrefix: 'Ranking_20_Principais_Ofensores_FPD',
     })
@@ -250,12 +278,14 @@ export const TopOfensores: React.FC = () => {
     })
   }
 
-  const hasActiveFilters = debouncedSearch !== '' || selectedLoja !== 'all'
+  const hasActiveFilters =
+    debouncedSearch !== '' || selectedLoja !== 'all' || selectedReferenceDate !== 'all'
 
   const clearFilters = () => {
     setSearch('')
     setDebouncedSearch('')
     setSelectedLoja('all')
+    setSelectedReferenceDate('all')
   }
 
   return (
@@ -376,7 +406,7 @@ export const TopOfensores: React.FC = () => {
           {/* Left search & filters */}
           <div className="flex flex-wrap items-center gap-2.5 flex-1">
             {/* Search */}
-            <div className="relative w-full sm:w-72">
+            <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 text-[#8A97AC] absolute left-3 top-1/2 -translate-y-1/2" />
               <Input
                 placeholder="Buscar ofensor, loja ou supervisão..."
@@ -394,8 +424,30 @@ export const TopOfensores: React.FC = () => {
               )}
             </div>
 
+            {/* Filter: Data de Referência */}
+            <div className="w-full sm:w-auto">
+              <select
+                value={selectedReferenceDate}
+                onChange={(e) => setSelectedReferenceDate(e.target.value)}
+                className={cn(
+                  'h-9 px-3 text-xs font-medium rounded-md border bg-white focus:outline-none focus:border-[#0E9F8A]',
+                  selectedReferenceDate !== 'all'
+                    ? 'border-[#0E9F8A] text-[#0E9F8A] bg-[#0E9F8A]/5 font-semibold'
+                    : 'border-[#E3E9F2] text-[#12365A]',
+                )}
+              >
+                <option value="all">Todas as referências</option>
+                {availableReferenceDates.map((date) => (
+                  <option key={date} value={date}>
+                    Referência: {date}
+                  </option>
+                ))}
+                <option value="none">Sem referência</option>
+              </select>
+            </div>
+
             {/* Filter Loja (Dropdown) */}
-            <div className="w-full sm:w-56">
+            <div className="w-full sm:w-52">
               <select
                 value={selectedLoja}
                 onChange={(e) => setSelectedLoja(e.target.value)}

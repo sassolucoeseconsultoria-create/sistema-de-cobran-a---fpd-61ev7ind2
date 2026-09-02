@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-02T18:53:07.195Z",
+  "generatedAt": "2026-09-02T19:17:20.111Z",
   "collections": [
     {
       "name": "users",
@@ -222,7 +222,8 @@
       ],
       "indexes": [
         "CREATE INDEX idx_fpd_records_store ON fpd_records (store)",
-        "CREATE INDEX idx_fpd_records_importado ON fpd_records (importado_em DESC)"
+        "CREATE INDEX idx_fpd_records_importado ON fpd_records (importado_em DESC)",
+        "CREATE INDEX `idx_fpd_records_referente` ON `fpd_records` (referente)"
       ]
     },
     {
@@ -351,7 +352,8 @@
       ],
       "indexes": [
         "CREATE INDEX idx_imported_files_store ON imported_files (store)",
-        "CREATE INDEX idx_imported_files_created ON imported_files (created DESC)"
+        "CREATE INDEX idx_imported_files_created ON imported_files (created DESC)",
+        "CREATE INDEX `idx_imported_files_ref_date` ON `imported_files` (reference_date)"
       ]
     },
     {
@@ -467,7 +469,7 @@
       "indexes": [
         "CREATE INDEX idx_vendor_consolidations_vendedor ON vendor_consolidations (vendedor)",
         "CREATE INDEX idx_vendor_consolidations_loja ON vendor_consolidations (loja)",
-        "CREATE INDEX idx_vendor_consolidations_data_ref ON vendor_consolidations (data_referencia)"
+        "CREATE INDEX `idx_vendor_consolidations_data_ref` ON `vendor_consolidations` (data_referencia)"
       ]
     },
     {

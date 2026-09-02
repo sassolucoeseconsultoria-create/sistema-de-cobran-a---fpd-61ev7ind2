@@ -6,9 +6,26 @@ import {
   formatCpf,
   formatPhone,
   getDadosField,
+  isValidDateDDMMAAAA,
 } from './clientFormatters'
 
 describe('clientFormatters', () => {
+  describe('isValidDateDDMMAAAA', () => {
+    it('validates correct DD/MM/AAAA dates', () => {
+      expect(isValidDateDDMMAAAA('20/08/2026')).toBe(true)
+      expect(isValidDateDDMMAAAA('01/01/2025')).toBe(true)
+      expect(isValidDateDDMMAAAA('29/02/2024')).toBe(true) // leap year
+      expect(isValidDateDDMMAAAA('29/02/2025')).toBe(false) // non-leap year
+    })
+
+    it('rejects invalid strings, dates and formats', () => {
+      expect(isValidDateDDMMAAAA('')).toBe(false)
+      expect(isValidDateDDMMAAAA('20/08/26')).toBe(false)
+      expect(isValidDateDDMMAAAA('32/01/2025')).toBe(false)
+      expect(isValidDateDDMMAAAA('15/13/2025')).toBe(false)
+      expect(isValidDateDDMMAAAA('abc')).toBe(false)
+    })
+  })
   describe('applyDateMask', () => {
     it('applies DD/MM/YYYY mask progressively', () => {
       expect(applyDateMask('')).toBe('')

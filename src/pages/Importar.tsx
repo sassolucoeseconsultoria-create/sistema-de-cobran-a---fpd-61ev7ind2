@@ -34,6 +34,7 @@ import {
 import { parseXlsxFile, type ParsedFileData } from '@/lib/xlsxParser'
 import { FPD_STATUSES, type StoreRecord } from '@/types/fpd'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
+import { applyDateMask, isValidDateDDMMAAAA } from '@/lib/clientFormatters'
 import { cn } from '@/lib/utils'
 
 interface FileQueueItem {
@@ -55,6 +56,8 @@ export const Importar: React.FC = () => {
 
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [loadingStores, setLoadingStores] = useState(true)
+  const [globalReferenceDate, setGlobalReferenceDate] = useState<string>('')
+  const [globalDateError, setGlobalDateError] = useState<string>('')
   const [fileQueue, setFileQueue] = useState<FileQueueItem[]>([])
   const [expandedColumnsMap, setExpandedColumnsMap] = useState<Record<string, boolean>>({})
   const [isDragging, setIsDragging] = useState(false)
@@ -84,6 +87,22 @@ export const Importar: React.FC = () => {
     loadStores()
   }, [])
 
+  const handleGlobalReferenceDateChange = (val: string) => {
+    const masked = applyDateMask(val)
+    setGlobalReferenceDate(masked)
+    if (globalDateError) setGlobalDateError('')
+
+    // Also update all items in queue that haven't been customized or update all
+    if (masked) {
+      setFileQueue((prev) =>
+        prev.map((q) => ({
+          ...q,
+          referenteDate: masked,
+        })),
+      )
+    }
+  }
+
   // Handle files selected
   const handleFiles = async (files: FileList | File[]) => {
     const newItems: FileQueueItem[] = []
@@ -106,7 +125,7 @@ export const Importar: React.FC = () => {
         status: 'pending',
         matchedStoreId: 'new',
         newStoreName: '',
-        referenteDate: '',
+        referenteDate: globalReferenceDate || '',
       })
     }
 
@@ -136,13 +155,15 @@ export const Importar: React.FC = () => {
       setFileQueue((prev) =>
         prev.map((item) => {
           if (item.id !== itemId) return item
+          // If globalReferenceDate is set, use it; otherwise fallback to guessed referente or empty
+          const initialRefDate = globalReferenceDate || parsed.guessedReferente || ''
           return {
             ...item,
             status: 'ready',
             parsedData: parsed,
             matchedStoreId: existingMatch ? existingMatch.id : 'new',
             newStoreName: existingMatch ? existingMatch.name : parsed.guessedStoreName,
-            referenteDate: parsed.guessedReferente,
+            referenteDate: item.referenteDate || initialRefDate,
           }
         }),
       )
@@ -185,6 +206,48 @@ export const Importar: React.FC = () => {
   const saveItemToBackend = async (item: FileQueueItem): Promise<boolean> => {
     if (!item.parsedData) return false
 
+    const refDate = (item.referenteDate || globalReferenceDate || '').trim()
+
+    if (!refDate) {
+      toast({
+        title: 'Data de Referência obrigatória',
+        description: `Informe a Data de Referência para o arquivo "${item.file.name}".`,
+        variant: 'destructive',
+      })
+      setFileQueue((prev) =>
+        prev.map((q) =>
+          q.id === item.id
+            ? {
+                ...q,
+                status: 'error',
+                errorMessage: 'Data de Referência é obrigatória (ex: 20/08/2026).',
+              }
+            : q,
+        ),
+      )
+      return false
+    }
+
+    if (!isValidDateDDMMAAAA(refDate)) {
+      toast({
+        title: 'Data de Referência inválida',
+        description: `A data "${refDate}" deve estar no formato DD/MM/AAAA válido.`,
+        variant: 'destructive',
+      })
+      setFileQueue((prev) =>
+        prev.map((q) =>
+          q.id === item.id
+            ? {
+                ...q,
+                status: 'error',
+                errorMessage: `Data inválida (${refDate}). Use o formato DD/MM/AAAA.`,
+              }
+            : q,
+        ),
+      )
+      return false
+    }
+
     try {
       setFileQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: 'saving' } : q)))
 
@@ -222,7 +285,7 @@ export const Importar: React.FC = () => {
         storeId,
         storeName: finalStoreName,
         fileName: item.file.name,
-        referenceDate: item.referenteDate,
+        referenceDate: refDate,
         total_linhas: item.parsedData.aggregated.total_linhas,
         enviado_faturas: item.parsedData.aggregated.envio_fatura,
         envio_fatura: item.parsedData.aggregated.envio_fatura,
@@ -239,7 +302,7 @@ export const Importar: React.FC = () => {
       // 2. Save/update consolidated FPD Record (upsert by store + referente)
       await saveFpdRecord({
         storeId,
-        referente: item.referenteDate,
+        referente: refDate,
         total_linhas: item.parsedData.aggregated.total_linhas,
         envio_fatura: item.parsedData.aggregated.envio_fatura,
         pendente: item.parsedData.aggregated.pendente,
@@ -259,7 +322,7 @@ export const Importar: React.FC = () => {
           ...vl,
           loja: vl.loja || finalStoreName,
         }))
-        await saveVendorConsolidationsFromLines(linesToSave, item.referenteDate, stores)
+        await saveVendorConsolidationsFromLines(linesToSave, refDate, stores)
       }
 
       setFileQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: 'done' } : q)))
@@ -289,6 +352,41 @@ export const Importar: React.FC = () => {
       return
     }
 
+    // Validate reference dates on all ready items before starting
+    const missingDateItems = readyItems.filter((item) => {
+      const d = (item.referenteDate || globalReferenceDate || '').trim()
+      return !d || !isValidDateDDMMAAAA(d)
+    })
+
+    if (missingDateItems.length > 0) {
+      setGlobalDateError(
+        'Informe uma Data de Referência válida (DD/MM/AAAA) para todos os arquivos.',
+      )
+      toast({
+        title: 'Data de Referência obrigatória',
+        description: 'Verifique os arquivos destacados com data ausente ou inválida.',
+        variant: 'destructive',
+      })
+      setFileQueue((prev) =>
+        prev.map((q) => {
+          const d = (q.referenteDate || globalReferenceDate || '').trim()
+          if (!d) {
+            return {
+              ...q,
+              status: 'error',
+              errorMessage: 'Data de Referência é obrigatória (ex: 20/08/2026).',
+            }
+          }
+          if (!isValidDateDDMMAAAA(d)) {
+            return { ...q, status: 'error', errorMessage: `Data inválida (${d}). Use DD/MM/AAAA.` }
+          }
+          return q
+        }),
+      )
+      return
+    }
+
+    setGlobalDateError('')
     setIsProcessingAll(true)
     let successCount = 0
 
@@ -347,49 +445,86 @@ export const Importar: React.FC = () => {
         </div>
       </div>
 
-      {/* Upload Dropzone */}
-      <div
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
-        onClick={() => fileInputRef.current?.click()}
-        className={cn(
-          'border-2 border-dashed rounded-2xl p-8 sm:p-12 text-center cursor-pointer transition-all',
-          isDragging
-            ? 'border-[#0E9F8A] bg-[#0E9F8A]/5 scale-[0.99]'
-            : 'border-[#cbd5e1] hover:border-[#0E9F8A] bg-white hover:bg-[#FAFCFF] shadow-xs',
-        )}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".xlsx, .xls"
-          multiple
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files) handleFiles(e.target.files)
-          }}
-        />
-        <div className="flex flex-col items-center justify-center space-y-3">
-          <div className="w-16 h-16 rounded-2xl bg-[#12365A]/5 flex items-center justify-center text-[#12365A]">
-            <UploadCloud className="w-8 h-8 text-[#0E9F8A]" />
+      {/* Reference Date Card & Upload Dropzone */}
+      <div className="bg-white rounded-xl p-5 border border-[#E3E9F2] shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4">
+          <div className="flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-[#0E9F8A]" />
+            <div>
+              <h3 className="text-sm font-bold text-[#12365A]">
+                Data de Referência da Importação <span className="text-red-500">*</span>
+              </h3>
+              <p className="text-xs text-[#5B6B82]">
+                Data a que se referem os dados das planilhas importadas (obrigatório para
+                consolidação e filtros históricos).
+              </p>
+            </div>
           </div>
-          <div className="space-y-1">
-            <h3 className="text-base font-bold text-[#12365A]">
-              Arraste suas planilhas .xlsx aqui ou clique para selecionar
-            </h3>
-            <p className="text-xs text-[#5B6B82]">
-              Selecione múltiplos arquivos das lojas simultaneamente.
-            </p>
+          <div className="w-full sm:w-64">
+            <div className="relative">
+              <Input
+                value={globalReferenceDate}
+                onChange={(e) => handleGlobalReferenceDateChange(e.target.value)}
+                placeholder="DD/MM/AAAA (ex: 20/08/2026)"
+                maxLength={10}
+                className={cn(
+                  'h-9 text-xs font-semibold tracking-wide bg-[#F8FAFC]',
+                  globalDateError
+                    ? 'border-red-500 focus-visible:ring-red-400'
+                    : 'border-[#E3E9F2] focus:border-[#0E9F8A]',
+                )}
+              />
+            </div>
+            {globalDateError && (
+              <p className="text-[11px] text-red-600 mt-1 font-medium">{globalDateError}</p>
+            )}
           </div>
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 text-[11px] font-medium text-[#5B6B82]">
-            <span>
-              Formatos aceitos: <strong>.xlsx, .xls</strong>
-            </span>
-            <span>•</span>
-            <span>
-              Abas esperadas: <strong>Móvel / Residencial</strong>
-            </span>
+        </div>
+
+        {/* Upload Dropzone */}
+        <div
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          onClick={() => fileInputRef.current?.click()}
+          className={cn(
+            'border-2 border-dashed rounded-xl p-8 sm:p-10 text-center cursor-pointer transition-all',
+            isDragging
+              ? 'border-[#0E9F8A] bg-[#0E9F8A]/5 scale-[0.99]'
+              : 'border-[#cbd5e1] hover:border-[#0E9F8A] bg-[#FAFCFF] hover:bg-slate-50 shadow-xs',
+          )}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx, .xls"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) handleFiles(e.target.files)
+            }}
+          />
+          <div className="flex flex-col items-center justify-center space-y-3">
+            <div className="w-14 h-14 rounded-2xl bg-[#12365A]/5 flex items-center justify-center text-[#12365A]">
+              <UploadCloud className="w-7 h-7 text-[#0E9F8A]" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-sm sm:text-base font-bold text-[#12365A]">
+                Arraste suas planilhas .xlsx aqui ou clique para selecionar
+              </h3>
+              <p className="text-xs text-[#5B6B82]">
+                Selecione múltiplos arquivos das lojas simultaneamente.
+              </p>
+            </div>
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 text-[11px] font-medium text-[#5B6B82]">
+              <span>
+                Formatos aceitos: <strong>.xlsx, .xls</strong>
+              </span>
+              <span>•</span>
+              <span>
+                Abas esperadas: <strong>Móvel / Residencial</strong>
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -778,21 +913,28 @@ export const Importar: React.FC = () => {
                         )}
 
                         {/* Referente date */}
-                        <div className="w-full sm:w-32">
+                        <div className="w-full sm:w-36">
                           <label className="text-[10px] font-bold text-[#5B6B82] uppercase block mb-1">
-                            Referente
+                            Data de Referência <span className="text-red-500">*</span>
                           </label>
                           <Input
                             value={item.referenteDate}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const masked = applyDateMask(e.target.value)
                               setFileQueue((prev) =>
                                 prev.map((q) =>
-                                  q.id === item.id ? { ...q, referenteDate: e.target.value } : q,
+                                  q.id === item.id ? { ...q, referenteDate: masked } : q,
                                 ),
                               )
-                            }
-                            placeholder="dd/mm/aaaa"
-                            className="h-8 text-xs bg-white"
+                            }}
+                            placeholder="DD/MM/AAAA"
+                            maxLength={10}
+                            className={cn(
+                              'h-8 text-xs bg-white',
+                              !item.referenteDate || !isValidDateDDMMAAAA(item.referenteDate)
+                                ? 'border-amber-400 focus-visible:ring-amber-300'
+                                : 'border-[#E3E9F2]',
+                            )}
                           />
                         </div>
 

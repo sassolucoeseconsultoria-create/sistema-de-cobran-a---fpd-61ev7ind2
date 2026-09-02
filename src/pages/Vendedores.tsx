@@ -35,6 +35,7 @@ import {
   clearAllVendorConsolidations,
   fetchStores,
   matchStore,
+  fetchDistinctReferenceDates,
 } from '@/services/fpdService'
 import { exportVendorsToXlsx } from '@/lib/xlsxExport'
 import {
@@ -56,6 +57,8 @@ export const Vendedores: React.FC = () => {
   // Filters
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [availableReferenceDates, setAvailableReferenceDates] = useState<string[]>([])
+  const [selectedReferenceDate, setSelectedReferenceDate] = useState<string>('all')
   const [selectedLoja, setSelectedLoja] = useState<string>('all')
 
   // Clear dialog
@@ -74,12 +77,14 @@ export const Vendedores: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [fetchedVendors, fetchedStores] = await Promise.all([
+      const [fetchedVendors, fetchedStores, fetchedRefDates] = await Promise.all([
         fetchVendorConsolidations(),
         fetchStores(),
+        fetchDistinctReferenceDates(),
       ])
       setRecords(fetchedVendors)
       setStores(fetchedStores)
+      setAvailableReferenceDates(fetchedRefDates)
     } catch (err: unknown) {
       console.error(err)
       toast({
@@ -172,9 +177,18 @@ export const Vendedores: React.FC = () => {
         if (row.loja !== selectedLoja) return false
       }
 
+      // Filter Reference Date
+      if (selectedReferenceDate !== 'all') {
+        if (selectedReferenceDate === 'none') {
+          if (row.dataReferencia && row.dataReferencia.trim() !== '') return false
+        } else {
+          if (row.dataReferencia !== selectedReferenceDate) return false
+        }
+      }
+
       return true
     })
-  }, [vendorRows, debouncedSearch, selectedLoja])
+  }, [vendorRows, debouncedSearch, selectedLoja, selectedReferenceDate])
 
   // Summary Totals
   const totals = useMemo(() => {
@@ -244,11 +258,21 @@ export const Vendedores: React.FC = () => {
     return new Set(vendorRows.map((r) => r.vendedor)).size
   }, [vendorRows])
 
-  // Latest Referente (only considering permitted stores)
-  const latestReferente = useMemo(() => {
+  // Effective Referente
+  const effectiveReferente = useMemo(() => {
+    if (
+      selectedReferenceDate &&
+      selectedReferenceDate !== 'all' &&
+      selectedReferenceDate !== 'none'
+    ) {
+      return selectedReferenceDate
+    }
+    if (selectedReferenceDate === 'none') {
+      return 'Sem referência'
+    }
     const withRef = vendorRows.find((r) => r.dataReferencia && r.dataReferencia.trim() !== '')
     return withRef?.dataReferencia || null
-  }, [vendorRows])
+  }, [vendorRows, selectedReferenceDate])
 
   // Clear data
   const handleClearAll = async () => {
@@ -282,19 +306,21 @@ export const Vendedores: React.FC = () => {
       })
       return
     }
-    exportVendorsToXlsx(filteredRows, totals, latestReferente || undefined)
+    exportVendorsToXlsx(filteredRows, totals, effectiveReferente || undefined)
     toast({
       title: 'Planilha exportada',
       description: 'O arquivo .xlsx do ranking por vendedor foi gerado.',
     })
   }
 
-  const hasActiveFilters = debouncedSearch !== '' || selectedLoja !== 'all'
+  const hasActiveFilters =
+    debouncedSearch !== '' || selectedLoja !== 'all' || selectedReferenceDate !== 'all'
 
   const clearFilters = () => {
     setSearch('')
     setDebouncedSearch('')
     setSelectedLoja('all')
+    setSelectedReferenceDate('all')
   }
 
   return (
@@ -420,7 +446,7 @@ export const Vendedores: React.FC = () => {
           {/* Left search & filters */}
           <div className="flex flex-wrap items-center gap-2.5 flex-1">
             {/* Search */}
-            <div className="relative w-full sm:w-72">
+            <div className="relative w-full sm:w-64">
               <Search className="w-4 h-4 text-[#8A97AC] absolute left-3 top-1/2 -translate-y-1/2" />
               <Input
                 placeholder="Buscar vendedor, loja ou supervisão..."
@@ -431,15 +457,37 @@ export const Vendedores: React.FC = () => {
               {search && (
                 <button
                   onClick={() => setSearch('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A97AC] hover:text-[#12365A]"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A97AC] hover:text-[#12233A]"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
 
+            {/* Filter: Data de Referência */}
+            <div className="w-full sm:w-auto">
+              <select
+                value={selectedReferenceDate}
+                onChange={(e) => setSelectedReferenceDate(e.target.value)}
+                className={cn(
+                  'h-9 px-3 text-xs font-medium rounded-md border bg-white focus:outline-none focus:border-[#0E9F8A]',
+                  selectedReferenceDate !== 'all'
+                    ? 'border-[#0E9F8A] text-[#0E9F8A] bg-[#0E9F8A]/5 font-semibold'
+                    : 'border-[#E3E9F2] text-[#12365A]',
+                )}
+              >
+                <option value="all">Todas as referências</option>
+                {availableReferenceDates.map((date) => (
+                  <option key={date} value={date}>
+                    Referência: {date}
+                  </option>
+                ))}
+                <option value="none">Sem referência</option>
+              </select>
+            </div>
+
             {/* Filter Loja (Dropdown) */}
-            <div className="w-full sm:w-56">
+            <div className="w-full sm:w-52">
               <select
                 value={selectedLoja}
                 onChange={(e) => setSelectedLoja(e.target.value)}
@@ -453,7 +501,6 @@ export const Vendedores: React.FC = () => {
                 ))}
               </select>
             </div>
-
             {/* Clear filters */}
             {hasActiveFilters && (
               <Button

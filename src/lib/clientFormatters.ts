@@ -124,6 +124,27 @@ export function formatCpf(value: unknown): string {
 }
 
 /**
+ * Validates whether a date string is a valid DD/MM/AAAA date
+ */
+export function isValidDateDDMMAAAA(value: string): boolean {
+  if (!value || typeof value !== 'string') return false
+  const trimmed = value.trim()
+  const regex = /^(\d{2})\/(\d{2})\/(\d{4})$/
+  const match = trimmed.match(regex)
+  if (!match) return false
+
+  const day = parseInt(match[1], 10)
+  const month = parseInt(match[2], 10)
+  const year = parseInt(match[3], 10)
+
+  if (year < 1900 || year > 2100) return false
+  if (month < 1 || month > 12) return false
+
+  const daysInMonth = new Date(year, month, 0).getDate()
+  return day >= 1 && day <= daysInMonth
+}
+
+/**
  * Formats phone number into (XX) XXXXX-XXXX or (XX) XXXX-XXXX
  */
 export function formatPhone(value: unknown): string {
