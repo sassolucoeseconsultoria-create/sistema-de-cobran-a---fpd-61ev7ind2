@@ -49,7 +49,7 @@ import {
   invalidateAnalyticalCache,
 } from '@/services/relacionamentoService'
 import { parseAnalyticalXlsxFile, ParsedAnalyticalFileData } from '@/lib/analyticalImportParser'
-import { fetchStores } from '@/services/fpdService'
+import { fetchStores, matchStore } from '@/services/fpdService'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import type {
   RelacionamentoAba,
@@ -534,15 +534,29 @@ export const Relacionamento: React.FC = () => {
           setImportStatusMessage(
             `Gravando ${pf.movelSheet.rows.length} linhas na tabela MÓVEL (${pf.fileName})...`,
           )
-          const movelBatchData = pf.movelSheet.rows.map((r) => ({
-            arquivo: pf.fileName,
-            linha: r.linha,
-            loja: r.loja,
-            vendedor: r.vendedor,
-            cliente: r.cliente,
-            dados: r.dados,
-            ocorrencias: r.ocorrencias || 'Não Tratados',
-          }))
+          const movelBatchData = pf.movelSheet.rows.map((r) => {
+            let normalizedLoja = r.loja?.trim() || ''
+            if (normalizedLoja) {
+              const matchedStore = matchStore(normalizedLoja, stores)
+              if (matchedStore) {
+                normalizedLoja = matchedStore.name
+              } else {
+                console.warn(
+                  `[Importação Analítica - Móvel] Loja "${r.loja}" não encontrada no cadastro. Mantendo valor bruto.`,
+                )
+              }
+            }
+
+            return {
+              arquivo: pf.fileName,
+              linha: r.linha,
+              loja: normalizedLoja,
+              vendedor: r.vendedor,
+              cliente: r.cliente,
+              dados: r.dados,
+              ocorrencias: r.ocorrencias || 'Não Tratados',
+            }
+          })
 
           await insertMovelBatch(movelBatchData, (insertedInBatch) => {
             const currentDone = insertedGlobalCount + insertedInBatch
@@ -556,16 +570,30 @@ export const Relacionamento: React.FC = () => {
           setImportStatusMessage(
             `Gravando ${pf.residencialSheet.rows.length} linhas na tabela RESIDENCIAL (${pf.fileName})...`,
           )
-          const resBatchData = pf.residencialSheet.rows.map((r) => ({
-            arquivo: pf.fileName,
-            linha: r.linha,
-            loja: r.loja,
-            vendedor: r.vendedor,
-            cliente: r.cliente,
-            dados: r.dados,
-            typedFields: r.typedFields,
-            ocorrencias: r.ocorrencias || 'Não Tratados',
-          }))
+          const resBatchData = pf.residencialSheet.rows.map((r) => {
+            let normalizedLoja = r.loja?.trim() || ''
+            if (normalizedLoja) {
+              const matchedStore = matchStore(normalizedLoja, stores)
+              if (matchedStore) {
+                normalizedLoja = matchedStore.name
+              } else {
+                console.warn(
+                  `[Importação Analítica - Residencial] Loja "${r.loja}" não encontrada no cadastro. Mantendo valor bruto.`,
+                )
+              }
+            }
+
+            return {
+              arquivo: pf.fileName,
+              linha: r.linha,
+              loja: normalizedLoja,
+              vendedor: r.vendedor,
+              cliente: r.cliente,
+              dados: r.dados,
+              typedFields: r.typedFields,
+              ocorrencias: r.ocorrencias || 'Não Tratados',
+            }
+          })
 
           await insertResidencialBatch(resBatchData, (insertedInBatch) => {
             const currentDone = insertedGlobalCount + insertedInBatch

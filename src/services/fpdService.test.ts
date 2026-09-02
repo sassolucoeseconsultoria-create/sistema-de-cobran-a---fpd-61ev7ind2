@@ -99,6 +99,16 @@ describe('matchStore - Real World Cases', () => {
       coordenacao: 'Valéria',
       supervisao: 'Luana',
     },
+    {
+      id: 'store-9',
+      collectionId: 'stores',
+      collectionName: 'stores',
+      created: '',
+      updated: '',
+      name: 'CELNET PLANALTINA DF',
+      coordenacao: 'Valéria',
+      supervisao: 'Luana',
+    },
   ] as StoreRecord[]
 
   it('Case 1: Planilha: "CELNET SHOPPING JK" -> Cadastro: "CELNET JK SHOPPING" (supervisor: Jéssica)', () => {
@@ -154,6 +164,13 @@ describe('matchStore - Real World Cases', () => {
     const match = matchStore('CELNET AGUAS CLARA', registeredStores)
     expect(match).not.toBeNull()
     expect(match?.name).toBe('CELNET AGUAS CLARAS')
+    expect(match?.supervisao).toBe('Luana')
+  })
+
+  it('Case 8: Planilha: "CELNET MATRIZ PLANALTINA DF" -> Cadastro: "CELNET PLANALTINA DF" (supervisor: Luana)', () => {
+    const match = matchStore('CELNET MATRIZ PLANALTINA DF', registeredStores)
+    expect(match).not.toBeNull()
+    expect(match?.name).toBe('CELNET PLANALTINA DF')
     expect(match?.supervisao).toBe('Luana')
   })
 })
