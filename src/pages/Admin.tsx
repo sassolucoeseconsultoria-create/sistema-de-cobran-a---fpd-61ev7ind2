@@ -2,8 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react'
 import {
   Users,
   Shield,
-  Briefcase,
   UserCheck,
+  UserCog,
+  Store,
   Plus,
   Search,
   Trash2,
@@ -17,9 +18,13 @@ import {
   User as UserIcon,
   CheckCircle2,
   RefreshCw,
+  Check,
+  ChevronsUpDown,
 } from 'lucide-react'
 import pb from '@/lib/pocketbase/client'
 import { useAuth, type UserRole, type User } from '@/contexts/AuthContext'
+import { fetchStores } from '@/services/fpdService'
+import type { StoreRecord } from '@/types/fpd'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -61,6 +66,7 @@ export const Admin: React.FC = () => {
   const { toast } = useToast()
 
   const [users, setUsers] = useState<User[]>([])
+  const [stores, setStores] = useState<StoreRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<'ALL' | UserRole>('ALL')
@@ -68,13 +74,15 @@ export const Admin: React.FC = () => {
   // Modal State for Create / Edit
   const [modalOpen, setModalOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [storeSearchQuery, setStoreSearchQuery] = useState('')
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     fone: '',
     password: '',
     passwordConfirm: '',
-    role: 'ANALISTA' as UserRole,
+    role: 'Supervisor' as UserRole,
+    lojas: [] as string[],
   })
   const [showPassword, setShowPassword] = useState(false)
   const [showPasswordConfirm, setShowPasswordConfirm] = useState(false)
@@ -86,19 +94,23 @@ export const Admin: React.FC = () => {
   const [userToDelete, setUserToDelete] = useState<User | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  // Fetch Users
-  const loadUsers = async () => {
+  // Fetch Users and Stores
+  const loadData = async () => {
     try {
       setLoading(true)
-      const list = await pb.collection('users').getFullList<User>({
-        sort: '-created',
-      })
-      setUsers(list)
+      const [userList, storeList] = await Promise.all([
+        pb.collection('users').getFullList<User>({
+          sort: '-created',
+        }),
+        fetchStores().catch(() => [] as StoreRecord[]),
+      ])
+      setUsers(userList)
+      setStores(storeList)
     } catch (err: unknown) {
       console.error(err)
       toast({
-        title: 'Erro ao carregar usuários',
-        description: 'Não foi possível buscar os usuários cadastrados.',
+        title: 'Erro ao carregar dados',
+        description: 'Não foi possível buscar os usuários e lojas cadastrados.',
         variant: 'destructive',
       })
     } finally {
@@ -107,7 +119,7 @@ export const Admin: React.FC = () => {
   }
 
   useEffect(() => {
-    loadUsers()
+    loadData()
   }, [])
 
   // Realtime updates for users collection
@@ -135,6 +147,7 @@ export const Admin: React.FC = () => {
               name: e.record.name || u.name,
               fone: e.record.fone !== undefined ? e.record.fone : u.fone,
               role: e.record.role || u.role,
+              lojas: e.record.lojas !== undefined ? e.record.lojas : u.lojas,
             }
           }
           return u
@@ -148,13 +161,15 @@ export const Admin: React.FC = () => {
   // Open Create Modal
   const handleOpenCreate = () => {
     setEditingUser(null)
+    setStoreSearchQuery('')
     setFormData({
       name: '',
       email: '',
       fone: '',
       password: '',
       passwordConfirm: '',
-      role: 'ANALISTA',
+      role: 'Supervisor',
+      lojas: [],
     })
     setShowPassword(false)
     setShowPasswordConfirm(false)
@@ -163,16 +178,30 @@ export const Admin: React.FC = () => {
     setModalOpen(true)
   }
 
+  // Normalize legacy roles if any record comes with old string
+  const normalizeRole = (role?: string): UserRole => {
+    if (role === 'GESTOR') return 'Coordenador'
+    if (role === 'ANALISTA') return 'Supervisor'
+    if (role === 'Coordenador' || role === 'Supervisor' || role === 'Gerente' || role === 'ADM') {
+      return role
+    }
+    return 'Supervisor'
+  }
+
   // Open Edit Modal
   const handleOpenEdit = (user: User) => {
     setEditingUser(user)
+    setStoreSearchQuery('')
+    const resolvedRole = normalizeRole(user.role)
+    const initialLojas = Array.isArray(user.lojas) ? user.lojas : []
     setFormData({
       name: user.name || '',
       email: user.email || '',
       fone: formatPhoneNumber(user.fone || ''),
       password: '',
       passwordConfirm: '',
-      role: (user.role as UserRole) || 'ANALISTA',
+      role: resolvedRole,
+      lojas: resolvedRole === 'Gerente' ? initialLojas.slice(0, 1) : initialLojas,
     })
     setShowPassword(false)
     setShowPasswordConfirm(false)
@@ -316,12 +345,20 @@ export const Admin: React.FC = () => {
       if (editingUser) {
         // Update user
         const normalizedEmail = (formData.email || '').trim().toLowerCase()
+        const resolvedLojas =
+          formData.role === 'ADM'
+            ? []
+            : formData.role === 'Gerente'
+              ? formData.lojas.slice(0, 1)
+              : formData.lojas
+
         const payload: Record<string, any> = {
           name: formData.name.trim(),
           email: normalizedEmail,
           emailVisibility: true,
           fone: formData.fone.trim(),
           role: formData.role,
+          lojas: resolvedLojas,
         }
 
         // Só enviar password e passwordConfirm se forem preenchidas
@@ -331,7 +368,7 @@ export const Admin: React.FC = () => {
         }
 
         const updated = await pb.collection('users').update<User>(editingUser.id, payload)
-        // Garante que os dados editados (incluindo email e fone) permaneçam no registro local
+        // Garante que os dados editados (incluindo email, fone e lojas) permaneçam no registro local
         const mergedUpdated: User = {
           ...editingUser,
           ...updated,
@@ -339,6 +376,7 @@ export const Admin: React.FC = () => {
           email: payload.email || updated.email || editingUser.email,
           fone: payload.fone,
           role: payload.role,
+          lojas: payload.lojas,
         }
 
         setUsers((prev) => {
@@ -354,12 +392,20 @@ export const Admin: React.FC = () => {
       } else {
         // Create user - NOTE: verified and emailVisibility omitted so non-superuser Admins can create records
         const normalizedEmail = (formData.email || '').trim().toLowerCase()
+        const resolvedLojas =
+          formData.role === 'ADM'
+            ? []
+            : formData.role === 'Gerente'
+              ? formData.lojas.slice(0, 1)
+              : formData.lojas
+
         const payload: Record<string, any> = {
           name: formData.name.trim(),
           email: normalizedEmail,
           emailVisibility: true,
           fone: formData.fone.trim(),
           role: formData.role,
+          lojas: resolvedLojas,
           password: trimmedPassword,
           passwordConfirm: trimmedPasswordConfirm,
         }
@@ -371,6 +417,7 @@ export const Admin: React.FC = () => {
           email: payload.email || created.email,
           fone: payload.fone,
           role: payload.role,
+          lojas: payload.lojas,
         }
 
         setUsers((prev) => {
@@ -520,21 +567,34 @@ export const Admin: React.FC = () => {
     }
   }
 
+  // Store dictionary for lookup by ID
+  const storeMap = useMemo(() => {
+    const map = new Map<string, StoreRecord>()
+    stores.forEach((s) => map.set(s.id, s))
+    return map
+  }, [stores])
+
   // Statistics
   const stats = useMemo(() => {
     const total = users.length
     const adms = users.filter((u) => u.role === 'ADM').length
-    const gestores = users.filter((u) => u.role === 'GESTOR').length
-    const analistas = users.filter((u) => !u.role || u.role === 'ANALISTA').length
-    return { total, adms, gestores, analistas }
+    const coordenadores = users.filter(
+      (u) => u.role === 'Coordenador' || (u.role as string) === 'GESTOR',
+    ).length
+    const supervisores = users.filter(
+      (u) => u.role === 'Supervisor' || (u.role as string) === 'ANALISTA',
+    ).length
+    const gerentes = users.filter((u) => u.role === 'Gerente').length
+    return { total, adms, coordenadores, supervisores, gerentes }
   }, [users])
 
   // Filtered list
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
+      const uRole = normalizeRole(u.role)
+
       // Role filter
       if (roleFilter !== 'ALL') {
-        const uRole = u.role || 'ANALISTA'
         if (uRole !== roleFilter) return false
       }
 
@@ -544,17 +604,39 @@ export const Admin: React.FC = () => {
         const nameMatch = (u.name || '').toLowerCase().includes(q)
         const emailMatch = (u.email || '').toLowerCase().includes(q)
         const phoneMatch = (u.fone || '').toLowerCase().includes(q)
-        const roleMatch = (u.role || 'ANALISTA').toLowerCase().includes(q)
-        return nameMatch || emailMatch || phoneMatch || roleMatch
+        const roleMatch = uRole.toLowerCase().includes(q)
+
+        // Store names match
+        const storeMatch = Array.isArray(u.lojas)
+          ? u.lojas.some((storeId) => {
+              const store = storeMap.get(storeId)
+              return store ? store.name.toLowerCase().includes(q) : false
+            })
+          : false
+
+        return nameMatch || emailMatch || phoneMatch || roleMatch || storeMatch
       }
 
       return true
     })
-  }, [users, roleFilter, search])
+  }, [users, roleFilter, search, storeMap])
+
+  // Filtered stores for modal search
+  const modalFilteredStores = useMemo(() => {
+    if (!storeSearchQuery.trim()) return stores
+    const q = storeSearchQuery.toLowerCase().trim()
+    return stores.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        (s.coordenacao && s.coordenacao.toLowerCase().includes(q)) ||
+        (s.supervisao && s.supervisao.toLowerCase().includes(q)),
+    )
+  }, [stores, storeSearchQuery])
 
   // Helper badge for role
   const renderRoleBadge = (role?: string) => {
-    switch (role) {
+    const resolvedRole = normalizeRole(role)
+    switch (resolvedRole) {
       case 'ADM':
         return (
           <Badge className="bg-[#12365A] hover:bg-[#0E2A47] text-white border-none text-[11px] font-semibold px-2.5 py-0.5 shadow-xs">
@@ -562,22 +644,63 @@ export const Admin: React.FC = () => {
             ADM
           </Badge>
         )
-      case 'GESTOR':
+      case 'Coordenador':
         return (
-          <Badge className="bg-[#EA580C] hover:bg-[#C2410C] text-white border-none text-[11px] font-semibold px-2.5 py-0.5 shadow-xs">
-            <Briefcase className="w-3 h-3 mr-1 text-orange-200" />
-            GESTOR
+          <Badge className="bg-[#0284C7] hover:bg-[#0369A1] text-white border-none text-[11px] font-semibold px-2.5 py-0.5 shadow-xs">
+            <UserCog className="w-3 h-3 mr-1 text-sky-200" />
+            Coordenador
           </Badge>
         )
-      case 'ANALISTA':
+      case 'Supervisor':
+        return (
+          <Badge className="bg-[#0D9488] hover:bg-[#0F766E] text-white border-none text-[11px] font-semibold px-2.5 py-0.5 shadow-xs">
+            <UserCheck className="w-3 h-3 mr-1 text-teal-200" />
+            Supervisor
+          </Badge>
+        )
+      case 'Gerente':
+        return (
+          <Badge className="bg-[#EA580C] hover:bg-[#C2410C] text-white border-none text-[11px] font-semibold px-2.5 py-0.5 shadow-xs">
+            <Store className="w-3 h-3 mr-1 text-orange-200" />
+            Gerente
+          </Badge>
+        )
       default:
         return (
           <Badge className="bg-[#64748B] hover:bg-[#475569] text-white border-none text-[11px] font-semibold px-2.5 py-0.5 shadow-xs">
-            <UserCheck className="w-3 h-3 mr-1 text-slate-200" />
-            ANALISTA
+            {resolvedRole}
           </Badge>
         )
     }
+  }
+
+  // Toggle store selection in form
+  const handleToggleStore = (storeId: string) => {
+    if (formData.role === 'Gerente') {
+      // Single store selection: if clicking already selected, keep it or unselect. Let's toggle single.
+      setFormData((prev) => ({
+        ...prev,
+        lojas: prev.lojas.includes(storeId) ? [] : [storeId],
+      }))
+    } else {
+      // Multiple store selection
+      setFormData((prev) => {
+        const exists = prev.lojas.includes(storeId)
+        const updated = exists
+          ? prev.lojas.filter((id) => id !== storeId)
+          : [...prev.lojas, storeId]
+        return { ...prev, lojas: updated }
+      })
+    }
+  }
+
+  const handleSelectAllStores = () => {
+    if (formData.role === 'Gerente') return
+    const allIds = stores.map((s) => s.id)
+    setFormData((prev) => ({
+      ...prev,
+      lojas: prev.lojas.length === stores.length ? [] : allIds,
+    }))
   }
 
   return (
@@ -599,7 +722,7 @@ export const Admin: React.FC = () => {
         <div className="flex items-center gap-2.5 shrink-0">
           <Button
             variant="outline"
-            onClick={loadUsers}
+            onClick={loadData}
             disabled={loading}
             className="h-9 text-xs border-[#E3E9F2] text-[#5B6B82] hover:text-[#12233A] hover:bg-[#F8FAFC] gap-1.5"
             title="Recarregar usuários"
@@ -618,68 +741,91 @@ export const Admin: React.FC = () => {
         </div>
       </div>
 
-      {/* Cards no topo: Total de usuários, ADMs, GESTORs, ANALISTAs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Cards no topo: Total de usuários, ADMs, Coordenadores, Supervisores, Gerentes */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         {/* Total Usuários */}
-        <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between col-span-2 sm:col-span-1">
           <div>
-            <p className="text-xs font-semibold text-[#5B6B82] uppercase tracking-wider">
-              Total de Usuários
+            <p className="text-[11px] font-semibold text-[#5B6B82] uppercase tracking-wider">
+              Total Usuários
             </p>
-            <p className="text-2xl font-black text-[#12233A] mt-1">{stats.total}</p>
-            <p className="text-[11px] text-[#8A97AC] mt-0.5">Acessos cadastrados</p>
+            <p className="text-xl sm:text-2xl font-black text-[#12233A] mt-0.5">{stats.total}</p>
+            <p className="text-[10px] text-[#8A97AC] mt-0.5">Acessos cadastrados</p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-[#F0F5FC] border border-[#E3E9F2] flex items-center justify-center text-[#12365A]">
-            <Users className="w-6 h-6 text-[#12365A]" />
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#F0F5FC] border border-[#E3E9F2] flex items-center justify-center text-[#12365A] shrink-0">
+            <Users className="w-5 h-5 text-[#12365A]" />
           </div>
         </div>
 
         {/* ADMs */}
-        <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-[#12365A]" />
-              <p className="text-xs font-semibold text-[#12365A] uppercase tracking-wider">ADMs</p>
+              <p className="text-[11px] font-semibold text-[#12365A] uppercase tracking-wider">
+                ADMs
+              </p>
             </div>
-            <p className="text-2xl font-black text-[#12365A] mt-1">{stats.adms}</p>
-            <p className="text-[11px] text-[#5B6B82] mt-0.5">Acesso total ao sistema</p>
+            <p className="text-xl sm:text-2xl font-black text-[#12365A] mt-0.5">{stats.adms}</p>
+            <p className="text-[10px] text-[#5B6B82] mt-0.5">Acesso total</p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-[#12365A]/10 border border-[#12365A]/20 flex items-center justify-center text-[#12365A]">
-            <Shield className="w-6 h-6 text-[#12365A]" />
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#12365A]/10 border border-[#12365A]/20 flex items-center justify-center text-[#12365A] shrink-0">
+            <Shield className="w-5 h-5 text-[#12365A]" />
           </div>
         </div>
 
-        {/* GESTORs */}
-        <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
+        {/* Coordenadores */}
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-[#0284C7]" />
+              <p className="text-[11px] font-semibold text-[#0284C7] uppercase tracking-wider">
+                Coordenadores
+              </p>
+            </div>
+            <p className="text-xl sm:text-2xl font-black text-[#0284C7] mt-0.5">
+              {stats.coordenadores}
+            </p>
+            <p className="text-[10px] text-[#5B6B82] mt-0.5">Múltiplas lojas</p>
+          </div>
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-sky-50 border border-sky-200 flex items-center justify-center text-[#0284C7] shrink-0">
+            <UserCog className="w-5 h-5 text-[#0284C7]" />
+          </div>
+        </div>
+
+        {/* Supervisores */}
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-[#0D9488]" />
+              <p className="text-[11px] font-semibold text-[#0D9488] uppercase tracking-wider">
+                Supervisores
+              </p>
+            </div>
+            <p className="text-xl sm:text-2xl font-black text-[#0D9488] mt-0.5">
+              {stats.supervisores}
+            </p>
+            <p className="text-[10px] text-[#5B6B82] mt-0.5">Múltiplas lojas</p>
+          </div>
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center text-[#0D9488] shrink-0">
+            <UserCheck className="w-5 h-5 text-[#0D9488]" />
+          </div>
+        </div>
+
+        {/* Gerentes */}
+        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-[#EA580C]" />
-              <p className="text-xs font-semibold text-[#EA580C] uppercase tracking-wider">
-                Gestores
+              <p className="text-[11px] font-semibold text-[#EA580C] uppercase tracking-wider">
+                Gerentes
               </p>
             </div>
-            <p className="text-2xl font-black text-[#EA580C] mt-1">{stats.gestores}</p>
-            <p className="text-[11px] text-[#5B6B82] mt-0.5">Gestão e acompanhamento</p>
+            <p className="text-xl sm:text-2xl font-black text-[#EA580C] mt-0.5">{stats.gerentes}</p>
+            <p className="text-[10px] text-[#5B6B82] mt-0.5">1 loja única</p>
           </div>
-          <div className="w-12 h-12 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-[#EA580C]">
-            <Briefcase className="w-6 h-6 text-[#EA580C]" />
-          </div>
-        </div>
-
-        {/* ANALISTAs */}
-        <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#64748B]" />
-              <p className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">
-                Analistas
-              </p>
-            </div>
-            <p className="text-2xl font-black text-[#64748B] mt-1">{stats.analistas}</p>
-            <p className="text-[11px] text-[#5B6B82] mt-0.5">Operação e visualização</p>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-[#64748B]">
-            <UserCheck className="w-6 h-6 text-[#64748B]" />
+          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-[#EA580C] shrink-0">
+            <Store className="w-5 h-5 text-[#EA580C]" />
           </div>
         </div>
       </div>
@@ -691,20 +837,20 @@ export const Admin: React.FC = () => {
           <div className="relative w-full sm:w-80">
             <Search className="w-4 h-4 text-[#8A97AC] absolute left-3 top-1/2 -translate-y-1/2" />
             <Input
-              placeholder="Buscar por nome, e-mail ou telefone..."
+              placeholder="Buscar por nome, e-mail, telefone ou loja..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9 h-9 text-xs bg-[#F8FAFC] border-[#E3E9F2]"
             />
           </div>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
+          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
             <span className="text-xs font-semibold text-[#5B6B82] uppercase">Perfil:</span>
-            <div className="inline-flex rounded-lg border border-[#E3E9F2] p-0.5 bg-[#F8FAFC]">
+            <div className="inline-flex rounded-lg border border-[#E3E9F2] p-0.5 bg-[#F8FAFC] flex-wrap gap-0.5">
               <button
                 onClick={() => setRoleFilter('ALL')}
                 className={cn(
-                  'px-3 py-1 rounded-md text-xs font-medium transition-all',
+                  'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
                   roleFilter === 'ALL'
                     ? 'bg-[#12365A] text-white shadow-xs'
                     : 'text-[#5B6B82] hover:text-[#12233A]',
@@ -715,7 +861,7 @@ export const Admin: React.FC = () => {
               <button
                 onClick={() => setRoleFilter('ADM')}
                 className={cn(
-                  'px-3 py-1 rounded-md text-xs font-medium transition-all',
+                  'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
                   roleFilter === 'ADM'
                     ? 'bg-[#12365A] text-white shadow-xs'
                     : 'text-[#5B6B82] hover:text-[#12233A]',
@@ -724,26 +870,37 @@ export const Admin: React.FC = () => {
                 ADM
               </button>
               <button
-                onClick={() => setRoleFilter('GESTOR')}
+                onClick={() => setRoleFilter('Coordenador')}
                 className={cn(
-                  'px-3 py-1 rounded-md text-xs font-medium transition-all',
-                  roleFilter === 'GESTOR'
+                  'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+                  roleFilter === 'Coordenador'
+                    ? 'bg-[#0284C7] text-white shadow-xs'
+                    : 'text-[#5B6B82] hover:text-[#12233A]',
+                )}
+              >
+                Coordenador
+              </button>
+              <button
+                onClick={() => setRoleFilter('Supervisor')}
+                className={cn(
+                  'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+                  roleFilter === 'Supervisor'
+                    ? 'bg-[#0D9488] text-white shadow-xs'
+                    : 'text-[#5B6B82] hover:text-[#12233A]',
+                )}
+              >
+                Supervisor
+              </button>
+              <button
+                onClick={() => setRoleFilter('Gerente')}
+                className={cn(
+                  'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+                  roleFilter === 'Gerente'
                     ? 'bg-[#EA580C] text-white shadow-xs'
                     : 'text-[#5B6B82] hover:text-[#12233A]',
                 )}
               >
-                GESTOR
-              </button>
-              <button
-                onClick={() => setRoleFilter('ANALISTA')}
-                className={cn(
-                  'px-3 py-1 rounded-md text-xs font-medium transition-all',
-                  roleFilter === 'ANALISTA'
-                    ? 'bg-[#64748B] text-white shadow-xs'
-                    : 'text-[#5B6B82] hover:text-[#12233A]',
-                )}
-              >
-                ANALISTA
+                Gerente
               </button>
             </div>
           </div>
@@ -754,17 +911,18 @@ export const Admin: React.FC = () => {
           <table className="w-full text-left border-collapse text-xs">
             <thead className="bg-[#12365A] text-white font-semibold uppercase tracking-wider text-[11px]">
               <tr>
-                <th className="px-4 py-3.5 min-w-[220px]">NOME COMPLETO</th>
-                <th className="px-4 py-3.5 min-w-[220px]">E-MAIL</th>
-                <th className="px-4 py-3.5 min-w-[150px]">FONE</th>
-                <th className="px-4 py-3.5 min-w-[130px]">PERFIL</th>
-                <th className="px-4 py-3.5 text-right min-w-[100px]">AÇÕES</th>
+                <th className="px-4 py-3.5 min-w-[200px]">NOME COMPLETO</th>
+                <th className="px-4 py-3.5 min-w-[200px]">E-MAIL</th>
+                <th className="px-4 py-3.5 min-w-[130px]">FONE</th>
+                <th className="px-4 py-3.5 min-w-[120px]">PERFIL</th>
+                <th className="px-4 py-3.5 min-w-[240px]">LOJAS VINCULADAS</th>
+                <th className="px-4 py-3.5 text-right min-w-[90px]">AÇÕES</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E3E9F2]">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={6} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-6 h-6 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
                       <span>Carregando usuários...</span>
@@ -773,7 +931,7 @@ export const Admin: React.FC = () => {
                 </tr>
               ) : filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={6} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
                       <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
                       <p className="font-semibold text-[#12365A]">Nenhum usuário encontrado</p>
@@ -788,6 +946,8 @@ export const Admin: React.FC = () => {
               ) : (
                 filteredUsers.map((u, idx) => {
                   const isCurrent = u.id === currentUser?.id
+                  const userLojas = Array.isArray(u.lojas) ? u.lojas : []
+                  const userRole = normalizeRole(u.role)
 
                   return (
                     <tr
@@ -839,6 +999,49 @@ export const Admin: React.FC = () => {
                       {/* PERFIL (BADGE) */}
                       <td className="px-4 py-3.5">{renderRoleBadge(u.role)}</td>
 
+                      {/* LOJAS VINCULADAS */}
+                      <td className="px-4 py-3.5">
+                        {userRole === 'ADM' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-[#5B6B82]">
+                            <Shield className="w-3 h-3 text-[#12365A]" />
+                            Todas as lojas (Acesso Total)
+                          </span>
+                        ) : userLojas.length === 0 ? (
+                          <span className="text-slate-400 text-[11px] italic">
+                            Nenhuma loja vinculada
+                          </span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1 max-w-sm">
+                            {userLojas.slice(0, 3).map((storeId) => {
+                              const store = storeMap.get(storeId)
+                              return (
+                                <Badge
+                                  key={storeId}
+                                  variant="outline"
+                                  className="text-[10px] font-semibold py-0.5 px-2 bg-blue-50/60 text-[#12365A] border-blue-200 truncate max-w-[160px]"
+                                  title={store?.name || storeId}
+                                >
+                                  <Store className="w-2.5 h-2.5 mr-1 text-[#0E9F8A] shrink-0" />
+                                  <span className="truncate">{store ? store.name : storeId}</span>
+                                </Badge>
+                              )
+                            })}
+                            {userLojas.length > 3 && (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] font-bold py-0.5 px-1.5 bg-slate-100 text-[#5B6B82] border-slate-200"
+                                title={userLojas
+                                  .slice(3)
+                                  .map((id) => storeMap.get(id)?.name || id)
+                                  .join(', ')}
+                              >
+                                +{userLojas.length - 3}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                      </td>
+
                       {/* AÇÕES */}
                       <td className="px-4 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -882,7 +1085,7 @@ export const Admin: React.FC = () => {
 
       {/* Modal: Cadastro / Edição de Usuário */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-md bg-white">
+        <DialogContent className="sm:max-w-xl bg-white max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-center gap-2 mb-1">
               <div className="w-8 h-8 rounded-lg bg-[#12365A] flex items-center justify-center text-white">
@@ -894,8 +1097,8 @@ export const Admin: React.FC = () => {
             </div>
             <DialogDescription className="text-xs text-[#5B6B82]">
               {editingUser
-                ? `Atualize os dados e o perfil de acesso de ${editingUser.name || editingUser.email}.`
-                : 'Preencha os campos abaixo para conceder acesso ao sistema.'}
+                ? `Atualize os dados, o perfil e as lojas vinculadas de ${editingUser.name || editingUser.email}.`
+                : 'Preencha os campos abaixo e vincule as lojas correspondentes ao perfil.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -911,225 +1114,370 @@ export const Admin: React.FC = () => {
               </div>
             )}
 
-            {/* Nome Completo */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase text-[#12365A] flex items-center gap-1">
-                <UserIcon className="w-3.5 h-3.5 text-[#5B6B82]" />
-                Nome Completo *
-              </label>
-              <Input
-                value={formData.name}
-                onChange={(e) => {
-                  setFormData({ ...formData, name: e.target.value })
-                  if (formErrors.name) setFormErrors({ ...formErrors, name: '' })
-                }}
-                placeholder="Ex: Carlos Eduardo Silva"
-                className={cn(
-                  'text-xs bg-[#F8FAFC]',
-                  Boolean(formErrors.name) && 'border-red-500 focus-visible:ring-red-400',
-                )}
-                required
-              />
-              {Boolean(formErrors.name) && (
-                <p className="text-[11px] text-red-600 font-medium">{formErrors.name}</p>
-              )}
-            </div>
-
-            {/* Telefone / Fone */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase text-[#12365A] flex items-center gap-1">
-                <Phone className="w-3.5 h-3.5 text-[#5B6B82]" />
-                Telefone / Celular
-              </label>
-              <Input
-                type="tel"
-                value={formData.fone}
-                onChange={(e) => {
-                  const masked = formatPhoneNumber(e.target.value)
-                  setFormData({ ...formData, fone: masked })
-                  if (formErrors.fone) setFormErrors({ ...formErrors, fone: '' })
-                }}
-                placeholder="Ex: (61) 98765-4321"
-                className={cn(
-                  'text-xs bg-[#F8FAFC]',
-                  Boolean(formErrors.fone) && 'border-red-500 focus-visible:ring-red-400',
-                )}
-              />
-              {Boolean(formErrors.fone) && (
-                <p className="text-[11px] text-red-600 font-medium">{formErrors.fone}</p>
-              )}
-            </div>
-
-            {/* E-mail */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase text-[#12365A] flex items-center gap-1">
-                <Mail className="w-3.5 h-3.5 text-[#5B6B82]" />
-                E-mail *
-              </label>
-              <Input
-                type="email"
-                value={formData.email}
-                onChange={(e) => {
-                  setFormData({ ...formData, email: e.target.value })
-                  if (formErrors.email) setFormErrors({ ...formErrors, email: '' })
-                }}
-                placeholder="Ex: carlos.silva@celnet.com.br"
-                className={cn(
-                  'text-xs bg-[#F8FAFC]',
-                  Boolean(formErrors.email) && 'border-red-500 focus-visible:ring-red-400',
-                )}
-                required
-              />
-              {Boolean(formErrors.email) && (
-                <p className="text-[11px] text-red-600 font-medium">{formErrors.email}</p>
-              )}
-            </div>
-
-            {/* Perfil (Role) */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase text-[#12365A] flex items-center gap-1">
-                <Shield className="w-3.5 h-3.5 text-[#5B6B82]" />
-                Perfil de Acesso *
-              </label>
-              <Select
-                value={formData.role}
-                onValueChange={(val: UserRole) => {
-                  setFormData({ ...formData, role: val })
-                  if (formErrors.role) setFormErrors({ ...formErrors, role: '' })
-                }}
-              >
-                <SelectTrigger
+            {/* Nome Completo e Fone em grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Nome Completo */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase text-[#12365A] flex items-center gap-1">
+                  <UserIcon className="w-3.5 h-3.5 text-[#5B6B82]" />
+                  Nome Completo *
+                </label>
+                <Input
+                  value={formData.name}
+                  onChange={(e) => {
+                    setFormData({ ...formData, name: e.target.value })
+                    if (formErrors.name) setFormErrors({ ...formErrors, name: '' })
+                  }}
+                  placeholder="Ex: Carlos Eduardo Silva"
                   className={cn(
-                    'w-full text-xs bg-[#F8FAFC] h-9',
-                    Boolean(formErrors.role) && 'border-red-500 focus:ring-red-400',
+                    'text-xs bg-[#F8FAFC]',
+                    Boolean(formErrors.name) && 'border-red-500 focus-visible:ring-red-400',
                   )}
+                  required
+                />
+                {Boolean(formErrors.name) && (
+                  <p className="text-[11px] text-red-600 font-medium">{formErrors.name}</p>
+                )}
+              </div>
+
+              {/* Telefone / Fone */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase text-[#12365A] flex items-center gap-1">
+                  <Phone className="w-3.5 h-3.5 text-[#5B6B82]" />
+                  Telefone / Celular
+                </label>
+                <Input
+                  type="tel"
+                  value={formData.fone}
+                  onChange={(e) => {
+                    const masked = formatPhoneNumber(e.target.value)
+                    setFormData({ ...formData, fone: masked })
+                    if (formErrors.fone) setFormErrors({ ...formErrors, fone: '' })
+                  }}
+                  placeholder="Ex: (61) 98765-4321"
+                  className={cn(
+                    'text-xs bg-[#F8FAFC]',
+                    Boolean(formErrors.fone) && 'border-red-500 focus-visible:ring-red-400',
+                  )}
+                />
+                {Boolean(formErrors.fone) && (
+                  <p className="text-[11px] text-red-600 font-medium">{formErrors.fone}</p>
+                )}
+              </div>
+            </div>
+
+            {/* E-mail e Perfil em grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* E-mail */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase text-[#12365A] flex items-center gap-1">
+                  <Mail className="w-3.5 h-3.5 text-[#5B6B82]" />
+                  E-mail *
+                </label>
+                <Input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => {
+                    setFormData({ ...formData, email: e.target.value })
+                    if (formErrors.email) setFormErrors({ ...formErrors, email: '' })
+                  }}
+                  placeholder="Ex: carlos.silva@celnet.com.br"
+                  className={cn(
+                    'text-xs bg-[#F8FAFC]',
+                    Boolean(formErrors.email) && 'border-red-500 focus-visible:ring-red-400',
+                  )}
+                  required
+                />
+                {Boolean(formErrors.email) && (
+                  <p className="text-[11px] text-red-600 font-medium">{formErrors.email}</p>
+                )}
+              </div>
+
+              {/* Perfil (Role) */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase text-[#12365A] flex items-center gap-1">
+                  <Shield className="w-3.5 h-3.5 text-[#5B6B82]" />
+                  Perfil de Acesso *
+                </label>
+                <Select
+                  value={formData.role}
+                  onValueChange={(val: UserRole) => {
+                    setFormData((prev) => ({
+                      ...prev,
+                      role: val,
+                      lojas:
+                        val === 'ADM'
+                          ? []
+                          : val === 'Gerente'
+                            ? prev.lojas.slice(0, 1)
+                            : prev.lojas,
+                    }))
+                    if (formErrors.role) setFormErrors({ ...formErrors, role: '' })
+                  }}
                 >
-                  <SelectValue placeholder="Selecione o perfil" />
-                </SelectTrigger>
-                <SelectContent className="bg-white">
-                  <SelectItem value="ADM" className="text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-[#12365A]" />
-                      <span className="font-bold text-[#12365A]">ADM</span>
-                      <span className="text-[#8A97AC] text-[10px]">— Acesso total e gestão</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="GESTOR" className="text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-[#EA580C]" />
-                      <span className="font-bold text-[#EA580C]">GESTOR</span>
-                      <span className="text-[#8A97AC] text-[10px]">— Gestão e acompanhamento</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="ANALISTA" className="text-xs">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-[#64748B]" />
-                      <span className="font-bold text-[#64748B]">ANALISTA</span>
-                      <span className="text-[#8A97AC] text-[10px]">
-                        — Visualização e relatórios
+                  <SelectTrigger
+                    className={cn(
+                      'w-full text-xs bg-[#F8FAFC] h-9',
+                      Boolean(formErrors.role) && 'border-red-500 focus:ring-red-400',
+                    )}
+                  >
+                    <SelectValue placeholder="Selecione o perfil" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white">
+                    <SelectItem value="ADM" className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[#12365A]" />
+                        <span className="font-bold text-[#12365A]">ADM</span>
+                        <span className="text-[#8A97AC] text-[10px]">
+                          — Acesso total ao sistema
+                        </span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="Coordenador" className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[#0284C7]" />
+                        <span className="font-bold text-[#0284C7]">Coordenador</span>
+                        <span className="text-[#8A97AC] text-[10px]">
+                          — Gestão de múltiplas lojas
+                        </span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="Supervisor" className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[#0D9488]" />
+                        <span className="font-bold text-[#0D9488]">Supervisor</span>
+                        <span className="text-[#8A97AC] text-[10px]">
+                          — Supervisão de múltiplas lojas
+                        </span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="Gerente" className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[#EA580C]" />
+                        <span className="font-bold text-[#EA580C]">Gerente</span>
+                        <span className="text-[#8A97AC] text-[10px]">— Gestão de 1 loja única</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {Boolean(formErrors.role) && (
+                  <p className="text-[11px] text-red-600 font-medium">{formErrors.role}</p>
+                )}
+              </div>
+            </div>
+
+            {/* SEÇÃO: VÍNCULO DE LOJAS */}
+            {formData.role !== 'ADM' && (
+              <div className="p-3.5 bg-[#F8FAFC] border border-[#E3E9F2] rounded-xl space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <label className="text-xs font-bold uppercase text-[#12365A] flex items-center gap-1.5">
+                      <Store className="w-3.5 h-3.5 text-[#0E9F8A]" />
+                      Lojas Vinculadas
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] font-semibold py-0 px-1.5 ml-1 bg-white"
+                      >
+                        {formData.lojas.length}{' '}
+                        {formData.lojas.length === 1 ? 'loja selecionada' : 'lojas selecionadas'}
+                      </Badge>
+                    </label>
+                    <p className="text-[11px] text-[#5B6B82] mt-0.5">
+                      {formData.role === 'Gerente'
+                        ? 'Selecione a loja única sob responsabilidade do gerente.'
+                        : 'Selecione uma ou mais lojas geridas por este perfil.'}
+                    </p>
+                  </div>
+
+                  {formData.role !== 'Gerente' && stores.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleSelectAllStores}
+                      className="text-[11px] font-semibold text-[#0E9F8A] hover:underline self-start sm:self-auto"
+                    >
+                      {formData.lojas.length === stores.length
+                        ? 'Desmarcar todas'
+                        : 'Selecionar todas'}
+                    </button>
+                  )}
+                </div>
+
+                {/* Busca rápida de lojas no modal se houver muitas lojas */}
+                {stores.length > 6 && (
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 text-[#8A97AC] absolute left-2.5 top-1/2 -translate-y-1/2" />
+                    <Input
+                      placeholder="Filtrar lojas na lista..."
+                      value={storeSearchQuery}
+                      onChange={(e) => setStoreSearchQuery(e.target.value)}
+                      className="pl-8 h-7 text-xs bg-white border-[#E3E9F2]"
+                    />
+                  </div>
+                )}
+
+                {/* Lista selecionável de lojas */}
+                <div className="max-h-48 overflow-y-auto border border-[#E3E9F2] rounded-lg bg-white divide-y divide-slate-100">
+                  {stores.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-[#5B6B82]">
+                      Nenhuma loja cadastrada no sistema.{' '}
+                      <span className="text-[#0E9F8A]">
+                        Cadastre lojas na aba Lojas ou via importação.
                       </span>
                     </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              {Boolean(formErrors.role) && (
-                <p className="text-[11px] text-red-600 font-medium">{formErrors.role}</p>
-              )}
-            </div>
-
-            {/* Senha */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase text-[#12365A] flex items-center justify-between">
-                <span className="flex items-center gap-1">
-                  <Lock className="w-3.5 h-3.5 text-[#5B6B82]" />
-                  Senha {editingUser ? '(Opcional)' : '*'}
-                </span>
-                <span className="text-[10px] text-slate-500 font-normal">
-                  {editingUser ? 'Deixe vazio para manter' : 'Mínimo 8 caracteres'}
-                </span>
-              </label>
-              <div className="relative">
-                <Input
-                  type={showPassword ? 'text' : 'password'}
-                  value={formData.password}
-                  onChange={(e) => {
-                    setFormData({ ...formData, password: e.target.value })
-                    if (formErrors.password) setFormErrors({ ...formErrors, password: '' })
-                  }}
-                  placeholder={
-                    editingUser
-                      ? 'Deixe em branco para manter a senha atual'
-                      : 'Mínimo 8 caracteres'
-                  }
-                  className={cn(
-                    'text-xs bg-[#F8FAFC] pr-10',
-                    Boolean(formErrors.password) && 'border-red-500 focus-visible:ring-red-400',
-                  )}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#12365A] p-1 transition-colors focus:outline-none"
-                  tabIndex={-1}
-                  aria-label={showPassword ? 'Ocultar senha' : 'Exibir senha'}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              {Boolean(formErrors.password) && (
-                <p className="text-[11px] text-red-600 font-medium">{formErrors.password}</p>
-              )}
-            </div>
-
-            {/* Confirmação de Senha */}
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold uppercase text-[#12365A] flex items-center justify-between">
-                <span className="flex items-center gap-1">
-                  <Lock className="w-3.5 h-3.5 text-[#5B6B82]" />
-                  Confirmar Senha {editingUser ? '(Opcional)' : '*'}
-                </span>
-              </label>
-              <div className="relative">
-                <Input
-                  type={showPasswordConfirm ? 'text' : 'password'}
-                  value={formData.passwordConfirm}
-                  onChange={(e) => {
-                    setFormData({ ...formData, passwordConfirm: e.target.value })
-                    if (formErrors.passwordConfirm)
-                      setFormErrors({ ...formErrors, passwordConfirm: '' })
-                  }}
-                  placeholder={
-                    editingUser
-                      ? 'Confirme a nova senha caso tenha digitado acima'
-                      : 'Digite a senha novamente'
-                  }
-                  className={cn(
-                    'text-xs bg-[#F8FAFC] pr-10',
-                    Boolean(formErrors.passwordConfirm) &&
-                      'border-red-500 focus-visible:ring-red-400',
-                  )}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPasswordConfirm((prev) => !prev)}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#12365A] p-1 transition-colors focus:outline-none"
-                  tabIndex={-1}
-                  aria-label={
-                    showPasswordConfirm
-                      ? 'Ocultar confirmação de senha'
-                      : 'Exibir confirmação de senha'
-                  }
-                >
-                  {showPasswordConfirm ? (
-                    <EyeOff className="w-4 h-4" />
+                  ) : modalFilteredStores.length === 0 ? (
+                    <div className="p-3 text-center text-xs text-[#8A97AC]">
+                      Nenhuma loja encontrada para "{storeSearchQuery}".
+                    </div>
                   ) : (
-                    <Eye className="w-4 h-4" />
+                    modalFilteredStores.map((store) => {
+                      const isSelected = formData.lojas.includes(store.id)
+
+                      return (
+                        <div
+                          key={store.id}
+                          onClick={() => handleToggleStore(store.id)}
+                          className={cn(
+                            'flex items-center justify-between p-2.5 cursor-pointer transition-colors text-xs',
+                            isSelected
+                              ? 'bg-[#F0F5FC] text-[#12365A] font-semibold'
+                              : 'hover:bg-slate-50 text-slate-700',
+                          )}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div
+                              className={cn(
+                                'w-4 h-4 rounded flex items-center justify-center border transition-colors shrink-0',
+                                formData.role === 'Gerente' ? 'rounded-full' : 'rounded',
+                                isSelected
+                                  ? 'bg-[#12365A] border-[#12365A] text-white'
+                                  : 'border-slate-300 bg-white',
+                              )}
+                            >
+                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                            </div>
+                            <span className="truncate">{store.name}</span>
+                          </div>
+
+                          {(store.coordenacao || store.supervisao) && (
+                            <span className="text-[10px] text-[#8A97AC] font-normal truncate shrink-0 ml-2">
+                              {[store.coordenacao, store.supervisao].filter(Boolean).join(' • ')}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })
                   )}
-                </button>
+                </div>
+
+                {formData.role === 'Gerente' && formData.lojas.length === 0 && (
+                  <p className="text-[11px] text-amber-600 font-medium">
+                    Aviso: O perfil Gerente requer a seleção de 1 loja.
+                  </p>
+                )}
               </div>
-              {Boolean(formErrors.passwordConfirm) && (
-                <p className="text-[11px] text-red-600 font-medium">{formErrors.passwordConfirm}</p>
-              )}
+            )}
+
+            {formData.role === 'ADM' && (
+              <div className="p-3 bg-blue-50/60 border border-blue-200 rounded-xl text-xs text-[#12365A] flex items-center gap-2">
+                <Shield className="w-4 h-4 text-[#0E9F8A] shrink-0" />
+                <span>
+                  Usuários com perfil <strong>ADM</strong> têm acesso irrestrito a todas as lojas da
+                  rede e não requerem vínculo manual.
+                </span>
+              </div>
+            )}
+
+            {/* Senhas em grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Senha */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase text-[#12365A] flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Lock className="w-3.5 h-3.5 text-[#5B6B82]" />
+                    Senha {editingUser ? '(Opcional)' : '*'}
+                  </span>
+                </label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.password}
+                    onChange={(e) => {
+                      setFormData({ ...formData, password: e.target.value })
+                      if (formErrors.password) setFormErrors({ ...formErrors, password: '' })
+                    }}
+                    placeholder={editingUser ? 'Deixe em branco p/ manter' : 'Mínimo 8 caracteres'}
+                    className={cn(
+                      'text-xs bg-[#F8FAFC] pr-8',
+                      Boolean(formErrors.password) && 'border-red-500 focus-visible:ring-red-400',
+                    )}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#12365A] p-1 transition-colors focus:outline-none"
+                    tabIndex={-1}
+                    aria-label={showPassword ? 'Ocultar senha' : 'Exibir senha'}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-3.5 h-3.5" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
+                {Boolean(formErrors.password) && (
+                  <p className="text-[11px] text-red-600 font-medium">{formErrors.password}</p>
+                )}
+              </div>
+
+              {/* Confirmação de Senha */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase text-[#12365A] flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Lock className="w-3.5 h-3.5 text-[#5B6B82]" />
+                    Confirmar Senha {editingUser ? '(Opcional)' : '*'}
+                  </span>
+                </label>
+                <div className="relative">
+                  <Input
+                    type={showPasswordConfirm ? 'text' : 'password'}
+                    value={formData.passwordConfirm}
+                    onChange={(e) => {
+                      setFormData({ ...formData, passwordConfirm: e.target.value })
+                      if (formErrors.passwordConfirm)
+                        setFormErrors({ ...formErrors, passwordConfirm: '' })
+                    }}
+                    placeholder={editingUser ? 'Confirme caso altere' : 'Repita a senha'}
+                    className={cn(
+                      'text-xs bg-[#F8FAFC] pr-8',
+                      Boolean(formErrors.passwordConfirm) &&
+                        'border-red-500 focus-visible:ring-red-400',
+                    )}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordConfirm((prev) => !prev)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#12365A] p-1 transition-colors focus:outline-none"
+                    tabIndex={-1}
+                    aria-label={
+                      showPasswordConfirm
+                        ? 'Ocultar confirmação de senha'
+                        : 'Exibir confirmação de senha'
+                    }
+                  >
+                    {showPasswordConfirm ? (
+                      <EyeOff className="w-3.5 h-3.5" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
+                {Boolean(formErrors.passwordConfirm) && (
+                  <p className="text-[11px] text-red-600 font-medium">
+                    {formErrors.passwordConfirm}
+                  </p>
+                )}
+              </div>
             </div>
 
             <DialogFooter className="pt-3 gap-2 sm:gap-0">

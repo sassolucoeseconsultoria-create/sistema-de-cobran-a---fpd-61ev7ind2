@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-02T13:09:01.589Z",
+  "generatedAt": "2026-09-02T13:24:56.796Z",
   "collections": [
     {
       "name": "users",
@@ -43,13 +43,20 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["ADM", "GESTOR", "ANALISTA"]
+          "selectValues": ["ADM", "Coordenador", "Supervisor", "Gerente"]
         },
         {
           "name": "fone",
           "type": "text",
           "required": false,
           "system": false
+        },
+        {
+          "name": "lojas",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "stores"
         }
       ],
       "indexes": [

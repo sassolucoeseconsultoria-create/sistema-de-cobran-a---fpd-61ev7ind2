@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useMemo } from '
 import type { RecordModel } from 'pocketbase'
 import pb from '@/lib/pocketbase/client'
 
-export type UserRole = 'ADM' | 'GESTOR' | 'ANALISTA'
+export type UserRole = 'ADM' | 'Coordenador' | 'Supervisor' | 'Gerente'
 
 export interface User extends RecordModel {
   email: string
@@ -10,6 +10,7 @@ export interface User extends RecordModel {
   avatar?: string
   role?: UserRole
   fone?: string
+  lojas?: string[]
 }
 
 interface AuthContextType {
