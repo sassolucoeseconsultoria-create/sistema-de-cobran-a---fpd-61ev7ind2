@@ -147,8 +147,8 @@ export const TopOfensores: React.FC = () => {
       const q = debouncedSearch.toLowerCase()
       rows = rows.filter((row) => {
         const matchVendedor = row.vendedor.toLowerCase().includes(q)
-        const matchLoja = row.loja.toLowerCase().includes(q)
-        const matchSuper = row.supervisao.toLowerCase().includes(q)
+        const matchLoja = (row.loja || '').toLowerCase().includes(q)
+        const matchSuper = (row.supervisao || '').toLowerCase().includes(q)
         return matchVendedor || matchLoja || matchSuper
       })
     }

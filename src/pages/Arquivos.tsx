@@ -212,8 +212,8 @@ export const Arquivos: React.FC = () => {
       if (debouncedSearch) {
         const q = debouncedSearch.toLowerCase()
         const matchName = row.storeName.toLowerCase().includes(q)
-        const matchCoord = row.coordenacao.toLowerCase().includes(q)
-        const matchSuper = row.supervisao.toLowerCase().includes(q)
+        const matchCoord = (row.coordenacao || '').toLowerCase().includes(q)
+        const matchSuper = (row.supervisao || '').toLowerCase().includes(q)
         if (!matchName && !matchCoord && !matchSuper) return false
       }
 

@@ -183,7 +183,8 @@ export const Admin: React.FC = () => {
     // Checagem local de unicidade do e-mail na lista carregada
     if (emailValue) {
       const existingWithEmail = users.find(
-        (u) => u.email.toLowerCase() === emailValue.toLowerCase() && u.id !== editingUser?.id,
+        (u) =>
+          (u.email || '').toLowerCase() === emailValue.toLowerCase() && u.id !== editingUser?.id,
       )
       if (existingWithEmail) {
         errors.email = 'Este e-mail já está sendo utilizado por outro usuário.'
@@ -295,7 +296,7 @@ export const Admin: React.FC = () => {
         // Update user
         const payload: Record<string, any> = {
           name: formData.name.trim(),
-          email: formData.email.trim().toLowerCase(),
+          email: (formData.email || '').trim().toLowerCase(),
           fone: formData.fone.trim(),
           role: formData.role,
         }
@@ -321,7 +322,7 @@ export const Admin: React.FC = () => {
         // Create user - NOTE: verified and emailVisibility omitted so non-superuser Admins can create records
         const payload: Record<string, any> = {
           name: formData.name.trim(),
-          email: formData.email.trim().toLowerCase(),
+          email: (formData.email || '').trim().toLowerCase(),
           fone: formData.fone.trim(),
           role: formData.role,
           password: trimmedPassword,
@@ -394,8 +395,8 @@ export const Admin: React.FC = () => {
 
           const isMismatch =
             itemCode === 'validation_values_mismatch' ||
-            itemMsg.toLowerCase().includes('mismatch') ||
-            itemMsg.toLowerCase().includes('match')
+            (itemMsg || '').toLowerCase().includes('mismatch') ||
+            (itemMsg || '').toLowerCase().includes('match')
 
           if (isMismatch && (key === 'password' || key === 'passwordConfirm')) {
             fieldErrors.passwordConfirm = 'As senhas digitadas não coincidem.'
@@ -496,7 +497,7 @@ export const Admin: React.FC = () => {
 
       // Search query
       if (search) {
-        const q = search.toLowerCase()
+        const q = (search || '').toLowerCase()
         const nameMatch = (u.name || '').toLowerCase().includes(q)
         const emailMatch = (u.email || '').toLowerCase().includes(q)
         const phoneMatch = (u.fone || '').toLowerCase().includes(q)
@@ -757,7 +758,7 @@ export const Admin: React.FC = () => {
                       <td className="px-4 py-3.5 font-medium text-[#12365A]">
                         <div className="flex items-center gap-2.5">
                           <div className="w-7 h-7 rounded-full bg-[#12365A]/10 text-[#12365A] font-bold text-xs flex items-center justify-center shrink-0">
-                            {u.name?.charAt(0).toUpperCase() || u.email.charAt(0).toUpperCase()}
+                            {(u.name?.charAt(0) || u.email?.charAt(0) || 'U').toUpperCase()}
                           </div>
                           <div className="min-w-0">
                             <span className="font-bold text-[#12365A] block truncate">

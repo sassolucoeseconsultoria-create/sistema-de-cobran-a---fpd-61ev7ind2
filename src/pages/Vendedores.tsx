@@ -153,8 +153,8 @@ export const Vendedores: React.FC = () => {
       if (debouncedSearch) {
         const q = debouncedSearch.toLowerCase()
         const matchVendedor = row.vendedor.toLowerCase().includes(q)
-        const matchLoja = row.loja.toLowerCase().includes(q)
-        const matchSuper = row.supervisao.toLowerCase().includes(q)
+        const matchLoja = (row.loja || '').toLowerCase().includes(q)
+        const matchSuper = (row.supervisao || '').toLowerCase().includes(q)
         if (!matchVendedor && !matchLoja && !matchSuper) return false
       }
 
