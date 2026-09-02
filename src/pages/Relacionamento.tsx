@@ -48,11 +48,14 @@ import {
   invalidateAnalyticalCache,
 } from '@/services/relacionamentoService'
 import { parseAnalyticalXlsxFile, ParsedAnalyticalFileData } from '@/lib/analyticalImportParser'
+import { fetchStores } from '@/services/fpdService'
+import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import type {
   RelacionamentoAba,
   UnifiedAnalyticRecord,
   MovelRecord,
   ResidencialRecord,
+  StoreRecord,
 } from '@/types/fpd'
 import { cn } from '@/lib/utils'
 import { ClientesMovel } from '@/components/ClientesMovel'
@@ -60,6 +63,7 @@ import { ClientesResidencial } from '@/components/ClientesResidencial'
 
 export const Relacionamento: React.FC = () => {
   const { toast } = useToast()
+  const userAccess = useUserStoreAccess()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Top sub-menu navigation: 'analitico' | 'clientes'
@@ -70,6 +74,7 @@ export const Relacionamento: React.FC = () => {
 
   // Data state
   const [rows, setRows] = useState<UnifiedAnalyticRecord[]>([])
+  const [stores, setStores] = useState<StoreRecord[]>([])
   const [totalItems, setTotalItems] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
   const [totalMovel, setTotalMovel] = useState(0)
@@ -83,7 +88,7 @@ export const Relacionamento: React.FC = () => {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selectedAba, setSelectedAba] = useState<RelacionamentoAba | 'TODAS'>('TODAS')
   const [selectedLoja, setSelectedLoja] = useState<string>('TODAS')
-  const [availableLojas, setAvailableLojas] = useState<string[]>([])
+  const [rawAvailableLojas, setRawAvailableLojas] = useState<string[]>([])
 
   // Expanded row IDs for JSON inspection
   const [expandedRowIds, setExpandedRowIds] = useState<Record<string, boolean>>({})
@@ -125,17 +130,35 @@ export const Relacionamento: React.FC = () => {
     return () => clearTimeout(timer)
   }, [search])
 
-  // Load distinct store names
+  // Load distinct store names and registered stores
   const loadLojas = useCallback(async () => {
     try {
-      const lojas = await fetchDistinctAnalyticalLojas()
+      const [lojas, registeredStores] = await Promise.all([
+        fetchDistinctAnalyticalLojas(),
+        fetchStores().catch(() => []),
+      ])
       if (Array.isArray(lojas)) {
-        setAvailableLojas(lojas)
+        setRawAvailableLojas(lojas)
       }
+      setStores(registeredStores)
     } catch {
       // ignore
     }
   }, [])
+
+  // Filtered available lojas based on user profile and linked stores
+  const availableLojas = useMemo(() => {
+    if (userAccess.isAdm) return rawAvailableLojas
+    if (userAccess.hasNoStoreAssigned) return []
+    return rawAvailableLojas.filter((l) => userAccess.isStoreNameAllowed(l, stores))
+  }, [rawAvailableLojas, stores, userAccess])
+
+  // Allowed store names array to send to backend or filter
+  const allowedStoreNames = useMemo(() => {
+    if (userAccess.isAdm) return undefined
+    if (userAccess.hasNoStoreAssigned) return []
+    return availableLojas
+  }, [userAccess.isAdm, userAccess.hasNoStoreAssigned, availableLojas])
 
   // Load rows from backend with single execution guarantee
   const loadRows = useCallback(
@@ -145,6 +168,17 @@ export const Relacionamento: React.FC = () => {
         setLoading(true)
       }
       try {
+        if (userAccess.hasNoStoreAssigned) {
+          if (currentRequestId === activeRequestIdRef.current) {
+            setRows([])
+            setTotalItems(0)
+            setTotalPages(1)
+            setTotalMovel(0)
+            setTotalResidencial(0)
+          }
+          return
+        }
+
         const res = await fetchAnalyticalRows({
           page,
           perPage,
@@ -152,12 +186,17 @@ export const Relacionamento: React.FC = () => {
           aba: selectedAba,
           loja: selectedLoja,
           sort: '-created',
+          allowedStoreNames,
         })
 
         // Only update state if this is still the latest request
         if (currentRequestId === activeRequestIdRef.current) {
-          setRows(res.items)
-          setTotalItems(res.totalItems)
+          const filteredItems = userAccess.isAdm
+            ? res.items
+            : res.items.filter((r) => userAccess.isStoreNameAllowed(r.loja, stores))
+
+          setRows(filteredItems)
+          setTotalItems(userAccess.isAdm ? res.totalItems : filteredItems.length)
           setTotalPages(res.totalPages)
           setTotalMovel(res.totalMovel)
           setTotalResidencial(res.totalResidencial)
@@ -179,7 +218,16 @@ export const Relacionamento: React.FC = () => {
     },
     // Note: toast is omitted from deps to guarantee stable callback identity
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [page, perPage, debouncedSearch, selectedAba, selectedLoja],
+    [
+      page,
+      perPage,
+      debouncedSearch,
+      selectedAba,
+      selectedLoja,
+      allowedStoreNames,
+      userAccess,
+      stores,
+    ],
   )
 
   // Initial load for lojas - once on mount
@@ -199,6 +247,8 @@ export const Relacionamento: React.FC = () => {
     if (isImportingRef.current) return
 
     if (e.action === 'create') {
+      if (!userAccess.isAdm && !userAccess.isStoreNameAllowed(e.record.loja, stores)) return
+
       const newUnified: UnifiedAnalyticRecord = {
         ...e.record,
         aba: 'Móvel',
@@ -212,8 +262,8 @@ export const Relacionamento: React.FC = () => {
       })
       setTotalMovel((prev) => prev + 1)
       setTotalItems((prev) => prev + 1)
-      if (e.record.loja && !availableLojas.includes(e.record.loja)) {
-        setAvailableLojas((prev) => [...prev, e.record.loja].sort((a, b) => a.localeCompare(b)))
+      if (e.record.loja && !rawAvailableLojas.includes(e.record.loja)) {
+        setRawAvailableLojas((prev) => [...prev, e.record.loja].sort((a, b) => a.localeCompare(b)))
       }
     } else if (e.action === 'update') {
       setRows((prev) =>
@@ -234,6 +284,8 @@ export const Relacionamento: React.FC = () => {
     if (isImportingRef.current) return
 
     if (e.action === 'create') {
+      if (!userAccess.isAdm && !userAccess.isStoreNameAllowed(e.record.loja, stores)) return
+
       const newUnified: UnifiedAnalyticRecord = {
         ...e.record,
         aba: 'Residencial',
@@ -247,8 +299,8 @@ export const Relacionamento: React.FC = () => {
       })
       setTotalResidencial((prev) => prev + 1)
       setTotalItems((prev) => prev + 1)
-      if (e.record.loja && !availableLojas.includes(e.record.loja)) {
-        setAvailableLojas((prev) => [...prev, e.record.loja].sort((a, b) => a.localeCompare(b)))
+      if (e.record.loja && !rawAvailableLojas.includes(e.record.loja)) {
+        setRawAvailableLojas((prev) => [...prev, e.record.loja].sort((a, b) => a.localeCompare(b)))
       }
     } else if (e.action === 'update') {
       setRows((prev) =>
@@ -674,13 +726,12 @@ export const Relacionamento: React.FC = () => {
               </button>
             </div>
           </div>
-
           {/* Render Active Clientes Table */}
           {activeClientesTab === 'movel' ? (
-            <ClientesMovel availableLojas={availableLojas} />
+            <ClientesMovel availableLojas={availableLojas} stores={stores} />
           ) : (
-            <ClientesResidencial availableLojas={availableLojas} />
-          )}
+            <ClientesResidencial availableLojas={availableLojas} stores={stores} />
+          )}{' '}
         </div>
       ) : (
         /* Sub-menu View: VISÃO ANALÍTICA (Original) */
@@ -920,15 +971,19 @@ export const Relacionamento: React.FC = () => {
                           </div>
                           <div className="space-y-1">
                             <p className="font-bold text-[#12365A] text-sm">
-                              Nenhuma linha analítica cadastrada ainda.
+                              {userAccess.hasNoStoreAssigned
+                                ? 'Nenhuma loja vinculada ao seu usuário'
+                                : 'Nenhuma linha analítica encontrada'}
                             </p>
                             <p className="text-xs text-[#5B6B82] leading-relaxed">
-                              {hasActiveFilters
-                                ? 'Nenhum registro corresponde aos filtros selecionados. Tente ajustar os filtros ou a busca.'
-                                : 'Clique em "Importar Planilha" acima para carregar o arquivo Excel com as abas Móvel e Residencial.'}
+                              {userAccess.hasNoStoreAssigned
+                                ? 'Solicite ao Administrador que vincule uma ou mais lojas ao seu perfil para visualizar as linhas analíticas de inadimplência.'
+                                : hasActiveFilters
+                                  ? 'Nenhum registro corresponde aos filtros selecionados. Tente ajustar os filtros ou a busca.'
+                                  : 'Clique em "Importar Planilha" acima para carregar o arquivo Excel com as abas Móvel e Residencial.'}
                             </p>
                           </div>
-                          {hasActiveFilters ? (
+                          {userAccess.hasNoStoreAssigned ? null : hasActiveFilters ? (
                             <Button
                               variant="outline"
                               size="sm"

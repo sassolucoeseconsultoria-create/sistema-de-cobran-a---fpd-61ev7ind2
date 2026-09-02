@@ -44,9 +44,11 @@ import { exportConsolidatedToXlsx } from '@/lib/xlsxExport'
 import { FPD_STATUSES, type StoreRecord, type FpdRecord, type ConsolidatedRow } from '@/types/fpd'
 import { cn } from '@/lib/utils'
 import { StoreAnalyticsDrawer } from '@/components/StoreAnalyticsDrawer'
+import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 
 export const Arquivos: React.FC = () => {
   const { toast } = useToast()
+  const userAccess = useUserStoreAccess()
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [records, setRecords] = useState<FpdRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -140,9 +142,14 @@ export const Arquivos: React.FC = () => {
     }
   })
 
+  // Filter stores accessible to user
+  const accessibleStores = useMemo(() => {
+    return userAccess.filterStores(stores)
+  }, [stores, userAccess])
+
   // Map each store to its consolidated FPD row (exact same aggregation logic as Index.tsx)
   const consolidatedRows: ConsolidatedRow[] = useMemo(() => {
-    return stores.map((store) => {
+    return accessibleStores.map((store) => {
       // Find all records for this store, pick the latest (records sorted -importado_em, -created)
       const storeRecords = records.filter((r) => r.store === store.id)
       const latest = storeRecords[0]
@@ -188,22 +195,22 @@ export const Arquivos: React.FC = () => {
         outros: latest.outros || 0,
       }
     })
-  }, [stores, records])
+  }, [accessibleStores, records])
 
   // Distinct filter options
   const uniqueCoordenacoes = useMemo(() => {
     const list = Array.from(
-      new Set(stores.map((s) => s.coordenacao?.trim()).filter(Boolean)),
+      new Set(accessibleStores.map((s) => s.coordenacao?.trim()).filter(Boolean)),
     ) as string[]
     return list.sort((a, b) => a.localeCompare(b))
-  }, [stores])
+  }, [accessibleStores])
 
   const uniqueSupervisoes = useMemo(() => {
     const list = Array.from(
-      new Set(stores.map((s) => s.supervisao?.trim()).filter(Boolean)),
+      new Set(accessibleStores.map((s) => s.supervisao?.trim()).filter(Boolean)),
     ) as string[]
     return list.sort((a, b) => a.localeCompare(b))
-  }, [stores])
+  }, [accessibleStores])
 
   // Filtered rows
   const filteredRows = useMemo(() => {
@@ -277,9 +284,15 @@ export const Arquivos: React.FC = () => {
 
   // Latest Referente date
   const latestReferente = useMemo(() => {
-    const withRef = records.find((r) => r.referente && r.referente.trim() !== '')
+    const accessibleRecordStoreIds = new Set(accessibleStores.map((s) => s.id))
+    const withRef = records.find(
+      (r) =>
+        (userAccess.isAdm || accessibleRecordStoreIds.has(r.store)) &&
+        r.referente &&
+        r.referente.trim() !== '',
+    )
     return withRef?.referente || null
-  }, [records])
+  }, [records, accessibleStores, userAccess.isAdm])
 
   // Handle open drawer
   const handleOpenRowDetail = async (row: ConsolidatedRow) => {
@@ -396,7 +409,7 @@ export const Arquivos: React.FC = () => {
             </p>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-bold text-[#12365A] tabular-nums">
-                {stores.length}
+                {accessibleStores.length}
               </span>
               <span className="text-xs text-[#0E9F8A] font-medium">
                 {storesWithDataCount} com dados
@@ -739,16 +752,22 @@ export const Arquivos: React.FC = () => {
               ) : filteredRows.length === 0 ? (
                 <tr>
                   <td colSpan={13} className="py-12 text-center text-[#5B6B82]">
-                    <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
+                    <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
                       <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
-                      <p className="font-medium text-[#12365A]">Nenhuma loja encontrada</p>
+                      <p className="font-semibold text-[#12365A]">
+                        {userAccess.hasNoStoreAssigned
+                          ? 'Nenhuma loja vinculada ao seu usuário'
+                          : 'Nenhuma loja encontrada'}
+                      </p>
                       <p className="text-xs text-[#5B6B82]">
-                        {stores.length === 0
-                          ? 'Cadastre lojas na aba Lojas ou faça o upload de arquivos .xlsx para preencher a tabela.'
-                          : 'Tente ajustar os termos de busca ou remover os filtros aplicados.'}
+                        {userAccess.hasNoStoreAssigned
+                          ? 'Solicite ao Administrador que vincule uma ou mais lojas ao seu perfil para visualizar os dados.'
+                          : stores.length === 0
+                            ? 'Importe arquivos na aba Importar para gerar os dados do Painel de Lojas.'
+                            : 'Tente ajustar os filtros de busca acima.'}
                       </p>
                     </div>
-                  </td>
+                  </td>{' '}
                 </tr>
               ) : (
                 filteredRows.map((row, idx) => {

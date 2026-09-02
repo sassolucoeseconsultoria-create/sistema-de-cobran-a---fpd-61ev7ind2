@@ -13,6 +13,7 @@ export interface FetchAnalyticalParams {
   aba?: RelacionamentoAba | 'TODAS'
   loja?: string
   sort?: string
+  allowedStoreNames?: string[]
 }
 
 export interface FetchAnalyticalResult {
@@ -59,8 +60,18 @@ export async function fetchAnalyticalRows(
   const search = params.search?.trim() || ''
   const sortStr = params.sort || '-created'
 
+  const allowedStoreNames = params.allowedStoreNames
+
   // Build a unique key for in-flight deduplication
-  const cacheKey = JSON.stringify({ page, perPage, selectedAba, loja, search, sortStr })
+  const cacheKey = JSON.stringify({
+    page,
+    perPage,
+    selectedAba,
+    loja,
+    search,
+    sortStr,
+    allowedStoreNames,
+  })
 
   const existing = pendingAnalyticalRequests.get(cacheKey)
   if (existing) {
@@ -72,6 +83,13 @@ export async function fetchAnalyticalRows(
 
     if (loja && loja !== 'TODAS' && loja.trim() !== '') {
       filterParts.push(`loja = "${loja.replace(/"/g, '\\"')}"`)
+    } else if (allowedStoreNames !== undefined) {
+      if (allowedStoreNames.length === 0) {
+        filterParts.push(`id = "none_match"`)
+      } else {
+        const storeFilters = allowedStoreNames.map((st) => `loja ~ "${st.replace(/"/g, '\\"')}"`)
+        filterParts.push(`(${storeFilters.join(' || ')})`)
+      }
     }
 
     if (search) {

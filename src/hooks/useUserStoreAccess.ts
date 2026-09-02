@@ -99,13 +99,30 @@ export function useUserStoreAccess(): UserStoreAccess {
           .filter((s) => effectiveAllowedIds.includes(s.id))
           .map((s) => s.name.trim().toUpperCase())
 
-        // Checagem exata ou por correspondência de nome
+        if (allowedNames.length === 0) return false
+
+        // Checagem exata
         if (allowedNames.includes(cleanName)) return true
 
-        // Checagem parcial caso haja sufixos ou prefixos
-        return allowedNames.some(
-          (allowed) => cleanName.includes(allowed) || allowed.includes(cleanName),
-        )
+        // Checagem normalizada (remover pontuações/espaços duplicados)
+        const normalizeSimple = (str: string) =>
+          str
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^A-Z0-9]/g, '')
+
+        const normClean = normalizeSimple(cleanName)
+        if (!normClean) return false
+
+        return allowedNames.some((allowed) => {
+          const normAllowed = normalizeSimple(allowed)
+          if (!normAllowed) return false
+          return (
+            normClean === normAllowed ||
+            normClean.includes(normAllowed) ||
+            normAllowed.includes(normClean)
+          )
+        })
       }
 
       // Se não temos allStores, não podemos mapear storeId para storeName com certeza

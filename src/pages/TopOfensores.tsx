@@ -28,9 +28,11 @@ import {
   type StoreRecord,
 } from '@/types/fpd'
 import { cn } from '@/lib/utils'
+import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 
 export const TopOfensores: React.FC = () => {
   const { toast } = useToast()
+  const userAccess = useUserStoreAccess()
   const [records, setRecords] = useState<VendorConsolidationRecord[]>([])
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -85,39 +87,43 @@ export const TopOfensores: React.FC = () => {
     }
   })
 
-  // Normalize all vendor records and aggregate by vendor name across stores (if a vendor worked in multiple stores or per record)
-  // Or rank each vendor record / aggregated vendor
-  // In our schema, records are already stored per vendor+store combination.
-  // We normalize them first.
+  // Normalize all vendor records - filtering strictly by user's permitted stores
   const allVendorRows: VendorRow[] = useMemo(() => {
-    return records.map((r) => {
-      let sup = r.supervisao || ''
-      if (!sup && r.loja) {
-        const matched = matchStore(r.loja, stores)
-        if (matched?.supervisao) sup = matched.supervisao
-      }
+    if (userAccess.hasNoStoreAssigned) return []
 
-      return {
-        id: r.id,
-        vendedor: r.vendedor || 'NÃO INFORMADO',
-        loja: r.loja || '',
-        supervisao: sup,
-        dataReferencia: r.data_referencia,
-        totalLinhas: r.total_linhas || 0,
-        faturaPaga: r.fatura_paga || 0,
-        envioFatura: r.envio_fatura || 0,
-        promessaPagto: r.promessa_pagto || 0,
-        semContato: r.sem_contato || 0,
-        cancelados: r.cancelados || 0,
-        pendente: r.pendente || 0,
-        contatoRealizado: r.contato_realizado || 0,
-        outros: r.outros || 0,
-        naoTratados: r.nao_tratados || 0,
-      }
-    })
-  }, [records, stores])
+    return records
+      .filter((r) => {
+        if (userAccess.isAdm) return true
+        return userAccess.isStoreNameAllowed(r.loja, stores)
+      })
+      .map((r) => {
+        let sup = r.supervisao || ''
+        if (!sup && r.loja) {
+          const matched = matchStore(r.loja, stores)
+          if (matched?.supervisao) sup = matched.supervisao
+        }
 
-  // Unique lojas for filter dropdown
+        return {
+          id: r.id,
+          vendedor: r.vendedor || 'NÃO INFORMADO',
+          loja: r.loja || '',
+          supervisao: sup,
+          dataReferencia: r.data_referencia,
+          totalLinhas: r.total_linhas || 0,
+          faturaPaga: r.fatura_paga || 0,
+          envioFatura: r.envio_fatura || 0,
+          promessaPagto: r.promessa_pagto || 0,
+          semContato: r.sem_contato || 0,
+          cancelados: r.cancelados || 0,
+          pendente: r.pendente || 0,
+          contatoRealizado: r.contato_realizado || 0,
+          outros: r.outros || 0,
+          naoTratados: r.nao_tratados || 0,
+        }
+      })
+  }, [records, stores, userAccess])
+
+  // Unique lojas for filter dropdown (only from permitted vendor rows)
   const uniqueLojas = useMemo(() => {
     const set = new Set<string>()
     for (const r of allVendorRows) {
@@ -219,11 +225,11 @@ export const TopOfensores: React.FC = () => {
     return ((totals.totalLinhas / grandTotalLinhas) * 100).toFixed(1)
   }, [totals.totalLinhas, grandTotalLinhas])
 
-  // Latest Referente
+  // Latest Referente (only from permitted vendor rows)
   const latestReferente = useMemo(() => {
-    const withRef = records.find((r) => r.data_referencia && r.data_referencia.trim() !== '')
-    return withRef?.data_referencia || null
-  }, [records])
+    const withRef = allVendorRows.find((r) => r.dataReferencia && r.dataReferencia.trim() !== '')
+    return withRef?.dataReferencia || null
+  }, [allVendorRows])
 
   // Export Top 20 to Excel
   const handleExportXlsx = () => {
@@ -490,11 +496,17 @@ export const TopOfensores: React.FC = () => {
                   <td colSpan={14} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
                       <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
-                      <p className="font-medium text-[#12365A]">Nenhum ofensor encontrado</p>
+                      <p className="font-medium text-[#12365A]">
+                        {userAccess.hasNoStoreAssigned
+                          ? 'Nenhuma loja vinculada ao seu usuário'
+                          : 'Nenhum ofensor encontrado'}
+                      </p>
                       <p className="text-xs text-[#5B6B82]">
-                        {allVendorRows.length === 0
-                          ? 'Importe arquivos .xlsx na aba Importar para gerar o ranking dos 20 principais ofensores.'
-                          : 'Tente ajustar os termos de busca ou o filtro de loja.'}
+                        {userAccess.hasNoStoreAssigned
+                          ? 'Solicite ao Administrador que vincule uma ou mais lojas ao seu perfil para visualizar os dados de ofensores.'
+                          : allVendorRows.length === 0
+                            ? 'Importe arquivos .xlsx na aba Importar para gerar o ranking dos 20 principais ofensores.'
+                            : 'Tente ajustar os termos de busca ou o filtro de loja.'}
                       </p>
                     </div>
                   </td>

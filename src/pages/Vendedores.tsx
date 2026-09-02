@@ -44,9 +44,11 @@ import {
   type StoreRecord,
 } from '@/types/fpd'
 import { cn } from '@/lib/utils'
+import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 
 export const Vendedores: React.FC = () => {
   const { toast } = useToast()
+  const userAccess = useUserStoreAccess()
   const [records, setRecords] = useState<VendorConsolidationRecord[]>([])
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -105,37 +107,44 @@ export const Vendedores: React.FC = () => {
     }
   })
 
-  // Normalize vendor rows
+  // Normalize vendor rows - filtering strictly by user's permitted stores
   const vendorRows: VendorRow[] = useMemo(() => {
-    return records.map((r) => {
-      // Find supervision if missing
-      let sup = r.supervisao || ''
-      if (!sup && r.loja) {
-        const matched = matchStore(r.loja, stores)
-        if (matched?.supervisao) sup = matched.supervisao
-      }
+    if (userAccess.hasNoStoreAssigned) return []
 
-      return {
-        id: r.id,
-        vendedor: r.vendedor || 'NÃO INFORMADO',
-        loja: r.loja || '',
-        supervisao: sup,
-        dataReferencia: r.data_referencia,
-        totalLinhas: r.total_linhas || 0,
-        faturaPaga: r.fatura_paga || 0,
-        envioFatura: r.envio_fatura || 0,
-        promessaPagto: r.promessa_pagto || 0,
-        semContato: r.sem_contato || 0,
-        cancelados: r.cancelados || 0,
-        pendente: r.pendente || 0,
-        contatoRealizado: r.contato_realizado || 0,
-        outros: r.outros || 0,
-        naoTratados: r.nao_tratados || 0,
-      }
-    })
-  }, [records, stores])
+    return records
+      .filter((r) => {
+        if (userAccess.isAdm) return true
+        return userAccess.isStoreNameAllowed(r.loja, stores)
+      })
+      .map((r) => {
+        // Find supervision if missing
+        let sup = r.supervisao || ''
+        if (!sup && r.loja) {
+          const matched = matchStore(r.loja, stores)
+          if (matched?.supervisao) sup = matched.supervisao
+        }
 
-  // Unique lojas for filter dropdown
+        return {
+          id: r.id,
+          vendedor: r.vendedor || 'NÃO INFORMADO',
+          loja: r.loja || '',
+          supervisao: sup,
+          dataReferencia: r.data_referencia,
+          totalLinhas: r.total_linhas || 0,
+          faturaPaga: r.fatura_paga || 0,
+          envioFatura: r.envio_fatura || 0,
+          promessaPagto: r.promessa_pagto || 0,
+          semContato: r.sem_contato || 0,
+          cancelados: r.cancelados || 0,
+          pendente: r.pendente || 0,
+          contatoRealizado: r.contato_realizado || 0,
+          outros: r.outros || 0,
+          naoTratados: r.nao_tratados || 0,
+        }
+      })
+  }, [records, stores, userAccess])
+
+  // Unique lojas for filter dropdown (only from permitted vendor rows)
   const uniqueLojas = useMemo(() => {
     const set = new Set<string>()
     for (const r of vendorRows) {
@@ -235,11 +244,11 @@ export const Vendedores: React.FC = () => {
     return new Set(vendorRows.map((r) => r.vendedor)).size
   }, [vendorRows])
 
-  // Latest Referente
+  // Latest Referente (only considering permitted stores)
   const latestReferente = useMemo(() => {
-    const withRef = records.find((r) => r.data_referencia && r.data_referencia.trim() !== '')
-    return withRef?.data_referencia || null
-  }, [records])
+    const withRef = vendorRows.find((r) => r.dataReferencia && r.dataReferencia.trim() !== '')
+    return withRef?.dataReferencia || null
+  }, [vendorRows])
 
   // Clear data
   const handleClearAll = async () => {
@@ -538,11 +547,17 @@ export const Vendedores: React.FC = () => {
                   <td colSpan={13} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
                       <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
-                      <p className="font-medium text-[#12365A]">Nenhum vendedor encontrado</p>
+                      <p className="font-medium text-[#12365A]">
+                        {userAccess.hasNoStoreAssigned
+                          ? 'Nenhuma loja vinculada ao seu usuário'
+                          : 'Nenhum vendedor encontrado'}
+                      </p>
                       <p className="text-xs text-[#5B6B82]">
-                        {vendorRows.length === 0
-                          ? 'Importe arquivos .xlsx na aba Importar para gerar automaticamente o ranking de vendedores.'
-                          : 'Tente ajustar os termos de busca ou o filtro de loja.'}
+                        {userAccess.hasNoStoreAssigned
+                          ? 'Solicite ao Administrador que vincule uma ou mais lojas ao seu perfil para visualizar os dados de vendedores.'
+                          : vendorRows.length === 0
+                            ? 'Importe arquivos .xlsx na aba Importar para gerar automaticamente o ranking de vendedores.'
+                            : 'Tente ajustar os termos de busca ou o filtro de loja.'}
                       </p>
                     </div>
                   </td>
