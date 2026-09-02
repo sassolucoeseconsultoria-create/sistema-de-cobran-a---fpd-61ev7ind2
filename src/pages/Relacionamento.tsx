@@ -163,21 +163,38 @@ export const Relacionamento: React.FC = () => {
   // Filtered available lojas based on user profile and linked stores
   const availableLojas = useMemo(() => {
     if (userAccess.isAdm) {
-      return rawAvailableLojas.length > 0
-        ? rawAvailableLojas.sort((a, b) => a.localeCompare(b))
-        : stores.map((s) => s.name).sort((a, b) => a.localeCompare(b))
+      const allNames = Array.from(
+        new Set([...rawAvailableLojas, ...stores.map((s) => s.name)]),
+      ).filter(Boolean)
+      return allNames.sort((a, b) => a.localeCompare(b))
     }
     if (userAccess.hasNoStoreAssigned) return []
 
-    // 1. Find which analytical loja strings belong to the user's stores
-    const allowed = rawAvailableLojas.filter((l) => userAccess.isStoreNameAllowed(l, stores))
+    // 1. Find which analytical loja strings belong to the user's allowed stores (with normalized comparison)
+    const allowedFromAnalytical = rawAvailableLojas.filter((l) =>
+      userAccess.isStoreNameAllowed(l, stores),
+    )
 
     // 2. Also retrieve registered store names for assigned stores
     const userRegisteredStoreNames = userAccess.getAllowedStoreNames(stores)
 
-    const combined = Array.from(new Set([...allowed, ...userRegisteredStoreNames])).filter(Boolean)
+    const combined = Array.from(
+      new Set([...allowedFromAnalytical, ...userRegisteredStoreNames]),
+    ).filter(Boolean)
     return combined.sort((a, b) => a.localeCompare(b))
   }, [rawAvailableLojas, stores, userAccess])
+
+  // If user selected a store that is not allowed, reset to 'TODAS'
+  useEffect(() => {
+    if (
+      !userAccess.isAdm &&
+      selectedLoja !== 'TODAS' &&
+      !userAccess.isStoreNameAllowed(selectedLoja, stores)
+    ) {
+      setSelectedLoja('TODAS')
+      setPage(1)
+    }
+  }, [selectedLoja, userAccess, stores])
 
   // Allowed store names array to send to backend or filter
   const allowedStoreNames = useMemo(() => {
@@ -219,10 +236,10 @@ export const Relacionamento: React.FC = () => {
         if (currentRequestId === activeRequestIdRef.current) {
           const filteredItems = userAccess.isAdm
             ? res.items
-            : res.items.filter((r) => !r.loja || userAccess.isStoreNameAllowed(r.loja, stores))
+            : res.items.filter((r) => userAccess.isStoreNameAllowed(r.loja, stores))
 
           setRows(filteredItems)
-          setTotalItems(userAccess.isAdm ? res.totalItems : res.totalItems)
+          setTotalItems(res.totalItems)
           setTotalPages(res.totalPages)
           setTotalMovel(res.totalMovel)
           setTotalResidencial(res.totalResidencial)

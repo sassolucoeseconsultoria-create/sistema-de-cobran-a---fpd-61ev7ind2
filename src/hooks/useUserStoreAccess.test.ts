@@ -46,11 +46,10 @@ describe('useUserStoreAccess', () => {
         updated: '2025-01-01',
       },
       token: 'mock-token',
-      isAuthenticated: true,
-      isLoading: false,
+      loading: false,
       login: vi.fn(),
       logout: vi.fn(),
-      updateUser: vi.fn(),
+      refreshAuth: vi.fn(),
     })
 
     const { result } = renderHook(() => useUserStoreAccess())
@@ -79,11 +78,10 @@ describe('useUserStoreAccess', () => {
         updated: '2025-01-01',
       },
       token: 'mock-token',
-      isAuthenticated: true,
-      isLoading: false,
+      loading: false,
       login: vi.fn(),
       logout: vi.fn(),
-      updateUser: vi.fn(),
+      refreshAuth: vi.fn(),
     })
 
     const { result } = renderHook(() => useUserStoreAccess())
@@ -123,11 +121,10 @@ describe('useUserStoreAccess', () => {
         updated: '2025-01-01',
       },
       token: 'mock-token',
-      isAuthenticated: true,
-      isLoading: false,
+      loading: false,
       login: vi.fn(),
       logout: vi.fn(),
-      updateUser: vi.fn(),
+      refreshAuth: vi.fn(),
     })
 
     const { result } = renderHook(() => useUserStoreAccess())

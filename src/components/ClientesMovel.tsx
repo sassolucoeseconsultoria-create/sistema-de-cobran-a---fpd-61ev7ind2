@@ -75,6 +75,18 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas, st
 
   const userAccess = useUserStoreAccess()
 
+  // If selected store becomes invalid under user's permissions, reset to TODAS
+  useEffect(() => {
+    if (
+      !userAccess.isAdm &&
+      selectedLoja !== 'TODAS' &&
+      !userAccess.isStoreNameAllowed(selectedLoja, stores)
+    ) {
+      setSelectedLoja('TODAS')
+      setPage(1)
+    }
+  }, [selectedLoja, userAccess, stores])
+
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
@@ -93,7 +105,19 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas, st
           // If a specific store is selected, ensure it's allowed
           if (userAccess.isStoreNameAllowed(selectedLoja, stores)) {
             const escaped = selectedLoja.replace(/"/g, '\\"')
-            filterParts.push(`(loja = "${escaped}" || loja ~ "${escaped}")`)
+            const unaccented = selectedLoja
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .trim()
+              .replace(/"/g, '\\"')
+
+            if (unaccented && unaccented.toLowerCase() !== escaped.toLowerCase()) {
+              filterParts.push(
+                `(loja = "${escaped}" || loja ~ "${escaped}" || loja = "${unaccented}" || loja ~ "${unaccented}")`,
+              )
+            } else {
+              filterParts.push(`(loja = "${escaped}" || loja ~ "${escaped}")`)
+            }
           } else {
             setRecords([])
             setTotalItems(0)
@@ -101,10 +125,25 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas, st
             return
           }
         } else if (availableLojas.length > 0) {
-          const storeFilters = availableLojas.map(
+          const expandedStoreNames = new Set<string>()
+          for (const l of availableLojas) {
+            if (!l || !l.trim()) continue
+            expandedStoreNames.add(l.trim())
+            const unaccented = l
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .trim()
+            if (unaccented) {
+              expandedStoreNames.add(unaccented)
+            }
+          }
+
+          const storeFilters = Array.from(expandedStoreNames).map(
             (l) => `loja = "${l.replace(/"/g, '\\"')}" || loja ~ "${l.replace(/"/g, '\\"')}"`,
           )
-          filterParts.push(`(${storeFilters.join(' || ')})`)
+          if (storeFilters.length > 0) {
+            filterParts.push(`(${storeFilters.join(' || ')})`)
+          }
         } else {
           // No allowed store names identified
           setRecords([])
@@ -114,7 +153,19 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas, st
         }
       } else if (selectedLoja && selectedLoja !== 'TODAS') {
         const escaped = selectedLoja.replace(/"/g, '\\"')
-        filterParts.push(`(loja = "${escaped}" || loja ~ "${escaped}")`)
+        const unaccented = selectedLoja
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .trim()
+          .replace(/"/g, '\\"')
+
+        if (unaccented && unaccented.toLowerCase() !== escaped.toLowerCase()) {
+          filterParts.push(
+            `(loja = "${escaped}" || loja ~ "${escaped}" || loja = "${unaccented}" || loja ~ "${unaccented}")`,
+          )
+        } else {
+          filterParts.push(`(loja = "${escaped}" || loja ~ "${escaped}")`)
+        }
       }
 
       if (debouncedSearch.trim()) {
@@ -132,13 +183,13 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas, st
         requestKey: null,
       })
 
-      // If non-ADM, also allow any rows where store check passes (or fallback to unfiltered list if filterStr already scoped it)
+      // If non-ADM, only retain records whose store is allowed
       const filteredItems = userAccess.isAdm
         ? res.items
-        : res.items.filter((item) => !item.loja || userAccess.isStoreNameAllowed(item.loja, stores))
+        : res.items.filter((item) => userAccess.isStoreNameAllowed(item.loja, stores))
 
       setRecords(filteredItems)
-      setTotalItems(userAccess.isAdm ? res.totalItems : res.totalItems)
+      setTotalItems(res.totalItems)
       setTotalPages(res.totalPages)
 
       // Initialize edit values
