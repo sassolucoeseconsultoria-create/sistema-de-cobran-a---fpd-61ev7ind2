@@ -61,7 +61,7 @@ export const Layout: React.FC = () => {
       to: '/relacionamento',
       label: 'Inadimplência',
       icon: Layers,
-      description: 'Linhas analíticas das planilhas Móvel e Residencial',
+      description: 'Gestão de clientes das carteiras Móvel e Residencial',
     },
     {
       to: '/lojas',
@@ -111,8 +111,8 @@ export const Layout: React.FC = () => {
         }
       case '/relacionamento':
         return {
-          title: 'Inadimplência Analítica',
-          subtitle: 'Linhas analíticas detalhadas das planilhas Móvel e Residencial',
+          title: 'Inadimplência - Clientes',
+          subtitle: 'Acompanhamento e tratamento individualizado de clientes Móvel e Residencial',
         }
       case '/lojas':
         return {
