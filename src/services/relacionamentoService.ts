@@ -769,13 +769,70 @@ export async function deleteAnalyticalRow(id: string, aba: RelacionamentoAba): P
  * Clear all records from 'movel' and 'residencial' collections (or single aba)
  * using sequential deletion with throttle and retry to safely prevent HTTP 429.
  */
-export async function clearAllAnalyticalRows(targetAba?: RelacionamentoAba | 'TODAS'): Promise<{
+export interface ClearAnalyticalRowsOptions {
+  targetAba?: RelacionamentoAba | 'TODAS'
+  loja?: string
+  lojas?: string[]
+}
+
+/**
+ * Clear records from 'movel' and 'residencial' collections (or single aba / specific stores).
+ * Tries the custom backend endpoint first (/api/custom/analytical/clear) which deletes server-side
+ * inside a single fast SQL transaction without 429 rate limit risk.
+ * Falls back to batched client-side deletion with exponential backoff if the endpoint fails.
+ */
+export async function clearAllAnalyticalRows(
+  optionsOrTargetAba?: RelacionamentoAba | 'TODAS' | ClearAnalyticalRowsOptions,
+): Promise<{
   movelCount: number
   residencialCount: number
+  relacionamentoCount?: number
 }> {
   invalidateAnalyticalCache()
 
-  const target = targetAba || 'TODAS'
+  let target: RelacionamentoAba | 'TODAS' = 'TODAS'
+  let lojas: string[] = []
+
+  if (typeof optionsOrTargetAba === 'string') {
+    target = optionsOrTargetAba
+  } else if (optionsOrTargetAba && typeof optionsOrTargetAba === 'object') {
+    target = optionsOrTargetAba.targetAba || 'TODAS'
+    if (Array.isArray(optionsOrTargetAba.lojas)) {
+      lojas = optionsOrTargetAba.lojas
+    } else if (optionsOrTargetAba.loja && optionsOrTargetAba.loja !== 'TODAS') {
+      lojas = [optionsOrTargetAba.loja]
+    }
+  }
+
+  // 1. Try server-side endpoint first (avoids 429 and does atomic deletion)
+  try {
+    const res = await pb.send<{
+      success: boolean
+      movelCount: number
+      residencialCount: number
+      relacionamentoCount?: number
+    }>('/api/custom/analytical/clear', {
+      method: 'POST',
+      body: {
+        targetAba: target,
+        lojas,
+      },
+    })
+    if (res && res.success) {
+      return {
+        movelCount: res.movelCount || 0,
+        residencialCount: res.residencialCount || 0,
+        relacionamentoCount: res.relacionamentoCount || 0,
+      }
+    }
+  } catch (endpointErr) {
+    console.warn(
+      '[relacionamentoService] Endpoint server-side /api/custom/analytical/clear não respondeu, usando fallback seguro:',
+      endpointErr,
+    )
+  }
+
+  // 2. Fallback: batched sequential deletion with throttle and retry
   let movelCount = 0
   let residencialCount = 0
 
@@ -783,7 +840,30 @@ export async function clearAllAnalyticalRows(targetAba?: RelacionamentoAba | 'TO
   const shouldClearResidencial = target === 'TODAS' || target === 'Residencial'
   const FETCH_PAGE_SIZE = 50
 
-  // 1. Clear Móvel using sequential individual deletes with throttle and retry
+  const buildLojaFilter = () => {
+    if (lojas.length === 0) return undefined
+    const parts: string[] = []
+    for (const l of lojas) {
+      const esc = l.replace(/"/g, '\\"')
+      parts.push(`loja = "${esc}"`)
+      if (l.toUpperCase().includes('AGUAS CLARA')) {
+        parts.push(`loja ~ "AGUAS CLARA"`)
+        parts.push(`arquivo ~ "AGUAS CLARAS"`)
+      }
+      if (
+        l.toUpperCase().includes('PLANALTINA DF') ||
+        l.toUpperCase().includes('MATRIZ PLANALTINA')
+      ) {
+        parts.push(`(loja ~ "PLANALTINA DF" || loja ~ "MATRIZ PLANALTINA")`)
+        parts.push(`arquivo ~ "PLANALTINA DF"`)
+      }
+    }
+    return `(${parts.join(' || ')})`
+  }
+
+  const filter = buildLojaFilter()
+
+  // 2.1 Clear Móvel
   if (shouldClearMovel) {
     try {
       while (true) {
@@ -791,6 +871,7 @@ export async function clearAllAnalyticalRows(targetAba?: RelacionamentoAba | 'TO
           () =>
             pb.collection('movel').getList<{ id: string }>(1, FETCH_PAGE_SIZE, {
               fields: 'id',
+              filter,
               requestKey: null,
             }),
           5,
@@ -825,7 +906,7 @@ export async function clearAllAnalyticalRows(targetAba?: RelacionamentoAba | 'TO
     }
   }
 
-  // 2. Clear Residencial using sequential individual deletes with throttle and retry
+  // 2.2 Clear Residencial
   if (shouldClearResidencial) {
     try {
       while (true) {
@@ -833,6 +914,7 @@ export async function clearAllAnalyticalRows(targetAba?: RelacionamentoAba | 'TO
           () =>
             pb.collection('residencial').getList<{ id: string }>(1, FETCH_PAGE_SIZE, {
               fields: 'id',
+              filter,
               requestKey: null,
             }),
           5,

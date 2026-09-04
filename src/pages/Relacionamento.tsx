@@ -36,7 +36,9 @@ import {
   insertMovelBatch,
   insertResidencialBatch,
   invalidateAnalyticalCache,
+  clearAllAnalyticalRows,
 } from '@/services/relacionamentoService'
+import { Trash2 } from 'lucide-react'
 import { parseAnalyticalXlsxFile, ParsedAnalyticalFileData } from '@/lib/analyticalImportParser'
 import { fetchStores, matchStore } from '@/services/fpdService'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
@@ -62,6 +64,10 @@ export const Relacionamento: React.FC = () => {
   const [rawAvailableLojas, setRawAvailableLojas] = useState<string[]>([])
   const [availableDates, setAvailableDates] = useState<string[]>([])
   const [selectedDataReferencia, setSelectedDataReferencia] = useState<string>('TODAS')
+
+  // Clear dialog state
+  const [clearDialogOpen, setClearDialogOpen] = useState(false)
+  const [isClearing, setIsClearing] = useState(false)
 
   // Import Dialog State
   const [importDialogOpen, setImportDialogOpen] = useState(false)
@@ -583,6 +589,18 @@ export const Relacionamento: React.FC = () => {
             <UploadCloud className="w-4 h-4" />
             <span>Importar Planilha</span>
           </Button>
+
+          {userAccess.isAdm && (
+            <Button
+              variant="outline"
+              onClick={() => setClearDialogOpen(true)}
+              className="h-9 px-3 text-xs font-semibold text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700 shadow-xs gap-1.5 transition-all"
+              title="Limpar dados de clientes em inadimplência"
+            >
+              <Trash2 className="w-4 h-4 text-rose-500" />
+              <span>Limpar Dados</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -666,6 +684,137 @@ export const Relacionamento: React.FC = () => {
           onLojaChange={setSelectedLojaResidencial}
         />
       )}
+
+      {/* Clear Data Confirmation Dialog */}
+      <Dialog
+        open={clearDialogOpen}
+        onOpenChange={(open) => !isClearing && setClearDialogOpen(open)}
+      >
+        <DialogContent className="sm:max-w-md bg-white">
+          <DialogHeader>
+            <div className="flex items-center gap-2 text-rose-600 mb-1">
+              <Trash2 className="w-5 h-5" />
+              <DialogTitle className="text-base sm:text-lg font-bold text-[#12365A]">
+                Limpar Dados de Inadimplência
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-[#5B6B82]">
+              Escolha o escopo de limpeza dos dados da Gestão de Clientes em Inadimplência.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2 text-xs">
+            <p className="text-[#12365A]">
+              Deseja limpar os registros das lojas com solicitações pendentes ou de toda a base?
+            </p>
+
+            <div className="space-y-2">
+              <button
+                type="button"
+                disabled={isClearing}
+                onClick={async () => {
+                  try {
+                    setIsClearing(true)
+                    const res = await clearAllAnalyticalRows({
+                      targetAba: 'TODAS',
+                      lojas: [
+                        'CELNET AGUAS CLARA',
+                        'CELNET AGUAS CLARAS',
+                        'CELNET ÁGUAS CLARAS',
+                        'CELNET ÁGUAS CLARA',
+                        'CELNET MATRIZ PLANALTINA DF',
+                        'CELNET PLANALTINA DF',
+                      ],
+                    })
+                    toast({
+                      title: 'Limpeza concluída com sucesso',
+                      description: `Águas Claras e Planaltina DF: ${res.movelCount} cliente(s) móvel e ${res.residencialCount} residencial removidos.`,
+                    })
+                    setClearDialogOpen(false)
+                    invalidateAnalyticalCache()
+                    loadInitialData()
+                    refreshMovelCount()
+                    refreshResidencialCount()
+                  } catch (err: unknown) {
+                    const e = err as Error
+                    toast({
+                      title: 'Erro ao limpar dados',
+                      description: e?.message || 'Falha ao executar a limpeza.',
+                      variant: 'destructive',
+                    })
+                  } finally {
+                    setIsClearing(false)
+                  }
+                }}
+                className="w-full text-left p-3 rounded-lg border border-[#E3E9F2] hover:border-rose-300 hover:bg-rose-50/50 transition-all flex flex-col gap-1"
+              >
+                <span className="font-bold text-[#12365A]">
+                  Limpar apenas CELNET Águas Claras e Planaltina DF
+                </span>
+                <span className="text-[11px] text-[#5B6B82]">
+                  Apaga registros das duas lojas nas coleções Móvel e Residencial (mantendo outras
+                  lojas).
+                </span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isClearing}
+                onClick={async () => {
+                  if (
+                    !window.confirm(
+                      'Tem certeza de que deseja apagar TODOS os dados de clientes de todas as lojas em Inadimplência?',
+                    )
+                  ) {
+                    return
+                  }
+                  try {
+                    setIsClearing(true)
+                    const res = await clearAllAnalyticalRows('TODAS')
+                    toast({
+                      title: 'Base limpa com sucesso',
+                      description: `${res.movelCount} registros móvel e ${res.residencialCount} residencial removidos.`,
+                    })
+                    setClearDialogOpen(false)
+                    invalidateAnalyticalCache()
+                    loadInitialData()
+                    refreshMovelCount()
+                    refreshResidencialCount()
+                  } catch (err: unknown) {
+                    const e = err as Error
+                    toast({
+                      title: 'Erro ao limpar dados',
+                      description: e?.message || 'Falha ao executar a limpeza total.',
+                      variant: 'destructive',
+                    })
+                  } finally {
+                    setIsClearing(false)
+                  }
+                }}
+                className="w-full text-left p-3 rounded-lg border border-[#E3E9F2] hover:border-rose-300 hover:bg-rose-50/50 transition-all flex flex-col gap-1"
+              >
+                <span className="font-bold text-rose-700">
+                  Limpar TODAS as Lojas (Base Completa)
+                </span>
+                <span className="text-[11px] text-[#5B6B82]">
+                  Remove todos os clientes cadastrados em Móvel e Residencial.
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <DialogFooter className="mt-2">
+            <Button
+              variant="outline"
+              disabled={isClearing}
+              onClick={() => setClearDialogOpen(false)}
+              className="text-xs"
+            >
+              Cancelar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Import Modal Dialog */}
       <Dialog
