@@ -16,6 +16,7 @@ import {
   Flame,
   Layers,
   Lock,
+  AlertTriangle,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
@@ -47,7 +48,7 @@ export const Layout: React.FC = () => {
     {
       to: '/top-ofensores',
       label: 'Principais Ofensores',
-      icon: Flame,
+      icon: AlertTriangle,
       description: 'Ranking dos principais ofensores por linhas',
       disabled: false,
     },

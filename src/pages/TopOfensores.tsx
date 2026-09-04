@@ -8,7 +8,6 @@ import {
   AlertCircle,
   TrendingDown,
   Flame,
-  Award,
   AlertTriangle,
   Building2,
   Percent,
@@ -442,7 +441,7 @@ export const TopOfensores: React.FC = () => {
             </div>
           </div>
           <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-            <Award className="w-5 h-5" />
+            <AlertTriangle className="w-5 h-5" />
           </div>
         </div>
       </div>
