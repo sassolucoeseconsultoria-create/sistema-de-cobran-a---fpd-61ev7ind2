@@ -504,8 +504,8 @@ describe('isHeaderOrTotalRow', () => {
     expect(movelCount + resCount).toBe(20)
   })
 
-  it('regression test: CELNET ALEXANIA reference numbers should match exact breakdown', () => {
-    // 13 Fatura Paga, 20 Enviado Fatura, 5 Promessa Pagto, 1 Sem Contato, 1 Cancelados, 1 Contato Realizado, 0 Outros, 0 Pendente, 0 Não Tratados
+  it('regression test: CELNET ALEXANIA reference numbers should match exact breakdown with unclassified categorized as outros', () => {
+    // 13 Fatura Paga, 20 Enviado Fatura, 5 Promessa Pagto, 1 Sem Contato, 1 Cancelados, 1 Contato Realizado, 1 Outros (unmatched row falls back to outros), 0 Pendente, 0 Não Tratados
     const sampleRows = [
       ['LOJA', 'STATUS', 'OBSERVACAO'], // Header
       ...Array(13).fill(['CELNET ALEXANIA', 'FATURA PAGA', 'CLIENTE PAGOU']),
@@ -514,7 +514,7 @@ describe('isHeaderOrTotalRow', () => {
       ...Array(1).fill(['CELNET ALEXANIA', 'SEM CONTATO', 'NAO ATENDE']),
       ...Array(1).fill(['CELNET ALEXANIA', 'CANCELADO', 'CANCELOU PLANO']),
       ...Array(1).fill(['CELNET ALEXANIA', 'CONTATO REALIZADO', 'FALOU COM O TITULAR']),
-      ['CELNET ALEXANIA', 'LINHA COM TEXTO ALEATORIO SEM STATUS', 'OBSERVACAO QUALQUER'], // Should be skipped silently
+      ['CELNET ALEXANIA', 'LINHA COM TEXTO ALEATORIO SEM STATUS', 'OBSERVACAO QUALQUER'], // Unmatched data row -> never discarded, classified as 'outros'
     ]
 
     const ws = XLSX.utils.aoa_to_sheet(sampleRows)
@@ -526,11 +526,11 @@ describe('isHeaderOrTotalRow', () => {
     expect(counts.sem_contato).toBe(1)
     expect(counts.cancelados).toBe(1)
     expect(counts.contato_realizado).toBe(1)
-    expect(counts.outros).toBe(0)
+    expect(counts.outros).toBe(1)
     expect(counts.pendente).toBe(0)
     expect(counts.nao_tratados).toBe(0)
-    expect(counts.totalRows).toBe(41) // 13 + 20 + 5 + 1 + 1 + 1 = 41
-    expect(counts.totalLinesCount).toBe(41)
+    expect(counts.totalRows).toBe(42) // 13 + 20 + 5 + 1 + 1 + 1 + 1 = 42
+    expect(counts.totalLinesCount).toBe(42)
   })
 })
 
@@ -616,7 +616,7 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     row3[1] = 'OUTROS MOTIVOS'
     row3[30] = 2
 
-    // Row 3b: Unknown row that should be ignored silently without incrementing totalRows or status
+    // Row 3b: Unknown row that matches no rule -> fallback to 'outros' with quantity 99
     const row3b = Array(35).fill('')
     row3b[0] = 'LOJA CENTRO'
     row3b[1] = 'TEXTO DESCONHECIDO SEM MATCH'
@@ -643,11 +643,11 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     expect(counts.columns?.find((c) => c.letter === 'AE')?.name).toBe('QUANTIDADE')
     expect(counts.envio_fatura).toBe(4)
     expect(counts.fatura_paga).toBe(3)
-    expect(counts.outros).toBe(2)
+    expect(counts.outros).toBe(101) // 2 + 99 (row3b falls back to outros)
     expect(counts.sem_contato).toBe(5)
     expect(counts.promessa_pagto).toBe(1)
-    expect(counts.totalRows).toBe(15) // 4 + 3 + 2 + 5 + 1 (row3b is skipped completely)
-    expect(counts.totalLinesCount).toBe(5)
+    expect(counts.totalRows).toBe(114) // 4 + 3 + 2 + 99 + 5 + 1
+    expect(counts.totalLinesCount).toBe(6)
   })
 
   it('should sum quantities from column AW for Residencial worksheet', () => {
@@ -750,6 +750,35 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
       loja: 'CELNET BRASILIA',
       status: 'cancelados',
       quantidade: 3,
+    })
+  })
+
+  it('should never discard unclassified data row and categorize as outros in vendorLines and counts', () => {
+    const movelHeader = Array(35).fill('')
+    movelHeader[0] = 'LOJA_HEADER'
+    movelHeader[1] = 'STATUS_HEADER'
+    movelHeader[3] = 'VENDEDOR'
+    movelHeader[4] = 'LOJA'
+    movelHeader[30] = 'QUANTIDADE'
+
+    const unrecognizedRow = Array(35).fill('')
+    unrecognizedRow[0] = 'CELNET AGUAS CLARAS'
+    unrecognizedRow[1] = 'STATUS TOTALMENTE DESCONHECIDO'
+    unrecognizedRow[3] = 'VENDEDOR TESTE'
+    unrecognizedRow[4] = 'CELNET AGUAS CLARAS'
+    unrecognizedRow[30] = 1
+
+    const movelWs = XLSX.utils.aoa_to_sheet([movelHeader, unrecognizedRow])
+    const counts = parseWorksheet(movelWs, 'Móvel', 'movel')
+
+    expect(counts.totalRows).toBe(1)
+    expect(counts.outros).toBe(1)
+    expect(counts.vendorLines).toHaveLength(1)
+    expect(counts.vendorLines[0]).toEqual({
+      vendedor: 'VENDEDOR TESTE',
+      loja: 'CELNET AGUAS CLARAS',
+      status: 'outros',
+      quantidade: 1,
     })
   })
 

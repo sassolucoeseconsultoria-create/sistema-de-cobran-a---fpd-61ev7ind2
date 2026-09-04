@@ -73,6 +73,7 @@ routerAdd(
       'ocorrencias',
       'data_promessa_de_pagto',
       'comentarios',
+      'data_referencia',
     ]
 
     $app.runInTransaction((txApp) => {
@@ -88,6 +89,9 @@ routerAdd(
           record.set('vendedor', item.vendedor ? String(item.vendedor).trim() : '')
           record.set('cliente', item.cliente ? String(item.cliente).trim() : '')
           record.set('dados', item.dados && typeof item.dados === 'object' ? item.dados : {})
+          if (item.data_referencia) {
+            record.set('data_referencia', String(item.data_referencia).trim())
+          }
 
           // Set typed fields if provided
           if (item.typedFields && typeof item.typedFields === 'object') {

@@ -14,6 +14,7 @@ export interface FetchAnalyticalParams {
   loja?: string
   sort?: string
   allowedStoreNames?: string[]
+  dataReferencia?: string
 }
 
 export interface FetchAnalyticalResult {
@@ -59,6 +60,7 @@ export async function fetchAnalyticalRows(
   const loja = params.loja || 'TODAS'
   const search = params.search?.trim() || ''
   const sortStr = params.sort || '-created'
+  const dataReferencia = params.dataReferencia?.trim() || ''
 
   const allowedStoreNames = params.allowedStoreNames
 
@@ -69,6 +71,7 @@ export async function fetchAnalyticalRows(
     selectedAba,
     loja,
     search,
+    dataReferencia,
     sortStr,
     allowedStoreNames,
   })
@@ -132,6 +135,14 @@ export async function fetchAnalyticalRows(
       const s = search.replace(/"/g, '\\"')
       filterParts.push(
         `(loja ~ "${s}" || arquivo ~ "${s}" || vendedor ~ "${s}" || cliente ~ "${s}")`,
+      )
+    }
+
+    if (dataReferencia && dataReferencia !== 'TODAS') {
+      const escapedRef = dataReferencia.replace(/"/g, '\\"')
+      // Query with fallback for legacy records where data_referencia is empty/unset
+      filterParts.push(
+        `(data_referencia = "${escapedRef}" || data_referencia = "" || data_referencia = null)`,
       )
     }
 
@@ -401,6 +412,7 @@ export interface MovelInsertItem {
   ocorrencias?: string
   data_promessa_de_pagto?: string
   comentarios?: string
+  data_referencia?: string
 }
 
 /**
@@ -536,6 +548,7 @@ export async function insertMovelBatch(
       ocorrencias: preservedOcorrencias,
       data_promessa_de_pagto: preservedPromessa,
       comentarios: preservedComentarios,
+      data_referencia: item.data_referencia?.trim() || '',
     }
 
     try {
@@ -599,6 +612,7 @@ export interface ResidencialInsertItem {
   ocorrencias?: string
   data_promessa_de_pagto?: string
   comentarios?: string
+  data_referencia?: string
 }
 
 /**
@@ -665,6 +679,7 @@ export async function insertResidencialBatch(
       ocorrencias: preservedOcorrencias,
       data_promessa_de_pagto: preservedPromessa,
       comentarios: preservedComentarios,
+      data_referencia: item.data_referencia?.trim() || '',
     }
 
     try {

@@ -47,6 +47,9 @@ routerAdd(
           if (item.comentarios) {
             record.set('comentarios', String(item.comentarios).trim())
           }
+          if (item.data_referencia) {
+            record.set('data_referencia', String(item.data_referencia).trim())
+          }
 
           txApp.save(record)
           inserted++

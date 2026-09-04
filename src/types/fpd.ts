@@ -51,6 +51,7 @@ export interface MovelRecord extends RecordModel {
   ocorrencias?: string
   data_promessa_de_pagto?: string
   comentarios?: string
+  data_referencia?: string
 }
 
 export interface ResidencialRecord extends RecordModel {
@@ -110,6 +111,7 @@ export interface ResidencialRecord extends RecordModel {
   ocorrencias?: string
   data_promessa_de_pagto?: string
   comentarios?: string
+  data_referencia?: string
 }
 
 export interface UnifiedAnalyticRecord extends RecordModel {
@@ -123,9 +125,8 @@ export interface UnifiedAnalyticRecord extends RecordModel {
   ocorrencias?: string
   data_promessa_de_pagto?: string
   comentarios?: string
-  rawRecord?: MovelRecord | ResidencialRecord
+  data_referencia?: string
 }
-
 export interface RelacionamentoRecord extends RecordModel {
   aba: RelacionamentoAba
   loja?: string

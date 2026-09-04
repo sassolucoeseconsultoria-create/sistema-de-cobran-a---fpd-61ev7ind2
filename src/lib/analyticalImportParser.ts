@@ -1,5 +1,10 @@
 import * as XLSX from 'xlsx'
-import { normalizeText, extractWorksheetColumns, isHeaderOrTotalRow } from './xlsxParser'
+import {
+  normalizeText,
+  extractWorksheetColumns,
+  isHeaderOrTotalRow,
+  guessReferenteDate,
+} from './xlsxParser'
 
 /**
  * Normalizes a header column name into a safe snake_case PocketBase field name.
@@ -101,6 +106,7 @@ export interface ParsedAnalyticalSheetData {
 
 export interface ParsedAnalyticalFileData {
   fileName: string
+  guessedReferente?: string
   movelSheet?: ParsedAnalyticalSheetData
   residencialSheet?: ParsedAnalyticalSheetData
   totalMovelRows: number
@@ -315,6 +321,7 @@ export async function parseAnalyticalXlsxFile(file: File): Promise<ParsedAnalyti
 
   return {
     fileName: file.name,
+    guessedReferente: guessReferenteDate(file.name),
     movelSheet,
     residencialSheet,
     totalMovelRows: movelSheet?.rows.length || 0,

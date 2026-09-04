@@ -7,7 +7,16 @@ import {
   Users,
   RefreshCw,
   FileSpreadsheet,
+  Calendar,
+  Info,
 } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -49,6 +58,8 @@ export const Relacionamento: React.FC = () => {
   const [totalMovel, setTotalMovel] = useState(0)
   const [totalResidencial, setTotalResidencial] = useState(0)
   const [rawAvailableLojas, setRawAvailableLojas] = useState<string[]>([])
+  const [availableDates, setAvailableDates] = useState<string[]>([])
+  const [selectedDataReferencia, setSelectedDataReferencia] = useState<string>('TODAS')
 
   // Import Dialog State
   const [importDialogOpen, setImportDialogOpen] = useState(false)
@@ -63,27 +74,54 @@ export const Relacionamento: React.FC = () => {
   const isImportingRef = useRef(false)
   isImportingRef.current = isImporting
 
-  // Load distinct store names, registered stores and total counts
+  // Load distinct store names, registered stores, reference dates and total counts
   const loadInitialData = useCallback(async () => {
     try {
-      const [lojas, registeredStores, movelList, resList] = await Promise.all([
-        fetchDistinctAnalyticalLojas(),
-        fetchStores().catch(() => []),
-        pb
-          .collection('movel')
-          .getList(1, 1, { fields: 'id', requestKey: null })
-          .catch(() => ({ totalItems: 0 })),
-        pb
-          .collection('residencial')
-          .getList(1, 1, { fields: 'id', requestKey: null })
-          .catch(() => ({ totalItems: 0 })),
-      ])
+      const [lojas, registeredStores, movelList, resList, distinctMovelDates, distinctResDates] =
+        await Promise.all([
+          fetchDistinctAnalyticalLojas(),
+          fetchStores().catch(() => []),
+          pb
+            .collection('movel')
+            .getList(1, 1, { fields: 'id', requestKey: null })
+            .catch(() => ({ totalItems: 0 })),
+          pb
+            .collection('residencial')
+            .getList(1, 1, { fields: 'id', requestKey: null })
+            .catch(() => ({ totalItems: 0 })),
+          pb
+            .collection('movel')
+            .getFullList<{ data_referencia?: string }>({
+              fields: 'data_referencia',
+              filter: 'data_referencia != "" && data_referencia != null',
+              requestKey: null,
+            })
+            .catch(() => []),
+          pb
+            .collection('residencial')
+            .getFullList<{ data_referencia?: string }>({
+              fields: 'data_referencia',
+              filter: 'data_referencia != "" && data_referencia != null',
+              requestKey: null,
+            })
+            .catch(() => []),
+        ])
 
       const set = new Set<string>(Array.isArray(lojas) ? lojas : [])
       setRawAvailableLojas(Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR')))
       setStores(registeredStores)
       setTotalMovel(movelList.totalItems || 0)
       setTotalResidencial(resList.totalItems || 0)
+
+      const datesSet = new Set<string>()
+      distinctMovelDates.forEach((r) => {
+        if (r.data_referencia && r.data_referencia.trim()) datesSet.add(r.data_referencia.trim())
+      })
+      distinctResDates.forEach((r) => {
+        if (r.data_referencia && r.data_referencia.trim()) datesSet.add(r.data_referencia.trim())
+      })
+      const sortedDates = Array.from(datesSet).sort((a, b) => b.localeCompare(a))
+      setAvailableDates(sortedDates)
     } catch (err) {
       console.error('Erro ao carregar dados iniciais de inadimplência:', err)
     }
@@ -236,6 +274,8 @@ export const Relacionamento: React.FC = () => {
           `Importando arquivo ${i + 1} de ${parsedFilesData.length}: ${pf.fileName}...`,
         )
 
+        const fileRefDate = pf.guessedReferente || ''
+
         // 1. Insert Móvel rows
         if (pf.movelSheet && pf.movelSheet.rows.length > 0) {
           setImportStatusMessage(
@@ -261,6 +301,7 @@ export const Relacionamento: React.FC = () => {
               vendedor: r.vendedor,
               cliente: r.cliente,
               dados: r.dados,
+              data_referencia: fileRefDate,
               ocorrencias: r.ocorrencias || 'Não Tratados',
             }
           })
@@ -297,6 +338,7 @@ export const Relacionamento: React.FC = () => {
               vendedor: r.vendedor,
               cliente: r.cliente,
               dados: r.dados,
+              data_referencia: fileRefDate,
               typedFields: r.typedFields,
               ocorrencias: r.ocorrencias || 'Não Tratados',
             }
@@ -386,7 +428,32 @@ export const Relacionamento: React.FC = () => {
         </div>
 
         {/* Counter Badge & Import Button */}
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
+          {/* Active Reference Date selector */}
+          {availableDates.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-[#F8FAFC] border border-[#E3E9F2] rounded-lg px-2.5 py-1">
+              <Calendar className="w-3.5 h-3.5 text-[#0E9F8A]" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#5B6B82]">
+                Ref:
+              </span>
+              <Select value={selectedDataReferencia} onValueChange={setSelectedDataReferencia}>
+                <SelectTrigger className="h-7 text-xs border-0 bg-transparent shadow-none px-1 font-semibold text-[#12365A] focus:ring-0">
+                  <SelectValue placeholder="Todas as datas" />
+                </SelectTrigger>
+                <SelectContent className="bg-white">
+                  <SelectItem value="TODAS" className="text-xs font-semibold">
+                    Todas as datas
+                  </SelectItem>
+                  {availableDates.map((d) => (
+                    <SelectItem key={d} value={d} className="text-xs font-mono">
+                      {d}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="px-3 py-1.5 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] text-right shadow-2xs">
             <span className="text-[9px] uppercase font-bold tracking-wider text-[#5B6B82] block">
               Total de Clientes
@@ -403,6 +470,23 @@ export const Relacionamento: React.FC = () => {
             <UploadCloud className="w-4 h-4" />
             <span>Importar Planilha</span>
           </Button>
+        </div>
+      </div>
+
+      {/* Information Banner: Clarifying Occurrences (Stores Panel) vs Unique Clients (Inadimplência) */}
+      <div className="bg-[#F0F5FC] border border-[#D5E2F1] rounded-xl p-3 sm:p-3.5 flex items-start gap-3 text-xs text-[#12365A]">
+        <Info className="w-4 h-4 text-[#12365A] shrink-0 mt-0.5" />
+        <div className="space-y-0.5">
+          <p className="font-semibold">
+            {selectedDataReferencia && selectedDataReferencia !== 'TODAS'
+              ? `Data de Referência Ativa: ${selectedDataReferencia}`
+              : 'Visualização de Clientes em Tratamento'}
+          </p>
+          <p className="text-[#5B6B82]">
+            Total de Clientes em tratamento analítico (linhas únicas). Para total de
+            ocorrências/faturas por loja, consulte o <strong>Painel de Lojas</strong> (fonte da
+            verdade).
+          </p>
         </div>
       </div>
 
@@ -453,9 +537,17 @@ export const Relacionamento: React.FC = () => {
 
       {/* Render Active Clientes Table */}
       {activeClientesTab === 'movel' ? (
-        <ClientesMovel availableLojas={availableLojas} stores={stores} />
+        <ClientesMovel
+          availableLojas={availableLojas}
+          stores={stores}
+          dataReferencia={selectedDataReferencia}
+        />
       ) : (
-        <ClientesResidencial availableLojas={availableLojas} stores={stores} />
+        <ClientesResidencial
+          availableLojas={availableLojas}
+          stores={stores}
+          dataReferencia={selectedDataReferencia}
+        />
       )}
 
       {/* Import Modal Dialog */}

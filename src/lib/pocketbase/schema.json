@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-04T12:49:21.425Z",
+  "generatedAt": "2026-09-04T13:15:37.191Z",
   "collections": [
     {
       "name": "users",
@@ -723,6 +723,12 @@
           "type": "text",
           "required": false,
           "system": false
+        },
+        {
+          "name": "data_referencia",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -731,7 +737,8 @@
         "CREATE INDEX idx_movel_cliente ON movel (cliente)",
         "CREATE INDEX idx_movel_arquivo ON movel (arquivo)",
         "CREATE INDEX idx_movel_linha ON movel (linha)",
-        "CREATE UNIQUE INDEX `idx_movel_arquivo_linha_unique` ON `movel` (arquivo, linha)"
+        "CREATE UNIQUE INDEX `idx_movel_arquivo_linha_unique` ON `movel` (arquivo, linha)",
+        "CREATE INDEX `idx_movel_data_referencia` ON `movel` (data_referencia)"
       ]
     },
     {
@@ -1082,6 +1089,12 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "data_referencia",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -1092,7 +1105,8 @@
         "CREATE INDEX idx_residencial_linha ON residencial (linha)",
         "CREATE INDEX idx_residencial_cpf ON residencial (cpf)",
         "CREATE INDEX idx_residencial_nr_contrato ON residencial (nr_contrato)",
-        "CREATE UNIQUE INDEX `idx_residencial_arquivo_linha_unique` ON `residencial` (arquivo, linha)"
+        "CREATE UNIQUE INDEX `idx_residencial_arquivo_linha_unique` ON `residencial` (arquivo, linha)",
+        "CREATE INDEX `idx_residencial_data_referencia` ON `residencial` (data_referencia)"
       ]
     }
   ]

@@ -40,11 +40,13 @@ import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 interface ClientesResidencialProps {
   availableLojas: string[]
   stores?: StoreRecord[]
+  dataReferencia?: string
 }
 
 export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
   availableLojas,
   stores = [],
+  dataReferencia,
 }) => {
   const { toast } = useToast()
 
@@ -162,6 +164,14 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
         )
       }
 
+      if (dataReferencia && dataReferencia !== 'TODAS') {
+        const escapedRef = dataReferencia.replace(/"/g, '\\"')
+        // Fallback for legacy records with empty or unset data_referencia
+        filterParts.push(
+          `(data_referencia = "${escapedRef}" || data_referencia = "" || data_referencia = null)`,
+        )
+      }
+
       const filterStr = filterParts.length > 0 ? filterParts.join(' && ') : undefined
 
       const res = await pb.collection('residencial').getList<ResidencialRecord>(page, perPage, {
@@ -215,7 +225,17 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
     } finally {
       setLoading(false)
     }
-  }, [page, perPage, debouncedSearch, selectedLoja, availableLojas, stores, userAccess, toast])
+  }, [
+    page,
+    perPage,
+    debouncedSearch,
+    selectedLoja,
+    availableLojas,
+    stores,
+    userAccess,
+    dataReferencia,
+    toast,
+  ])
 
   useEffect(() => {
     loadData()

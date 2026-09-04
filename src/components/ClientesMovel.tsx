@@ -39,9 +39,14 @@ import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 interface ClientesMovelProps {
   availableLojas: string[]
   stores?: StoreRecord[]
+  dataReferencia?: string
 }
 
-export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas, stores = [] }) => {
+export const ClientesMovel: React.FC<ClientesMovelProps> = ({
+  availableLojas,
+  stores = [],
+  dataReferencia,
+}) => {
   const { toast } = useToast()
 
   const [records, setRecords] = useState<MovelRecord[]>([])
@@ -159,6 +164,14 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas, st
         )
       }
 
+      if (dataReferencia && dataReferencia !== 'TODAS') {
+        const escapedRef = dataReferencia.replace(/"/g, '\\"')
+        // Fallback for legacy records with empty or unset data_referencia
+        filterParts.push(
+          `(data_referencia = "${escapedRef}" || data_referencia = "" || data_referencia = null)`,
+        )
+      }
+
       const filterStr = filterParts.length > 0 ? filterParts.join(' && ') : undefined
 
       const res = await pb.collection('movel').getList<MovelRecord>(page, perPage, {
@@ -212,7 +225,17 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({ availableLojas, st
     } finally {
       setLoading(false)
     }
-  }, [page, perPage, debouncedSearch, selectedLoja, availableLojas, stores, userAccess, toast])
+  }, [
+    page,
+    perPage,
+    debouncedSearch,
+    selectedLoja,
+    availableLojas,
+    stores,
+    userAccess,
+    dataReferencia,
+    toast,
+  ])
 
   useEffect(() => {
     loadData()

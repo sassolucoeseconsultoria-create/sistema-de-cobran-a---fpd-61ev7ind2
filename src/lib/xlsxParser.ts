@@ -709,11 +709,8 @@ export function parseWorksheet(
     }
 
     const normalizedCells = row.map(normalizeText)
-    const category = classifyRow(normalizedCells)
-    if (!category) {
-      // Row didn't match any known status -> skip/ignore silently
-      continue
-    }
+    // Never discard a valid data row: if classifyRow does not match, default to 'outros'
+    const category: FpdStatusKey = classifyRow(normalizedCells) || 'outros'
 
     const qty = Math.round(extractRowQuantity(row, qtyColIndex))
     const validQty = Number.isFinite(qty) && qty > 0 ? qty : 1
