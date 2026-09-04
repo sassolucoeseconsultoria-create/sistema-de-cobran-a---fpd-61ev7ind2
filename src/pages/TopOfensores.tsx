@@ -818,58 +818,60 @@ export const TopOfensores: React.FC = () => {
             </tbody>
 
             {/* Totals Row (Pinned Footer) */}
-            <tfoot className="sticky bottom-0 z-20 bg-[#12365A] text-white font-bold text-[13px] shadow-lg border-t-2 border-red-500">
-              <tr>
-                {/* POS */}
-                <td className="px-3 py-3 border-r border-[#1e456f] text-center text-xs text-red-300">
-                  PRINCIPAIS {rankingLimit}
-                </td>
-                {/* A: Totais */}
-                <td className="sticky left-0 z-30 bg-[#12365A] px-3.5 py-3 border-r border-[#1e456f] text-white uppercase tracking-wider">
-                  Totais dos Principais {rankingLimit} Ofensores ({filteredAndSorted.length})
-                </td>
-                {/* B */}
-                <td className="px-3 py-3 border-r border-[#1e456f]"></td>
-                {/* C */}
-                <td className="px-3 py-3 border-r border-[#1e456f]"></td>
-                {/* D: TOTAL LINHAS */}
-                <td className="px-3 py-3 text-center text-red-200 tabular-nums border-r border-[#1e456f] bg-red-950 font-black">
-                  {animatedTotalLinhas.toLocaleString('pt-BR')}
-                </td>
-                {/* E: 1. Fatura(s) Paga(s) */}
-                <td className="px-2.5 py-3 text-center text-[#67e8f9] tabular-nums border-r border-[#1e456f]">
-                  {animatedFaturaPaga.toLocaleString('pt-BR')}
-                </td>
-                {/* F: 2. Enviado Fatura(s) */}
-                <td className="px-2.5 py-3 text-center text-[#4ade80] tabular-nums border-r border-[#1e456f]">
-                  {animatedEnvioFatura.toLocaleString('pt-BR')}
-                </td>
-                {/* G: 3. Promessa de Pagto. */}
-                <td className="px-2.5 py-3 text-center text-[#d8b4fe] tabular-nums border-r border-[#1e456f]">
-                  {animatedPromessaPagto.toLocaleString('pt-BR')}
-                </td>
-                {/* H: 4. Sem Contato */}
-                <td className="px-2.5 py-3 text-center text-[#cbd5e1] tabular-nums border-r border-[#1e456f]">
-                  {animatedSemContato.toLocaleString('pt-BR')}
-                </td>
-                {/* I: 5. Cancelados */}
-                <td className="px-2.5 py-3 text-center text-slate-300 tabular-nums border-r border-[#1e456f]">
-                  {animatedCancelados.toLocaleString('pt-BR')}
-                </td>
-                {/* J: 6. Pendente */}
-                <td className="px-2.5 py-3 text-center text-[#fca5a5] tabular-nums border-r border-[#1e456f]">
-                  {animatedPendente.toLocaleString('pt-BR')}
-                </td>
-                {/* K: 7. Contato Realizado */}
-                <td className="px-2.5 py-3 text-center text-[#5eead4] tabular-nums border-r border-[#1e456f]">
-                  {animatedContatoRealizado.toLocaleString('pt-BR')}
-                </td>
-                {/* L: 8. Não Tratados */}
-                <td className="px-2.5 py-3 text-center text-[#fdba74] tabular-nums border-r border-[#1e456f]">
-                  {animatedNaoTratados.toLocaleString('pt-BR')}
-                </td>
-              </tr>
-            </tfoot>
+            {!loading && filteredAndSorted.length > 0 && (
+              <tfoot className="sticky bottom-0 z-20 bg-[#12365A] text-white font-bold text-[13px] shadow-lg border-t-2 border-red-500">
+                <tr>
+                  {/* POS */}
+                  <td className="px-3 py-3 border-r border-[#1e456f] text-center text-xs font-black text-white uppercase tracking-wider bg-[#0E2A47]">
+                    TOTAL
+                  </td>
+                  {/* A: Totais */}
+                  <td className="sticky left-0 z-30 bg-[#12365A] px-3.5 py-3 border-r border-[#1e456f] text-white uppercase tracking-wider font-bold">
+                    TOTAL ({filteredAndSorted.length})
+                  </td>
+                  {/* B: LOJA */}
+                  <td className="px-3 py-3 border-r border-[#1e456f]"></td>
+                  {/* C: SUPERVISÃO */}
+                  <td className="px-3 py-3 border-r border-[#1e456f]"></td>
+                  {/* D: TOTAL LINHAS */}
+                  <td className="px-3 py-3 text-center text-red-200 tabular-nums border-r border-[#1e456f] bg-red-950 font-black">
+                    {animatedTotalLinhas.toLocaleString('pt-BR')}
+                  </td>
+                  {/* E: 1. Fatura(s) Paga(s) */}
+                  <td className="px-2.5 py-3 text-center text-[#67e8f9] tabular-nums border-r border-[#1e456f]">
+                    {animatedFaturaPaga.toLocaleString('pt-BR')}
+                  </td>
+                  {/* F: 2. Enviado Fatura(s) */}
+                  <td className="px-2.5 py-3 text-center text-[#4ade80] tabular-nums border-r border-[#1e456f]">
+                    {animatedEnvioFatura.toLocaleString('pt-BR')}
+                  </td>
+                  {/* G: 3. Promessa de Pagto. */}
+                  <td className="px-2.5 py-3 text-center text-[#d8b4fe] tabular-nums border-r border-[#1e456f]">
+                    {animatedPromessaPagto.toLocaleString('pt-BR')}
+                  </td>
+                  {/* H: 4. Sem Contato */}
+                  <td className="px-2.5 py-3 text-center text-[#cbd5e1] tabular-nums border-r border-[#1e456f]">
+                    {animatedSemContato.toLocaleString('pt-BR')}
+                  </td>
+                  {/* I: 5. Cancelados */}
+                  <td className="px-2.5 py-3 text-center text-slate-300 tabular-nums border-r border-[#1e456f]">
+                    {animatedCancelados.toLocaleString('pt-BR')}
+                  </td>
+                  {/* J: 6. Pendente */}
+                  <td className="px-2.5 py-3 text-center text-[#fca5a5] tabular-nums border-r border-[#1e456f]">
+                    {animatedPendente.toLocaleString('pt-BR')}
+                  </td>
+                  {/* K: 7. Contato Realizado */}
+                  <td className="px-2.5 py-3 text-center text-[#5eead4] tabular-nums border-r border-[#1e456f]">
+                    {animatedContatoRealizado.toLocaleString('pt-BR')}
+                  </td>
+                  {/* L: 8. Não Tratados */}
+                  <td className="px-2.5 py-3 text-center text-[#fdba74] tabular-nums border-r border-[#1e456f]">
+                    {animatedNaoTratados.toLocaleString('pt-BR')}
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         </div>
       </div>

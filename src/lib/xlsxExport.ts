@@ -65,8 +65,8 @@ export function exportVendorsToXlsx(
   ])
 
   const totalsRow = [
-    'Totais',
-    '',
+    'TOTAL',
+    'TOTAL',
     '',
     '',
     totals.totalLinhas,

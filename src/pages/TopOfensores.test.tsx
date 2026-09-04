@@ -208,9 +208,9 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
     // Lojas de outros locais não devem aparecer
     expect(screen.queryByText('Vendedor Taguatinga 1')).toBeNull()
 
-    // Rodapé deve exibir PRINCIPAIS 3
-    expect(screen.getByText('PRINCIPAIS 3')).toBeDefined()
-    expect(screen.getByText(/Totais dos Principais 3 Ofensores \(3\)/i)).toBeDefined()
+    // Rodapé deve exibir TOTAL
+    expect(screen.getByText('TOTAL')).toBeDefined()
+    expect(screen.getByText(/TOTAL \(3\)/i)).toBeDefined()
 
     // Exportação para Excel: deve exportar apenas os 3 registros
     const exportBtn = screen.getByRole('button', { name: /Exportar Principais Ofensores/i })
@@ -280,9 +280,9 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
     // Ceilândia não está vinculada ao Supervisor, então nunca deve aparecer
     expect(screen.queryByText('Vendedor Ceilandia 1')).toBeNull()
 
-    // Rodapé deve exibir PRINCIPAIS 10
-    expect(screen.getByText('PRINCIPAIS 10')).toBeDefined()
-    expect(screen.getByText(/Totais dos Principais 10 Ofensores \(10\)/i)).toBeDefined()
+    // Rodapé deve exibir TOTAL
+    expect(screen.getByText('TOTAL')).toBeDefined()
+    expect(screen.getByText(/TOTAL \(10\)/i)).toBeDefined()
 
     // Exportação deve exportar apenas os 10 itens
     const exportBtn = screen.getByRole('button', { name: /Exportar Principais Ofensores/i })
@@ -339,9 +339,9 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
       'Exibindo 20 de 30 possíveis — limite do perfil Coordenador: 20',
     )
 
-    // Rodapé deve exibir PRINCIPAIS 20
-    expect(screen.getByText('PRINCIPAIS 20')).toBeDefined()
-    expect(screen.getByText(/Totais dos Principais 20 Ofensores \(20\)/i)).toBeDefined()
+    // Rodapé deve exibir TOTAL
+    expect(screen.getByText('TOTAL')).toBeDefined()
+    expect(screen.getByText(/TOTAL \(20\)/i)).toBeDefined()
 
     // Exportação deve exportar 20 itens
     const exportBtn = screen.getByRole('button', { name: /Exportar Principais Ofensores/i })
@@ -355,5 +355,44 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
       sheetName: 'Principais_20_Ofensores',
       filePrefix: 'Ranking_20_Principais_Ofensores_FPD',
     })
+  })
+
+  it('Cenário 4: Não deve exibir linha de TOTAL quando não houver ofensores', async () => {
+    vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+      user: {
+        id: 'usr_adm',
+        collectionId: 'users',
+        collectionName: 'users',
+        email: 'adm@celnet.com.br',
+        name: 'Administrador',
+        role: 'ADM',
+        lojas: [],
+        created: '2025-01-01',
+        updated: '2025-01-01',
+      },
+      token: 'mock-token',
+      loading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshAuth: vi.fn(),
+    })
+
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <TopOfensores />
+      </MemoryRouter>,
+    )
+
+    // Digita busca que não corresponde a ninguém
+    const searchInput = screen.getByPlaceholderText(/buscar ofensor/i)
+    await user.type(searchInput, 'vendedor_que_nao_existe_xyz')
+
+    await waitFor(() => {
+      expect(screen.getByText('Nenhum ofensor encontrado')).toBeDefined()
+    })
+
+    // Linha de total não deve aparecer
+    expect(screen.queryByText('TOTAL')).toBeNull()
   })
 })
