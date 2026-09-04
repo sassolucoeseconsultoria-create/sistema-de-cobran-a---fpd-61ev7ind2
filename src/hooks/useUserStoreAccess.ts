@@ -11,9 +11,24 @@ export interface UserStoreAccess {
   isAdm: boolean
 
   /**
+   * Perfil direto do usuário logado (ADM, Coordenador, Supervisor, Gerente).
+   */
+  userRole?: string
+
+  /**
    * Se o perfil do usuário logado é Gerente.
    */
   isGerente: boolean
+
+  /**
+   * Se o perfil do usuário logado é Supervisor.
+   */
+  isSupervisor: boolean
+
+  /**
+   * Se o perfil do usuário logado é Coordenador.
+   */
+  isCoordenador: boolean
 
   /**
    * ID da única loja vinculada (quando Gerente), se houver.
@@ -169,12 +184,17 @@ export function useUserStoreAccess(): UserStoreAccess {
     }
 
     const isGerente = user?.role === 'Gerente'
+    const isSupervisor = user?.role === 'Supervisor'
+    const isCoordenador = user?.role === 'Coordenador'
     const managerStoreId =
       isGerente && effectiveAllowedIds.length > 0 ? effectiveAllowedIds[0] : null
 
     return {
       isAdm,
+      userRole: user?.role,
       isGerente,
+      isSupervisor,
+      isCoordenador,
       managerStoreId,
       hasNoStoreAssigned,
       allowedStoreIds: effectiveAllowedIds,

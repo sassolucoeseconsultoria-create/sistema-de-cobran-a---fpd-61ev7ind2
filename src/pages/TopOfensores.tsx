@@ -12,6 +12,8 @@ import {
   AlertTriangle,
   Building2,
   Percent,
+  Store,
+  Info,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -132,6 +134,32 @@ export const TopOfensores: React.FC = () => {
       })
   }, [records, stores, userAccess])
 
+  // Determina o nome canônico da loja vinculada ao Gerente
+  const managerAssignedStoreName = useMemo(() => {
+    if (!userAccess.isGerente || userAccess.hasNoStoreAssigned) return null
+
+    // 1. Procurar nas stores cadastradas pelo ID vinculado
+    if (userAccess.managerStoreId && stores.length > 0) {
+      const matchedStore = stores.find((s) => s.id === userAccess.managerStoreId)
+      if (matchedStore?.name?.trim()) {
+        return matchedStore.name.trim()
+      }
+    }
+
+    // 2. Se temos linhas de vendedores permitidas
+    if (allVendorRows.length > 0) {
+      const firstWithLoja = allVendorRows.find((r) => r.loja && r.loja.trim() !== '')
+      if (firstWithLoja) return firstWithLoja.loja.trim()
+    }
+
+    // 3. Fallback: allowedStoreIds
+    if (userAccess.allowedStoreIds.length > 0) {
+      return userAccess.allowedStoreIds[0]
+    }
+
+    return null
+  }, [userAccess, stores, allVendorRows])
+
   // Unique lojas for filter dropdown (only from permitted vendor rows)
   const uniqueLojas = useMemo(() => {
     const set = new Set<string>()
@@ -143,13 +171,54 @@ export const TopOfensores: React.FC = () => {
     return Array.from(set).sort((a, b) => a.localeCompare(b))
   }, [allVendorRows])
 
+  // Sincroniza selectedLoja com a loja única do Gerente quando aplicável
+  useEffect(() => {
+    if (!userAccess.isGerente) return
+
+    if (userAccess.hasNoStoreAssigned) {
+      if (selectedLoja !== '') {
+        setSelectedLoja('')
+      }
+      return
+    }
+
+    if (managerAssignedStoreName && selectedLoja !== managerAssignedStoreName) {
+      setSelectedLoja(managerAssignedStoreName)
+    }
+  }, [userAccess.isGerente, userAccess.hasNoStoreAssigned, managerAssignedStoreName, selectedLoja])
+
+  // Limite de ranking conforme o perfil do usuário logado:
+  // - Gerente: 3 (restrito à loja vinculada a ele)
+  // - Supervisor: 10 (considerando as lojas vinculadas a ele)
+  // - Coordenador: 20 (considerando as lojas vinculadas a ele)
+  // - ADM: 20 (comportamento atual mantido)
+  const rankingLimit = useMemo(() => {
+    if (userAccess.isGerente) return 3
+    if (userAccess.isSupervisor) return 10
+    if (userAccess.isCoordenador) return 20
+    return 20 // ADM e fallback padrão
+  }, [userAccess.isGerente, userAccess.isSupervisor, userAccess.isCoordenador])
+
+  // Título e legenda dinâmicos por perfil
+  const rankingTitle = `Top ${rankingLimit} Ofensores`
+  const rankingCardLabel = `Linhas no Top ${rankingLimit}`
+  const profileLabel = userAccess.isGerente
+    ? 'Gerente'
+    : userAccess.isSupervisor
+      ? 'Supervisor'
+      : userAccess.isCoordenador
+        ? 'Coordenador'
+        : userAccess.isAdm
+          ? 'ADM'
+          : userAccess.userRole || 'Usuário'
+
   // Total lines overall across all vendors in database
   const grandTotalLinhas = useMemo(() => {
     return allVendorRows.reduce((acc, r) => acc + r.totalLinhas, 0)
   }, [allVendorRows])
 
-  // Filtered rows before slicing to Top 20
-  const filteredAndSorted = useMemo(() => {
+  // Total de possíveis antes de cortar pelo limite do perfil
+  const candidateRowsBeforeSlice = useMemo(() => {
     let rows = [...allVendorRows]
 
     // Apply reference date filter
@@ -161,8 +230,8 @@ export const TopOfensores: React.FC = () => {
       }
     }
 
-    // Apply store filter first if selected
-    if (selectedLoja !== 'all') {
+    // Apply store filter first if selected and not 'all'
+    if (selectedLoja !== 'all' && selectedLoja !== '') {
       rows = rows.filter((r) => r.loja === selectedLoja)
     }
 
@@ -185,9 +254,13 @@ export const TopOfensores: React.FC = () => {
       return a.vendedor.localeCompare(b.vendedor)
     })
 
-    // Take top 20
-    return rows.slice(0, 20)
+    return rows
   }, [allVendorRows, debouncedSearch, selectedLoja, selectedReferenceDate])
+
+  // Filtered rows sliced according to rankingLimit
+  const filteredAndSorted = useMemo(() => {
+    return candidateRowsBeforeSlice.slice(0, rankingLimit)
+  }, [candidateRowsBeforeSlice, rankingLimit])
 
   // Summary Totals for Top 20
   const totals = useMemo(() => {
@@ -256,7 +329,7 @@ export const TopOfensores: React.FC = () => {
     return withRef?.dataReferencia || null
   }, [allVendorRows, selectedReferenceDate])
 
-  // Export Top 20 to Excel
+  // Export to Excel - exports only the sliced items (filteredAndSorted)
   const handleExportXlsx = () => {
     if (filteredAndSorted.length === 0) {
       toast({
@@ -266,22 +339,26 @@ export const TopOfensores: React.FC = () => {
       return
     }
     exportVendorsToXlsx(filteredAndSorted, totals, effectiveReferente || undefined, {
-      sheetName: 'Top_20_Ofensores',
-      filePrefix: 'Ranking_20_Principais_Ofensores_FPD',
+      sheetName: `Top_${rankingLimit}_Ofensores`,
+      filePrefix: `Ranking_${rankingLimit}_Principais_Ofensores_FPD`,
     })
     toast({
       title: 'Planilha exportada',
-      description: 'O ranking dos 20 principais ofensores foi exportado em .xlsx com sucesso.',
+      description: `O ranking dos ${rankingLimit} principais ofensores foi exportado em .xlsx com sucesso.`,
     })
   }
 
   const hasActiveFilters =
-    debouncedSearch !== '' || selectedLoja !== 'all' || selectedReferenceDate !== 'all'
+    debouncedSearch !== '' ||
+    (!userAccess.isGerente && selectedLoja !== 'all') ||
+    selectedReferenceDate !== 'all'
 
   const clearFilters = () => {
     setSearch('')
     setDebouncedSearch('')
-    setSelectedLoja('all')
+    if (!userAccess.isGerente) {
+      setSelectedLoja('all')
+    }
     setSelectedReferenceDate('all')
   }
 
@@ -309,11 +386,11 @@ export const TopOfensores: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 2: Total de Linhas Top 20 */}
+        {/* Card 2: Total de Linhas no Top N */}
         <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82]">
-              Linhas no Top 20
+              {rankingCardLabel}
             </p>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-bold text-[#12365A] tabular-nums">
@@ -327,7 +404,7 @@ export const TopOfensores: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 3: % de Concentração do Top 20 */}
+        {/* Card 3: % de Concentração do Top N */}
         <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82]">
@@ -370,21 +447,75 @@ export const TopOfensores: React.FC = () => {
         </div>
       </div>
 
+      {/* Header com título dinâmico e aviso do limite por perfil */}
+      <div className="bg-[#F0F5FC] border border-[#D5E2F1] rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-[#12365A]">
+        <div className="flex items-start sm:items-center gap-3">
+          <span className="p-2 rounded-lg bg-red-100 text-red-600 shrink-0">
+            <Flame className="w-5 h-5" />
+          </span>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base sm:text-lg font-bold text-[#12365A] tracking-tight">
+                {rankingTitle}
+              </h2>
+              <Badge
+                variant="outline"
+                className="text-[11px] px-2 py-0.5 bg-white border-[#CBD5E1] font-semibold text-[#12365A]"
+              >
+                Perfil {profileLabel}
+              </Badge>
+            </div>
+            <p className="text-xs text-[#5B6B82] mt-0.5" data-testid="profile-limit-info">
+              Exibindo {filteredAndSorted.length} de {candidateRowsBeforeSlice.length} possíveis —
+              limite do perfil {profileLabel}: {rankingLimit}
+            </p>
+          </div>
+        </div>
+
+        {userAccess.isGerente && (
+          <div className="flex items-center gap-1.5 text-xs text-[#12365A] bg-white border border-[#CBD5E1] px-3 py-1.5 rounded-lg shrink-0">
+            <Store className="w-4 h-4 text-[#0E9F8A] shrink-0" />
+            <span>
+              Loja Vinculada:{' '}
+              <strong className="uppercase">
+                {managerAssignedStoreName || selectedLoja || 'Não identificada'}
+              </strong>
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Gerente sem loja vinculada - aviso amigável */}
+      {userAccess.isGerente && userAccess.hasNoStoreAssigned && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 text-xs text-amber-900">
+          <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-bold text-sm text-amber-900">
+              Nenhuma loja vinculada ao seu usuário Gerente
+            </p>
+            <p className="text-amber-800">
+              Seu perfil de Gerente ainda não possui uma loja vinculada pelo Administrador. Para
+              visualizar o ranking dos 3 principais ofensores da sua loja, solicite a vinculação da
+              sua loja à equipe administradora.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Empty State Banner when no records exist */}
       {!loading && allVendorRows.length === 0 && (
         <div className="bg-gradient-to-r from-[#12365A] to-[#1a4a7a] text-white rounded-2xl p-6 sm:p-8 shadow-lg flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="space-y-2 text-center md:text-left">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/20 text-red-300 text-xs font-semibold tracking-wider uppercase border border-red-400/30">
               <Flame className="w-3.5 h-3.5 text-red-400" />
-              <span>Ranking dos 20 Principais Ofensores</span>
+              <span>Ranking dos {rankingLimit} Principais Ofensores</span>
             </div>
             <h2 className="text-xl sm:text-2xl font-bold">
               Nenhum dado importado para o ranking de ofensores
             </h2>
             <p className="text-sm text-slate-200 max-w-xl">
               Importe as planilhas <span className="text-white font-semibold">.xlsx</span> das lojas
-              para ranquear automaticamente os 20 vendedores com maior quantidade de linhas em
-              atraso.
+              para ranquear automaticamente os vendedores com maior quantidade de linhas em atraso.
             </p>
           </div>
           {userAccess.isAdm && (
@@ -445,20 +576,37 @@ export const TopOfensores: React.FC = () => {
               </select>
             </div>
 
-            {/* Filter Loja (Dropdown) */}
-            <div className="w-full sm:w-52">
-              <select
-                value={selectedLoja}
-                onChange={(e) => setSelectedLoja(e.target.value)}
-                className="w-full h-9 text-xs rounded-md border border-[#E3E9F2] bg-[#F8FAFC] px-2.5 text-[#12365A] focus:outline-none focus:border-[#0E9F8A]"
-              >
-                <option value="all">Todas as Lojas ({uniqueLojas.length})</option>
-                {uniqueLojas.map((loja) => (
-                  <option key={loja} value={loja}>
-                    {loja}
-                  </option>
-                ))}
-              </select>
+            {/* Filter Loja (Travado para Gerente, Dropdown para Supervisor/Coordenador/ADM) */}
+            <div className="w-full sm:w-56">
+              {userAccess.isGerente ? (
+                <div
+                  data-testid="locked-store-display"
+                  className="h-9 px-3 rounded-md bg-[#F1F5F9] border border-[#CBD5E1] flex items-center gap-2 text-xs text-[#12365A]"
+                  title="Loja vinculada ao perfil de Gerente"
+                >
+                  <Store className="w-3.5 h-3.5 text-[#0E9F8A] shrink-0" />
+                  <span className="truncate">
+                    Loja:{' '}
+                    <strong className="uppercase">
+                      {managerAssignedStoreName || selectedLoja || uniqueLojas[0] || 'Vinculada'}
+                    </strong>
+                  </span>
+                </div>
+              ) : (
+                <select
+                  value={selectedLoja}
+                  onChange={(e) => setSelectedLoja(e.target.value)}
+                  className="w-full h-9 text-xs rounded-md border border-[#E3E9F2] bg-[#F8FAFC] px-2.5 text-[#12365A] focus:outline-none focus:border-[#0E9F8A]"
+                  aria-label="Selecionar Loja"
+                >
+                  <option value="all">Todas as Lojas ({uniqueLojas.length})</option>
+                  {uniqueLojas.map((loja) => (
+                    <option key={loja} value={loja}>
+                      {loja}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             {/* Clear filters */}
@@ -483,7 +631,7 @@ export const TopOfensores: React.FC = () => {
               className="h-9 border-[#E3E9F2] text-[#12365A] hover:bg-[#F3F6FA] font-medium text-xs sm:text-sm gap-2"
             >
               <Download className="w-4 h-4 text-[#0E9F8A]" />
-              <span>Exportar Top 20 (.xlsx)</span>
+              <span>Exportar Top {rankingLimit} (.xlsx)</span>
             </Button>
           </div>
         </div>
@@ -674,11 +822,11 @@ export const TopOfensores: React.FC = () => {
               <tr>
                 {/* POS */}
                 <td className="px-3 py-3 border-r border-[#1e456f] text-center text-xs text-red-300">
-                  TOP 20
+                  TOP {rankingLimit}
                 </td>
                 {/* A: Totais */}
                 <td className="sticky left-0 z-30 bg-[#12365A] px-3.5 py-3 border-r border-[#1e456f] text-white uppercase tracking-wider">
-                  Totais dos 20 Ofensores ({filteredAndSorted.length})
+                  Totais dos {rankingLimit} Ofensores ({filteredAndSorted.length})
                 </td>
                 {/* B */}
                 <td className="px-3 py-3 border-r border-[#1e456f]"></td>
