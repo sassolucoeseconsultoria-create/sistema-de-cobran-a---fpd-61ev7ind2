@@ -606,6 +606,271 @@ export function extractWorksheetColumns(jsonData: unknown[][]): DetectedColumn[]
  * If empty, invalid, 0, or negative, defaults to 1 (each valid data row represents at least 1 occurrence unless specified).
  * If it's a positive number or string number, parses it (e.g. "5" -> 5).
  */
+/**
+ * Normalized status headers accepted in spreadsheets.
+ * Priority: columns containing "ocorren" (exact, prefix, contains) come first.
+ * Fallbacks: status cobranca, substatus, situacao, status, motivo.
+ */
+export const ACCEPTED_STATUS_HEADERS = [
+  'ocorrencias',
+  'ocorrencia',
+  'ocorrencia 1',
+  'ocorrencias 1',
+  'status',
+  'substatus',
+  'situacao',
+  'status cobranca',
+  'status da cobranca',
+  'motivo',
+]
+
+/**
+ * Finds the column index for the occurrences/status column from detected columns.
+ * Selection algorithm:
+ * 1. Checks columns containing "ocorren" (cobre ocorrência, ocorrencias, ocorrência):
+ *    exact match ("ocorrencias"/"ocorrencia") > prefix match > contains.
+ * 2. If none match "ocorren", checks fallback terms (status cobranca, substatus, situacao, status, motivo):
+ *    exact match > prefix match > contains.
+ * In case of tie, picks the leftmost column (lowest columnIndex).
+ */
+/**
+ * Classifies the cell value of a dedicated occurrences/status column.
+ * Rules:
+ * 1. Empty/blank -> 'nao_tratados'
+ * 2. Texts containing "paga" or "pago" (or "quitad", "liquidad") -> 'fatura_paga'
+ * 3. Texts containing "enviad" (or "2 via", "2a via", "reenvio") -> 'envio_fatura'
+ * 4. Texts containing "contato" or "atendid" -> 'contato_realizado'
+ * 5. Other categories via exact/known matches (promessa_pagto, sem_contato, cancelados, pendente, nao_tratados)
+ * 6. Fallback to classifyRow or 'outros'
+ */
+export function classifyStatusCell(cellVal: unknown): FpdStatusKey {
+  const norm = normalizeText(cellVal)
+  if (!norm) return 'nao_tratados'
+
+  // Exact/priority checks
+  // 1. Enviado fatura: "enviad", "envio", "2 via", "2a via"
+  if (
+    norm.includes('enviad') ||
+    norm.includes('envio') ||
+    norm.includes('2 via') ||
+    norm.includes('2a via') ||
+    EXACT_ENVIO_FATURA.has(norm)
+  ) {
+    return 'envio_fatura'
+  }
+
+  // 2. Promessa de Pagamento
+  if (norm.includes('promessa') || EXACT_PROMESSA_PAGTO.has(norm)) {
+    return 'promessa_pagto'
+  }
+
+  // 3. Fatura Paga: "paga", "pago", "quitad", "liquidad"
+  if (
+    norm.includes('paga') ||
+    norm.includes('pago') ||
+    norm.includes('quitad') ||
+    norm.includes('liquidad') ||
+    EXACT_FATURA_PAGA.has(norm)
+  ) {
+    return 'fatura_paga'
+  }
+
+  // 4. Sem Contato: "sem contato", "nao atende", "caixa postal", "recusad", "desligad"
+  if (
+    norm.includes('sem contato') ||
+    norm.includes('nao atende') ||
+    norm.includes('caixa postal') ||
+    EXACT_SEM_CONTATO.has(norm)
+  ) {
+    return 'sem_contato'
+  }
+
+  // 5. Cancelados
+  if (
+    norm.includes('cancel') ||
+    norm.includes('fraude') ||
+    norm.includes('desist') ||
+    norm.includes('devolv') ||
+    EXACT_CANCELADOS.has(norm)
+  ) {
+    return 'cancelados'
+  }
+
+  // 6. Pendente
+  if (
+    norm.includes('pendente') ||
+    norm.includes('em analise') ||
+    norm.includes('em tratativa') ||
+    norm.includes('aguardando') ||
+    EXACT_PENDENTE.has(norm)
+  ) {
+    return 'pendente'
+  }
+
+  // 7. Contato Realizado: "contato", "atendid", "falou"
+  if (
+    norm.includes('contato') ||
+    norm.includes('atendid') ||
+    norm.includes('falou') ||
+    norm.includes('recado') ||
+    EXACT_CONTATO_REALIZADO.has(norm)
+  ) {
+    return 'contato_realizado'
+  }
+
+  // 8. Não Tratados
+  if (
+    norm.includes('nao tratado') ||
+    norm.includes('nao trabalh') ||
+    norm.includes('a tratar') ||
+    EXACT_NAO_TRATADOS.has(norm)
+  ) {
+    return 'nao_tratados'
+  }
+
+  // 9. Standard classifyRow fallback or 'outros'
+  return classifyRow(norm) || 'outros'
+}
+
+/**
+ * Maps an FpdStatusKey to its official OCORRENCIAS_OPTIONS label
+ */
+export function fpdStatusKeyToOcorrenciaLabel(key: FpdStatusKey): string {
+  switch (key) {
+    case 'fatura_paga':
+      return 'Fatura(s) Paga(s)'
+    case 'envio_fatura':
+      return 'Enviado Fatura(s)'
+    case 'promessa_pagto':
+      return 'Promessa de Pagto.'
+    case 'sem_contato':
+      return 'Sem Contato'
+    case 'cancelados':
+      return 'Cancelados'
+    case 'pendente':
+      return 'Pendente'
+    case 'contato_realizado':
+      return 'Contato Realizado'
+    case 'outros':
+      return 'Outros Motivos'
+    case 'nao_tratados':
+    default:
+      return 'Não Tratados'
+  }
+}
+
+export function findStatusColumnIndex(detectedColumns: DetectedColumn[]): number {
+  if (!detectedColumns || detectedColumns.length === 0) return -1
+
+  // 1. Check for "ocorren"
+  let bestOcorrenScore = -1
+  let bestOcorrenCol: DetectedColumn | null = null
+
+  for (const col of detectedColumns) {
+    const norm = normalizeText(col.name)
+    if (!norm) continue
+
+    if (norm.includes('ocorren')) {
+      // Score: 3 = exact ('ocorrencias' or 'ocorrencia'), 2 = prefix ('ocorren...'), 1 = contains
+      let score = 1
+      if (norm === 'ocorrencias' || norm === 'ocorrencia') {
+        score = 3
+      } else if (
+        norm.startsWith('ocorrencias') ||
+        norm.startsWith('ocorrencia') ||
+        norm.startsWith('ocorren')
+      ) {
+        score = 2
+      }
+
+      if (score > bestOcorrenScore) {
+        bestOcorrenScore = score
+        bestOcorrenCol = col
+      } else if (
+        score === bestOcorrenScore &&
+        bestOcorrenCol &&
+        col.columnIndex < bestOcorrenCol.columnIndex
+      ) {
+        bestOcorrenCol = col
+      }
+    }
+  }
+
+  if (bestOcorrenCol) {
+    return bestOcorrenCol.columnIndex
+  }
+
+  // 2. Fallbacks: 'status cobranca', 'substatus', 'situacao', 'status', 'motivo'
+  const fallbackTerms = [
+    'status cobranca',
+    'status da cobranca',
+    'substatus',
+    'situacao',
+    'status',
+    'motivo',
+  ]
+
+  let bestFallbackScore = -1
+  let bestFallbackCol: DetectedColumn | null = null
+
+  for (const col of detectedColumns) {
+    const norm = normalizeText(col.name)
+    if (!norm) continue
+
+    for (const term of fallbackTerms) {
+      if (norm === term) {
+        // Exact match
+        const score = 3
+        if (score > bestFallbackScore) {
+          bestFallbackScore = score
+          bestFallbackCol = col
+        } else if (
+          score === bestFallbackScore &&
+          bestFallbackCol &&
+          col.columnIndex < bestFallbackCol.columnIndex
+        ) {
+          bestFallbackCol = col
+        }
+        break
+      } else if (norm.startsWith(term)) {
+        // Prefix match
+        const score = 2
+        if (score > bestFallbackScore) {
+          bestFallbackScore = score
+          bestFallbackCol = col
+        } else if (
+          score === bestFallbackScore &&
+          bestFallbackCol &&
+          col.columnIndex < bestFallbackCol.columnIndex
+        ) {
+          bestFallbackCol = col
+        }
+        break
+      } else if (norm.includes(term)) {
+        // Contains match
+        const score = 1
+        if (score > bestFallbackScore) {
+          bestFallbackScore = score
+          bestFallbackCol = col
+        } else if (
+          score === bestFallbackScore &&
+          bestFallbackCol &&
+          col.columnIndex < bestFallbackCol.columnIndex
+        ) {
+          bestFallbackCol = col
+        }
+        break
+      }
+    }
+  }
+
+  if (bestFallbackCol) {
+    return bestFallbackCol.columnIndex
+  }
+
+  return -1
+}
+
 export function extractRowQuantity(row: unknown[], colIndex: number): number {
   if (!row || colIndex < 0 || colIndex >= row.length) {
     return 1
@@ -663,25 +928,7 @@ export function parseWorksheet(
   }
 
   // Identify status/occurrences column from detected headers
-  // Accepted normalized names: 'ocorrencias', 'ocorrencia', 'status', 'substatus', 'situacao', 'status cobranca', 'motivo'
-  const ACCEPTED_STATUS_HEADERS = new Set([
-    'ocorrencias',
-    'ocorrencia',
-    'status',
-    'substatus',
-    'situacao',
-    'status cobranca',
-    'motivo',
-  ])
-
-  let statusColIndex = -1
-  for (const col of detectedColumns) {
-    const normColName = normalizeText(col.name)
-    if (ACCEPTED_STATUS_HEADERS.has(normColName)) {
-      statusColIndex = col.columnIndex
-      break
-    }
-  }
+  let statusColIndex = findStatusColumnIndex(detectedColumns)
 
   // Determine explicit quantity column index from detected headers if any
   // If column header explicitly indicates quantity ('quantidade', 'qtde', 'qtd', 'quantidades', 'faturas')
@@ -804,7 +1051,7 @@ export function parseWorksheet(
       if (!normalizedStatusCell) {
         category = 'nao_tratados'
       } else {
-        category = classifyRow(normalizedStatusCell) || 'outros'
+        category = classifyStatusCell(normalizedStatusCell)
       }
     } else {
       // Fallback: classify scanning the whole row to keep compatibility with sheets lacking status header

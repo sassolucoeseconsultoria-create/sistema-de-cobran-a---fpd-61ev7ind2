@@ -2,6 +2,10 @@ import * as XLSX from 'xlsx'
 import {
   normalizeText,
   extractWorksheetColumns,
+  findStatusColumnIndex,
+  classifyStatusCell,
+  classifyRow,
+  fpdStatusKeyToOcorrenciaLabel,
   isHeaderOrTotalRow,
   guessReferenteDate,
 } from './xlsxParser'
@@ -131,7 +135,7 @@ export function parseAnalyticalWorksheet(
     }
   }
 
-  // Find header row index
+  // Find header row index and detected columns
   const detectedCols = extractWorksheetColumns(jsonData)
   let headerRowIndex = 0
 
@@ -161,6 +165,9 @@ export function parseAnalyticalWorksheet(
       headerColumns.push(name)
     }
   }
+
+  // Detect the status / occurrences column index
+  const statusColIndex = findStatusColumnIndex(detectedCols)
 
   const rows: ParsedAnalyticalRow[] = []
 
@@ -240,12 +247,28 @@ export function parseAnalyticalWorksheet(
       lojaVal = String(row[4]).trim()
     }
 
+    // Determine occurrences classification:
+    // If status/occurrences column is detected, classify EXCLUSIVELY by its cell value.
+    // Otherwise fallback to scanning the whole row.
+    let rowOcorrenciaLabel = 'Não Tratados'
+    if (statusColIndex >= 0) {
+      const rawStatusCell = statusColIndex < row.length ? row[statusColIndex] : ''
+      const statusKey = classifyStatusCell(rawStatusCell)
+      rowOcorrenciaLabel = fpdStatusKeyToOcorrenciaLabel(statusKey)
+    } else {
+      const normalizedCells = row.map(normalizeText)
+      const matchedKey = classifyRow(normalizedCells)
+      if (matchedKey) {
+        rowOcorrenciaLabel = fpdStatusKeyToOcorrenciaLabel(matchedKey)
+      }
+    }
+
     rows.push({
       linha: r + 1, // original 1-based line number in spreadsheet
       loja: lojaVal,
       vendedor: vendedorVal,
       cliente: clienteVal,
-      ocorrencias: 'Não Tratados',
+      ocorrencias: rowOcorrenciaLabel,
       dados: rowDataMap,
       typedFields: sheetType === 'residencial' ? typedFields : undefined,
     })

@@ -901,4 +901,131 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     expect(counts.fatura_paga).toBe(1)
     expect(counts.totalRows).toBe(1)
   })
+
+  it('regression test: CELNET AGUAS CLARAS synthetic workbook with Móvel (15 rows: 13 pagas, 1 enviada, 1 contato) and Residencial (6 rows: 6 pagas)', async () => {
+    // 1. Aba Móvel - 15 linhas
+    // Cabeçalhos reais contendo 'OCORRÊNCIAS', 'LOJA', 'VENDEDOR', 'CLIENTE'
+    const movelHeader = [
+      'LOJA',
+      'VENDEDOR',
+      'CLIENTE',
+      'CPF',
+      'STATUS',
+      'OCORRÊNCIAS',
+      '1 Fatura em Aberto',
+      '2 Faturas em Aberto',
+    ]
+
+    const movelRows: (string | number)[][] = []
+    // 13 linhas Fatura Paga
+    for (let i = 1; i <= 13; i++) {
+      movelRows.push([
+        'CELNET AGUAS CLARA',
+        'VICTOR GABRIEL CHAVES DO NASCIMENTO',
+        `CLIENTE MOVEL PAGO ${i}`,
+        '551211105',
+        'Adimplente',
+        'FATURA PAGA',
+        '',
+        '',
+      ])
+    }
+    // 1 linha Enviado Fatura
+    movelRows.push([
+      'CELNET AGUAS CLARA',
+      'WANESSA RODRIGUES RIBEIRO DE OLIVEI',
+      'CLIENTE MOVEL ENVIADO',
+      '8692974145',
+      'Inadimplente',
+      'ENVIADO FATURA',
+      '46244',
+      '17/07/2026 - 16/08/2026',
+    ])
+    // 1 linha Contato Realizado
+    movelRows.push([
+      'CELNET AGUAS CLARA',
+      'FABIO DANILO DA SILVA TELES',
+      'CLIENTE MOVEL CONTATO',
+      '367657163',
+      'Inadimplente',
+      'CONTATO REALIZADO',
+      '',
+      '',
+    ])
+
+    const movelWs = XLSX.utils.aoa_to_sheet([movelHeader, ...movelRows])
+    const movelCounts = parseWorksheet(movelWs, 'Móvel', 'movel')
+
+    expect(movelCounts.totalRows).toBe(15)
+    expect(movelCounts.totalLinesCount).toBe(15)
+    expect(movelCounts.fatura_paga).toBe(13)
+    expect(movelCounts.envio_fatura).toBe(1)
+    expect(movelCounts.contato_realizado).toBe(1)
+    expect(movelCounts.nao_tratados).toBe(0)
+    expect(movelCounts.outros).toBe(0)
+
+    // 2. Aba Residencial - 6 linhas
+    // Cabeçalhos reais contendo 'LOJA', 'VENDEDOR', 'CLIENTE', 'FATURA', 'PAGO', 'DEVENDO', 'INDICADOR', 'OCORRÊNCIAS'
+    const resHeader = [
+      'CANAL',
+      'CLIENTE',
+      'CPF',
+      'FONE',
+      'FATURA',
+      'PAGO',
+      'DEVENDO',
+      'INDICADOR',
+      'OCORRÊNCIAS',
+      'LOJA',
+      'VENDEDOR',
+    ]
+
+    const resRows: (string | number)[][] = []
+    for (let i = 1; i <= 6; i++) {
+      resRows.push([
+        'Agente Autorizado',
+        `CLIENTE RESIDENCIAL ${i}`,
+        '039.491.971-84',
+        '61991142018',
+        'Em Aberto',
+        0,
+        1,
+        'Preventiva FPD',
+        'FATURA PAGA',
+        'CELNET AGUAS CLARA',
+        'VICTOR GABRIEL CHAVES DO NASCIMENTO',
+      ])
+    }
+
+    const resWs = XLSX.utils.aoa_to_sheet([resHeader, ...resRows])
+    const resCounts = parseWorksheet(resWs, 'Residencial', 'residencial')
+
+    expect(resCounts.totalRows).toBe(6)
+    expect(resCounts.totalLinesCount).toBe(6)
+    expect(resCounts.fatura_paga).toBe(6)
+    expect(resCounts.nao_tratados).toBe(0)
+    expect(resCounts.outros).toBe(0)
+
+    // 3. Teste parseAnalyticalWorksheet para garantir classificação analítica
+    const { parseAnalyticalWorksheet } = await import('@/lib/analyticalImportParser')
+    const parsedMovel = parseAnalyticalWorksheet(movelWs, 'Móvel', 'movel')
+    expect(parsedMovel.rows).toHaveLength(15)
+    const movelPagas = parsedMovel.rows.filter((r) => r.ocorrencias === 'Fatura(s) Paga(s)')
+    const movelEnviadas = parsedMovel.rows.filter((r) => r.ocorrencias === 'Enviado Fatura(s)')
+    const movelContatos = parsedMovel.rows.filter((r) => r.ocorrencias === 'Contato Realizado')
+    const movelNaoTratados = parsedMovel.rows.filter((r) => r.ocorrencias === 'Não Tratados')
+
+    expect(movelPagas).toHaveLength(13)
+    expect(movelEnviadas).toHaveLength(1)
+    expect(movelContatos).toHaveLength(1)
+    expect(movelNaoTratados).toHaveLength(0)
+
+    const parsedRes = parseAnalyticalWorksheet(resWs, 'Residencial', 'residencial')
+    expect(parsedRes.rows).toHaveLength(6)
+    const resPagas = parsedRes.rows.filter((r) => r.ocorrencias === 'Fatura(s) Paga(s)')
+    const resNaoTratados = parsedRes.rows.filter((r) => r.ocorrencias === 'Não Tratados')
+
+    expect(resPagas).toHaveLength(6)
+    expect(resNaoTratados).toHaveLength(0)
+  })
 })
