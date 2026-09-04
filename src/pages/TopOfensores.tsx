@@ -290,7 +290,7 @@ export const TopOfensores: React.FC = () => {
         outros: 0,
       },
     )
-  }, [])
+  }, [filteredAndSorted])
 
   // Animated totals
   const animatedTotalLinhas = useCountUp(totals.totalLinhas)

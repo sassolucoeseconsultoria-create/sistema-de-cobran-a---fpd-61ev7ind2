@@ -212,7 +212,7 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
     expect(screen.getByText('TOTAL')).toBeDefined()
     expect(screen.getByText(/TOTAL \(3\)/i)).toBeDefined()
 
-    // Exportação para Excel: deve exportar apenas os 3 registros
+    // Exportação para Excel: deve exportar apenas os 3 registros com totals calculados dos 3 itens
     const exportBtn = screen.getByRole('button', { name: /Exportar Principais Ofensores/i })
     expect(exportBtn).toBeDefined()
     await user.click(exportBtn)
@@ -225,6 +225,15 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
       'Vendedor Aguas 2',
       'Vendedor Aguas 3',
     ])
+    // Verifica que os totais passados para o exportador somam exatamente os 3 itens visíveis:
+    // 95 + 90 + 85 = 270 totalLinhas
+    // 10 + 10 + 10 = 30 faturaPaga
+    // 5 + 5 + 5 = 15 envioFatura, etc.
+    const exportedTotals = exportVendorsSpy.mock.calls[0][1]
+    expect(exportedTotals.totalLinhas).toBe(270)
+    expect(exportedTotals.faturaPaga).toBe(30)
+    expect(exportedTotals.envioFatura).toBe(15)
+
     const exportOptions = exportVendorsSpy.mock.calls[0][3]
     expect(exportOptions).toEqual({
       sheetName: 'Principais_3_Ofensores',
@@ -284,13 +293,19 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
     expect(screen.getByText('TOTAL')).toBeDefined()
     expect(screen.getByText(/TOTAL \(10\)/i)).toBeDefined()
 
-    // Exportação deve exportar apenas os 10 itens
+    // Exportação deve exportar apenas os 10 itens com totals correspondentes aos 10 itens
     const exportBtn = screen.getByRole('button', { name: /Exportar Principais Ofensores/i })
     await user.click(exportBtn)
 
     expect(exportVendorsSpy).toHaveBeenCalledTimes(1)
     const exportedRows = exportVendorsSpy.mock.calls[0][0]
     expect(exportedRows).toHaveLength(10)
+    const exportedTotals = exportVendorsSpy.mock.calls[0][1]
+    // Top 10 são os maiores entre Águas (95, 90, 85, 80, 75, 70, 65, 60, 55, 50) e Taguatinga (76, 72, 68...)
+    const expectedSum = exportedRows.reduce((acc: number, r: any) => acc + r.totalLinhas, 0)
+    expect(exportedTotals.totalLinhas).toBe(expectedSum)
+    expect(exportedTotals.totalLinhas).toBeGreaterThan(0)
+
     const exportOptions = exportVendorsSpy.mock.calls[0][3]
     expect(exportOptions).toEqual({
       sheetName: 'Principais_10_Ofensores',
@@ -350,6 +365,11 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
     expect(exportVendorsSpy).toHaveBeenCalledTimes(1)
     const exportedRows = exportVendorsSpy.mock.calls[0][0]
     expect(exportedRows).toHaveLength(20)
+    const exportedTotals = exportVendorsSpy.mock.calls[0][1]
+    const expectedSum = exportedRows.reduce((acc: number, r: any) => acc + r.totalLinhas, 0)
+    expect(exportedTotals.totalLinhas).toBe(expectedSum)
+    expect(exportedTotals.totalLinhas).toBeGreaterThan(0)
+
     const exportOptions = exportVendorsSpy.mock.calls[0][3]
     expect(exportOptions).toEqual({
       sheetName: 'Principais_20_Ofensores',
@@ -357,7 +377,54 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
     })
   })
 
-  it('Cenário 4: Não deve exibir linha de TOTAL quando não houver ofensores', async () => {
+  it('Cenário 4: Perfil ADM traz os 20 principais e calcula o total correto', async () => {
+    vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+      user: {
+        id: 'usr_adm',
+        collectionId: 'users',
+        collectionName: 'users',
+        email: 'adm@celnet.com.br',
+        name: 'Administrador Geral',
+        role: 'ADM',
+        lojas: [],
+        created: '2025-01-01',
+        updated: '2025-01-01',
+      },
+      token: 'mock-token',
+      loading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshAuth: vi.fn(),
+    })
+
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <TopOfensores />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('heading', { name: /Principais Ofensores \(Top 20\)/i }),
+      ).toBeDefined()
+    })
+
+    expect(screen.getByText('TOTAL')).toBeDefined()
+    expect(screen.getByText(/TOTAL \(20\)/i)).toBeDefined()
+
+    const exportBtn = screen.getByRole('button', { name: /Exportar Principais Ofensores/i })
+    await user.click(exportBtn)
+
+    expect(exportVendorsSpy).toHaveBeenCalledTimes(1)
+    const exportedRows = exportVendorsSpy.mock.calls[0][0]
+    expect(exportedRows).toHaveLength(20)
+    const exportedTotals = exportVendorsSpy.mock.calls[0][1]
+    const expectedSum = exportedRows.reduce((acc: number, r: any) => acc + r.totalLinhas, 0)
+    expect(exportedTotals.totalLinhas).toBe(expectedSum)
+  })
+
+  it('Cenário 5: Não deve exibir linha de TOTAL quando não houver ofensores', async () => {
     vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
       user: {
         id: 'usr_adm',

@@ -80,7 +80,7 @@ export function exportVendorsToXlsx(
     totals.naoTratados,
   ]
 
-  const wsData = [headers, ...dataRows, totalsRow]
+  const wsData = rows.length > 0 ? [headers, ...dataRows, totalsRow] : [headers, ...dataRows]
   const ws = XLSX.utils.aoa_to_sheet(wsData)
 
   ws['!cols'] = [
