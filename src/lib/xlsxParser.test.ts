@@ -1028,4 +1028,101 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     expect(resPagas).toHaveLength(6)
     expect(resNaoTratados).toHaveLength(0)
   })
+
+  it('regression test: adverse case Móvel spreadsheet without recognized status column header, classifying by cell values (13 pagas, 1 enviada, 1 contato, 0 nao tratados)', async () => {
+    // Real headers of Móvel without 'OCORRÊNCIAS' or standard status headers recognizable as such,
+    // or with an empty/unrecognized status column, where status is preserved in a cell
+    const adverseMovelHeader = [
+      '1 Fatura em Aberto',
+      '2 Faturas em Aberto',
+      '3 Faturas em Aberto',
+      'Adimplente',
+      'Ativação',
+      'CPF',
+      'Data Venda',
+      'Faturas em aberto',
+      'Faturas em atraso',
+      'Fechamento',
+      'VENDEDOR',
+      'LOJA',
+      'Coluna_Status_Desconhecida',
+    ]
+
+    const movelRows: (string | number)[][] = []
+    // 13 rows with FATURA PAGA
+    for (let i = 1; i <= 13; i++) {
+      movelRows.push([
+        '',
+        '',
+        '',
+        'não',
+        46196,
+        `55121110${i}`,
+        '',
+        0,
+        1,
+        '',
+        'VICTOR GABRIEL CHAVES DO NASCIMENTO',
+        'CELNET AGUAS CLARA',
+        'FATURA PAGA',
+      ])
+    }
+    // 1 row with ENVIADO FATURA
+    movelRows.push([
+      46244,
+      '17/07/2026 - 16/08/2026',
+      'R$ 71,47',
+      'não',
+      46149,
+      '8692974145',
+      '',
+      1,
+      1,
+      '',
+      'WANESSA RODRIGUES RIBEIRO DE OLIVEI',
+      'CELNET AGUAS CLARA',
+      'ENVIADO FATURA',
+    ])
+    // 1 row with CONTATO REALIZADO
+    movelRows.push([
+      '',
+      '',
+      '',
+      'sim',
+      46183,
+      '10800824253',
+      '',
+      0,
+      1,
+      '',
+      'ISABELLY VANIA FERREIRA FREITAS',
+      'CELNET AGUAS CLARA',
+      'CONTATO REALIZADO',
+    ])
+
+    const adverseWs = XLSX.utils.aoa_to_sheet([adverseMovelHeader, ...movelRows])
+    const counts = parseWorksheet(adverseWs, 'Móvel', 'movel')
+
+    expect(counts.totalRows).toBe(15)
+    expect(counts.totalLinesCount).toBe(15)
+    expect(counts.fatura_paga).toBe(13)
+    expect(counts.envio_fatura).toBe(1)
+    expect(counts.contato_realizado).toBe(1)
+    expect(counts.nao_tratados).toBe(0)
+    expect(counts.outros).toBe(0)
+
+    // Also verify parseAnalyticalWorksheet produces exactly 13 / 1 / 1 / 0
+    const { parseAnalyticalWorksheet } = await import('@/lib/analyticalImportParser')
+    const parsed = parseAnalyticalWorksheet(adverseWs, 'Móvel', 'movel')
+    expect(parsed.rows).toHaveLength(15)
+    const pagas = parsed.rows.filter((r) => r.ocorrencias === 'Fatura(s) Paga(s)')
+    const enviadas = parsed.rows.filter((r) => r.ocorrencias === 'Enviado Fatura(s)')
+    const contatos = parsed.rows.filter((r) => r.ocorrencias === 'Contato Realizado')
+    const naoTratados = parsed.rows.filter((r) => r.ocorrencias === 'Não Tratados')
+
+    expect(pagas).toHaveLength(13)
+    expect(enviadas).toHaveLength(1)
+    expect(contatos).toHaveLength(1)
+    expect(naoTratados).toHaveLength(0)
+  })
 })

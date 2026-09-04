@@ -625,14 +625,224 @@ export const ACCEPTED_STATUS_HEADERS = [
 ]
 
 /**
- * Finds the column index for the occurrences/status column from detected columns.
- * Selection algorithm:
- * 1. Checks columns containing "ocorren" (cobre ocorrência, ocorrencias, ocorrência):
- *    exact match ("ocorrencias"/"ocorrencia") > prefix match > contains.
- * 2. If none match "ocorren", checks fallback terms (status cobranca, substatus, situacao, status, motivo):
- *    exact match > prefix match > contains.
- * In case of tie, picks the leftmost column (lowest columnIndex).
+ * Known status phrases for cell/row value matching.
+ * Must match as phrase (whole cell or substring containing the phrase), NEVER isolated words like "pago" or "paga" across rows.
  */
+export const KNOWN_STATUS_PHRASES: { phrase: string; key: FpdStatusKey }[] = [
+  // 1. Enviado Fatura(s)
+  { phrase: 'enviado fatura(s)', key: 'envio_fatura' },
+  { phrase: 'enviado fatura', key: 'envio_fatura' },
+  { phrase: 'enviada fatura', key: 'envio_fatura' },
+  { phrase: 'fatura enviada', key: 'envio_fatura' },
+  { phrase: 'envio de fatura', key: 'envio_fatura' },
+  { phrase: 'envio fatura', key: 'envio_fatura' },
+  { phrase: 'enviado 2 via', key: 'envio_fatura' },
+  { phrase: 'enviada 2 via', key: 'envio_fatura' },
+  { phrase: 'enviado 2a via', key: 'envio_fatura' },
+  { phrase: 'enviada 2a via', key: 'envio_fatura' },
+  { phrase: 'segunda via enviada', key: 'envio_fatura' },
+  { phrase: '2 via enviada', key: 'envio_fatura' },
+  { phrase: '2a via enviada', key: 'envio_fatura' },
+
+  // 2. Promessa de Pagto.
+  { phrase: 'promessa de pagto.', key: 'promessa_pagto' },
+  { phrase: 'promessa de pagto', key: 'promessa_pagto' },
+  { phrase: 'promessa de pagamento', key: 'promessa_pagto' },
+  { phrase: 'promessa pagto.', key: 'promessa_pagto' },
+  { phrase: 'promessa pagto', key: 'promessa_pagto' },
+  { phrase: 'promessa pagamento', key: 'promessa_pagto' },
+
+  // 3. Fatura(s) Paga(s)
+  { phrase: 'fatura(s) paga(s)', key: 'fatura_paga' },
+  { phrase: 'fatura paga', key: 'fatura_paga' },
+  { phrase: 'faturas pagas', key: 'fatura_paga' },
+  { phrase: 'boleto pago', key: 'fatura_paga' },
+  { phrase: 'fatura quitada', key: 'fatura_paga' },
+  { phrase: 'faturas quitadas', key: 'fatura_paga' },
+  { phrase: 'fatura liquidada', key: 'fatura_paga' },
+  { phrase: 'pagamento efetuado', key: 'fatura_paga' },
+  { phrase: 'pagamento realizado', key: 'fatura_paga' },
+  { phrase: 'pagamento confirmado', key: 'fatura_paga' },
+
+  // 4. Sem Contato
+  { phrase: 'sem contato', key: 'sem_contato' },
+  { phrase: 'nao atende', key: 'sem_contato' },
+  { phrase: 'nao atendeu', key: 'sem_contato' },
+  { phrase: 'caixa postal', key: 'sem_contato' },
+  { phrase: 'telefone incorreto', key: 'sem_contato' },
+  { phrase: 'numero incorreto', key: 'sem_contato' },
+  { phrase: 'numero errado', key: 'sem_contato' },
+  { phrase: 'telefone errado', key: 'sem_contato' },
+
+  // 5. Cancelados
+  { phrase: 'cancelado', key: 'cancelados' },
+  { phrase: 'cancelada', key: 'cancelados' },
+  { phrase: 'cancelados', key: 'cancelados' },
+  { phrase: 'canceladas', key: 'cancelados' },
+  { phrase: 'desistencia', key: 'cancelados' },
+  { phrase: 'devolucao', key: 'cancelados' },
+
+  // 6. Pendente
+  { phrase: 'em analise', key: 'pendente' },
+  { phrase: 'em andamento', key: 'pendente' },
+  { phrase: 'em tratativa', key: 'pendente' },
+  { phrase: 'aguardando retorno', key: 'pendente' },
+  { phrase: 'retorno agendado', key: 'pendente' },
+  { phrase: 'pendente', key: 'pendente' },
+
+  // 7. Contato Realizado
+  { phrase: 'contato realizado', key: 'contato_realizado' },
+  { phrase: 'contato efetuado', key: 'contato_realizado' },
+  { phrase: 'contato feito', key: 'contato_realizado' },
+  { phrase: 'cliente atendido', key: 'contato_realizado' },
+  { phrase: 'cliente atendida', key: 'contato_realizado' },
+  { phrase: 'atendimento realizado', key: 'contato_realizado' },
+  { phrase: 'falou com cliente', key: 'contato_realizado' },
+  { phrase: 'falou com o cliente', key: 'contato_realizado' },
+  { phrase: 'falou com titular', key: 'contato_realizado' },
+  { phrase: 'deixou recado', key: 'contato_realizado' },
+
+  // 8. Não Tratados
+  { phrase: 'nao tratado', key: 'nao_tratados' },
+  { phrase: 'nao tratada', key: 'nao_tratados' },
+  { phrase: 'naotratado', key: 'nao_tratados' },
+  { phrase: 'nao trabalhado', key: 'nao_tratados' },
+  { phrase: 'a tratar', key: 'nao_tratados' },
+  { phrase: 'sem tratamento', key: 'nao_tratados' },
+]
+
+/**
+ * Searches row cell values for known status phrases.
+ * Each candidate cell's normalized text is checked against KNOWN_STATUS_PHRASES.
+ * Returns the matching FpdStatusKey or null.
+ */
+export function matchRowStatusByKnownPhrase(rowCells: unknown[]): FpdStatusKey | null {
+  if (!Array.isArray(rowCells) || rowCells.length === 0) return null
+
+  // Normalize all cells
+  const normalizedCells = rowCells
+    .map((c) => (c !== null && c !== undefined ? normalizeText(c) : ''))
+    .filter(Boolean)
+
+  if (normalizedCells.length === 0) return null
+
+  for (const item of KNOWN_STATUS_PHRASES) {
+    for (const cell of normalizedCells) {
+      if (cell === item.phrase || cell.includes(item.phrase)) {
+        return item.key
+      }
+    }
+  }
+
+  return null
+}
+
+/**
+ * Finds the candidate column index for occurrences/status, returning an ordered list of candidate indices.
+ */
+export function getCandidateStatusColumnIndices(detectedColumns: DetectedColumn[]): number[] {
+  if (!detectedColumns || detectedColumns.length === 0) return []
+
+  const ocorrenCandidates: { col: DetectedColumn; score: number }[] = []
+  const fallbackCandidates: { col: DetectedColumn; score: number }[] = []
+
+  const fallbackTerms = [
+    'status cobranca',
+    'status da cobranca',
+    'substatus',
+    'situacao',
+    'status',
+    'motivo',
+  ]
+
+  for (const col of detectedColumns) {
+    const norm = normalizeText(col.name)
+    if (!norm) continue
+
+    if (norm.includes('ocorren')) {
+      let score = 1
+      if (norm === 'ocorrencias' || norm === 'ocorrencia') {
+        score = 3
+      } else if (
+        norm.startsWith('ocorrencias') ||
+        norm.startsWith('ocorrencia') ||
+        norm.startsWith('ocorren')
+      ) {
+        score = 2
+      }
+      ocorrenCandidates.push({ col, score })
+    } else {
+      for (const term of fallbackTerms) {
+        if (norm === term) {
+          fallbackCandidates.push({ col, score: 3 })
+          break
+        } else if (norm.startsWith(term)) {
+          fallbackCandidates.push({ col, score: 2 })
+          break
+        } else if (norm.includes(term)) {
+          fallbackCandidates.push({ col, score: 1 })
+          break
+        }
+      }
+    }
+  }
+
+  // Sort ocorren candidates by score desc, then columnIndex asc
+  ocorrenCandidates.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    return a.col.columnIndex - b.col.columnIndex
+  })
+
+  // Sort fallback candidates by score desc, then columnIndex asc
+  fallbackCandidates.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score
+    return a.col.columnIndex - b.col.columnIndex
+  })
+
+  return [
+    ...ocorrenCandidates.map((c) => c.col.columnIndex),
+    ...fallbackCandidates.map((c) => c.col.columnIndex),
+  ]
+}
+
+/**
+ * Validates candidate status column indices against the sheet data rows.
+ * If in ALL data rows the cell at the candidate columnIndex is empty, discards it and checks next.
+ * If a candidate has at least one non-empty value in data rows, returns it.
+ * If none has values, returns -1.
+ */
+export function findValidatedStatusColumnIndex(
+  detectedColumns: DetectedColumn[],
+  jsonData: unknown[][],
+  dataStartRowIndex = 1,
+): number {
+  const candidates = getCandidateStatusColumnIndices(detectedColumns)
+  if (candidates.length === 0) return -1
+  if (!jsonData || jsonData.length <= dataStartRowIndex) return candidates[0]
+
+  for (const colIdx of candidates) {
+    let hasNonEmpty = false
+    for (let r = dataStartRowIndex; r < jsonData.length; r++) {
+      const row = jsonData[r]
+      if (!Array.isArray(row) || row.length === 0) continue
+      if (isHeaderOrTotalRow(row)) continue
+
+      if (colIdx < row.length) {
+        const val = row[colIdx]
+        if (val !== null && val !== undefined && String(val).trim() !== '') {
+          hasNonEmpty = true
+          break
+        }
+      }
+    }
+    if (hasNonEmpty) {
+      return colIdx
+    }
+  }
+
+  return -1
+}
+
 /**
  * Classifies the cell value of a dedicated occurrences/status column.
  * Rules:
@@ -927,8 +1137,11 @@ export function parseWorksheet(
     return counts
   }
 
-  // Identify status/occurrences column from detected headers
-  let statusColIndex = findStatusColumnIndex(detectedColumns)
+  // Identify and validate status/occurrences column from detected headers and row data
+  let statusColIndex = findValidatedStatusColumnIndex(detectedColumns, jsonData, 1)
+  if (statusColIndex === -1) {
+    statusColIndex = findStatusColumnIndex(detectedColumns)
+  }
 
   // Determine explicit quantity column index from detected headers if any
   // If column header explicitly indicates quantity ('quantidade', 'qtde', 'qtd', 'quantidades', 'faturas')
@@ -1049,14 +1262,21 @@ export function parseWorksheet(
       const rawStatusCell = statusColIndex < row.length ? row[statusColIndex] : ''
       const normalizedStatusCell = normalizeText(rawStatusCell)
       if (!normalizedStatusCell) {
-        category = 'nao_tratados'
+        // If the identified column cell is empty, check fallback by known status phrase in the row cells
+        const phraseMatch = matchRowStatusByKnownPhrase(row)
+        category = phraseMatch || 'nao_tratados'
       } else {
         category = classifyStatusCell(normalizedStatusCell)
       }
     } else {
-      // Fallback: classify scanning the whole row to keep compatibility with sheets lacking status header
-      const normalizedCells = row.map(normalizeText)
-      category = classifyRow(normalizedCells) || 'outros'
+      // Fallback: check known phrases in cells, then classifyRow
+      const phraseMatch = matchRowStatusByKnownPhrase(row)
+      if (phraseMatch) {
+        category = phraseMatch
+      } else {
+        const normalizedCells = row.map(normalizeText)
+        category = classifyRow(normalizedCells) || 'outros'
+      }
     }
 
     // Determine quantity for this row:

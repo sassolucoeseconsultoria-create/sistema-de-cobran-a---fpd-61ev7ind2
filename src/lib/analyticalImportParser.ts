@@ -3,8 +3,10 @@ import {
   normalizeText,
   extractWorksheetColumns,
   findStatusColumnIndex,
+  findValidatedStatusColumnIndex,
   classifyStatusCell,
   classifyRow,
+  matchRowStatusByKnownPhrase,
   fpdStatusKeyToOcorrenciaLabel,
   isHeaderOrTotalRow,
   guessReferenteDate,
@@ -166,8 +168,11 @@ export function parseAnalyticalWorksheet(
     }
   }
 
-  // Detect the status / occurrences column index
-  const statusColIndex = findStatusColumnIndex(detectedCols)
+  // Detect and validate the status / occurrences column index against data rows
+  let statusColIndex = findValidatedStatusColumnIndex(detectedCols, jsonData, headerRowIndex + 1)
+  if (statusColIndex === -1) {
+    statusColIndex = findStatusColumnIndex(detectedCols)
+  }
 
   const rows: ParsedAnalyticalRow[] = []
 
@@ -248,18 +253,36 @@ export function parseAnalyticalWorksheet(
     }
 
     // Determine occurrences classification:
-    // If status/occurrences column is detected, classify EXCLUSIVELY by its cell value.
-    // Otherwise fallback to scanning the whole row.
+    // 1. If status/occurrences column is detected and has a non-empty cell value: classify by its cell value.
+    // 2. If the cell is empty or no status column detected, check fallback by known status phrase across row cells.
+    // 3. Otherwise fallback to classifyRow or 'Não Tratados'.
     let rowOcorrenciaLabel = 'Não Tratados'
     if (statusColIndex >= 0) {
       const rawStatusCell = statusColIndex < row.length ? row[statusColIndex] : ''
-      const statusKey = classifyStatusCell(rawStatusCell)
-      rowOcorrenciaLabel = fpdStatusKeyToOcorrenciaLabel(statusKey)
+      const normalizedStatusCell = normalizeText(rawStatusCell)
+      if (!normalizedStatusCell) {
+        // Fallback: search known status phrases in the row cells
+        const phraseKey = matchRowStatusByKnownPhrase(row)
+        if (phraseKey) {
+          rowOcorrenciaLabel = fpdStatusKeyToOcorrenciaLabel(phraseKey)
+        } else {
+          rowOcorrenciaLabel = 'Não Tratados'
+        }
+      } else {
+        const statusKey = classifyStatusCell(normalizedStatusCell)
+        rowOcorrenciaLabel = fpdStatusKeyToOcorrenciaLabel(statusKey)
+      }
     } else {
-      const normalizedCells = row.map(normalizeText)
-      const matchedKey = classifyRow(normalizedCells)
-      if (matchedKey) {
-        rowOcorrenciaLabel = fpdStatusKeyToOcorrenciaLabel(matchedKey)
+      // No status column detected: search known status phrases first, then classifyRow
+      const phraseKey = matchRowStatusByKnownPhrase(row)
+      if (phraseKey) {
+        rowOcorrenciaLabel = fpdStatusKeyToOcorrenciaLabel(phraseKey)
+      } else {
+        const normalizedCells = row.map(normalizeText)
+        const matchedKey = classifyRow(normalizedCells)
+        if (matchedKey) {
+          rowOcorrenciaLabel = fpdStatusKeyToOcorrenciaLabel(matchedKey)
+        }
       }
     }
 
