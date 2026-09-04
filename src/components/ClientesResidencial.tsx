@@ -517,10 +517,10 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
             <thead className="sticky top-0 z-20 bg-[#12365A] text-white shadow-sm font-semibold tracking-wider uppercase text-[11px]">
               <tr>
                 <th className="px-3 py-3.5 text-center w-12 border-r border-[#1e456f]">#</th>
-                <th className="px-3.5 py-3.5 min-w-[130px] border-r border-[#1e456f]">
+                <th className="px-3.5 py-3.5 min-w-[130px] text-center border-r border-[#1e456f]">
                   NR_CONTRATO
                 </th>
-                <th className="px-3.5 py-3.5 min-w-[180px] border-r border-[#1e456f]">
+                <th className="px-3.5 py-3.5 min-w-[180px] text-center border-r border-[#1e456f]">
                   DSC_STATUS_CONTRATO
                 </th>
                 <th className="px-3.5 py-3.5 min-w-[130px] text-center border-r border-[#1e456f]">
@@ -535,18 +535,28 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
                 <th className="px-3.5 py-3.5 min-w-[110px] text-center border-r border-[#1e456f]">
                   Virou FPD
                 </th>
-                <th className="px-3.5 py-3.5 min-w-[140px] border-r border-[#1e456f]">CPF</th>
-                <th className="px-3.5 py-3.5 min-w-[200px] border-r border-[#1e456f]">CLIENTE</th>
-                <th className="px-3.5 py-3.5 min-w-[130px] border-r border-[#1e456f]">FONE</th>
-                <th className="px-3.5 py-3.5 min-w-[160px] border-r border-[#1e456f]">LOJA</th>
-                <th className="px-3.5 py-3.5 min-w-[160px] border-r border-[#1e456f]">VENDEDOR</th>
-                <th className="px-3.5 py-3.5 min-w-[185px] border-r border-[#1e456f]">
+                <th className="px-3.5 py-3.5 min-w-[140px] text-center border-r border-[#1e456f]">
+                  CPF
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[200px] text-center border-r border-[#1e456f]">
+                  CLIENTE
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[130px] text-center border-r border-[#1e456f]">
+                  FONE
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[160px] text-center border-r border-[#1e456f]">
+                  LOJA
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[160px] text-center border-r border-[#1e456f]">
+                  VENDEDOR
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[185px] text-center border-r border-[#1e456f]">
                   Ocorrências
                 </th>
-                <th className="px-3.5 py-3.5 min-w-[170px] border-r border-[#1e456f]">
+                <th className="px-3.5 py-3.5 min-w-[170px] text-center border-r border-[#1e456f]">
                   Data Promessa de Pagto
                 </th>
-                <th className="px-3.5 py-3.5 min-w-[240px]">Comentários</th>
+                <th className="px-3.5 py-3.5 min-w-[240px] text-center">Comentários</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E3E9F2]">

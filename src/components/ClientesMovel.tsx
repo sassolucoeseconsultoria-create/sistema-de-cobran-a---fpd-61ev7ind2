@@ -517,25 +517,37 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
             <thead className="sticky top-0 z-20 bg-[#12365A] text-white shadow-sm font-semibold tracking-wider uppercase text-[11px]">
               <tr>
                 <th className="px-3 py-3.5 text-center w-12 border-r border-[#1e456f]">#</th>
-                <th className="px-3.5 py-3.5 min-w-[130px] border-r border-[#1e456f]">Número</th>
-                <th className="px-3.5 py-3.5 min-w-[140px] border-r border-[#1e456f]">CPF</th>
-                <th className="px-3.5 py-3.5 min-w-[200px] border-r border-[#1e456f]">Nome</th>
-                <th className="px-3.5 py-3.5 min-w-[170px] border-r border-[#1e456f]">Vendedor</th>
-                <th className="px-3.5 py-3.5 min-w-[170px] border-r border-[#1e456f]">Local</th>
-                <th className="px-3.5 py-3.5 min-w-[110px] border-r border-[#1e456f]">Status</th>
+                <th className="px-3.5 py-3.5 min-w-[130px] text-center border-r border-[#1e456f]">
+                  Número
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[140px] text-center border-r border-[#1e456f]">
+                  CPF
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[200px] text-center border-r border-[#1e456f]">
+                  Nome
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[170px] text-center border-r border-[#1e456f]">
+                  Vendedor
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[170px] text-center border-r border-[#1e456f]">
+                  Local
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[110px] text-center border-r border-[#1e456f]">
+                  Status
+                </th>
                 <th className="px-3.5 py-3.5 min-w-[110px] text-center border-r border-[#1e456f]">
                   Adimplente
                 </th>
                 <th className="px-3.5 py-3.5 min-w-[120px] text-center border-r border-[#1e456f]">
                   Maior atraso
                 </th>
-                <th className="px-3.5 py-3.5 min-w-[185px] border-r border-[#1e456f]">
+                <th className="px-3.5 py-3.5 min-w-[185px] text-center border-r border-[#1e456f]">
                   Ocorrências
                 </th>
-                <th className="px-3.5 py-3.5 min-w-[170px] border-r border-[#1e456f]">
+                <th className="px-3.5 py-3.5 min-w-[170px] text-center border-r border-[#1e456f]">
                   Data Promessa de Pagto
                 </th>
-                <th className="px-3.5 py-3.5 min-w-[240px]">Comentários</th>
+                <th className="px-3.5 py-3.5 min-w-[240px] text-center">Comentários</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E3E9F2]">
