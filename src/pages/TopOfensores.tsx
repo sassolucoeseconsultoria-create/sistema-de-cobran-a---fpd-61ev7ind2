@@ -368,8 +368,9 @@ export const TopOfensores: React.FC = () => {
         {/* Card 1: Principais Ofensores */}
         <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82]">
-              Principais Ofensores
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82] flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+              <span>Principais Ofensores</span>
             </p>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-bold text-[#DC2626] tabular-nums">
@@ -381,15 +382,16 @@ export const TopOfensores: React.FC = () => {
             </div>
           </div>
           <div className="w-10 h-10 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">
-            <Flame className="w-5 h-5" />
+            <AlertTriangle className="w-5 h-5 text-red-600" />
           </div>
         </div>
 
         {/* Card 2: Total de Linhas nos Principais Ofensores */}
         <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82]">
-              {rankingCardLabel}
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82] flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+              <span>{rankingCardLabel}</span>
             </p>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-bold text-[#12365A] tabular-nums">
@@ -398,8 +400,8 @@ export const TopOfensores: React.FC = () => {
               <span className="text-xs text-[#5B6B82]">linhas</span>
             </div>
           </div>
-          <div className="w-10 h-10 rounded-lg bg-[#0E9F8A]/10 text-[#0E9F8A] flex items-center justify-center">
-            <TrendingDown className="w-5 h-5 text-red-500" />
+          <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+            <AlertTriangle className="w-5 h-5 text-amber-600" />
           </div>
         </div>
 
@@ -422,8 +424,9 @@ export const TopOfensores: React.FC = () => {
         {/* Card 4: Maior Ofensor (#1) */}
         <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div className="min-w-0 flex-1 mr-2">
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82]">
-              Maior Ofensor (#1)
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82] flex items-center gap-1.5">
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+              <span>Maior Ofensor (#1)</span>
             </p>
             <div className="mt-1">
               <p
@@ -440,8 +443,8 @@ export const TopOfensores: React.FC = () => {
               )}
             </div>
           </div>
-          <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-            <AlertTriangle className="w-5 h-5" />
+          <div className="w-12 h-12 rounded-xl bg-amber-50 border border-amber-200/60 text-amber-600 flex items-center justify-center shrink-0 shadow-xs">
+            <AlertTriangle className="w-7 h-7" />
           </div>
         </div>
       </div>
@@ -449,13 +452,14 @@ export const TopOfensores: React.FC = () => {
       {/* Header com título dinâmico e aviso do limite por perfil */}
       <div className="bg-[#F0F5FC] border border-[#D5E2F1] rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-[#12365A]">
         <div className="flex items-start sm:items-center gap-3">
-          <span className="p-2 rounded-lg bg-red-100 text-red-600 shrink-0">
-            <Flame className="w-5 h-5" />
+          <span className="p-2 rounded-lg bg-amber-100 text-amber-600 shrink-0">
+            <AlertTriangle className="w-5 h-5" />
           </span>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base sm:text-lg font-bold text-[#12365A] tracking-tight">
-                {rankingTitle}
+              <h2 className="text-base sm:text-lg font-bold text-[#12365A] tracking-tight flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+                <span>{rankingTitle}</span>
               </h2>
               <Badge
                 variant="outline"
@@ -492,10 +496,13 @@ export const TopOfensores: React.FC = () => {
             <p className="font-bold text-sm text-amber-900">
               Nenhuma loja vinculada ao seu usuário Gerente
             </p>
-            <p className="text-amber-800">
-              Seu perfil de Gerente ainda não possui uma loja vinculada pelo Administrador. Para
-              visualizar o ranking dos 3 principais ofensores da sua loja, solicite a vinculação da
-              sua loja à equipe administradora.
+            <p className="text-amber-800 flex items-center gap-1.5 flex-wrap">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-700 shrink-0 inline-block" />
+              <span>
+                Seu perfil de Gerente ainda não possui uma loja vinculada pelo Administrador. Para
+                visualizar o ranking dos 3 principais ofensores da sua loja, solicite a vinculação
+                da sua loja à equipe administradora.
+              </span>
             </p>
           </div>
         </div>
@@ -506,11 +513,12 @@ export const TopOfensores: React.FC = () => {
         <div className="bg-gradient-to-r from-[#12365A] to-[#1a4a7a] text-white rounded-2xl p-6 sm:p-8 shadow-lg flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="space-y-2 text-center md:text-left">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/20 text-red-300 text-xs font-semibold tracking-wider uppercase border border-red-400/30">
-              <Flame className="w-3.5 h-3.5 text-red-400" />
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
               <span>Ranking dos {rankingLimit} Principais Ofensores</span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-bold">
-              Nenhum dado importado para o ranking de ofensores
+            <h2 className="text-xl sm:text-2xl font-bold flex items-center gap-2 flex-wrap">
+              <AlertTriangle className="w-6 h-6 text-amber-400 shrink-0 inline-block" />
+              <span>Nenhum dado importado para o ranking de ofensores</span>
             </h2>
             <p className="text-sm text-slate-200 max-w-xl">
               Importe as planilhas <span className="text-white font-semibold">.xlsx</span> das lojas
@@ -629,6 +637,7 @@ export const TopOfensores: React.FC = () => {
               variant="outline"
               className="h-9 border-[#E3E9F2] text-[#12365A] hover:bg-[#F3F6FA] font-medium text-xs sm:text-sm gap-2"
             >
+              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
               <Download className="w-4 h-4 text-[#0E9F8A]" />
               <span>Exportar Principais Ofensores (.xlsx)</span>
             </Button>
@@ -647,7 +656,10 @@ export const TopOfensores: React.FC = () => {
                 </th>
                 {/* A - VENDEDOR (Sticky left) */}
                 <th className="sticky left-0 z-30 bg-[#12365A] px-3.5 py-3.5 min-w-[200px] text-center border-r border-[#1e456f]">
-                  VENDEDOR OFENSOR
+                  <div className="flex items-center justify-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>VENDEDOR OFENSOR</span>
+                  </div>
                 </th>
                 {/* B - LOJA */}
                 <th className="px-3 py-3.5 min-w-[150px] text-center border-r border-[#1e456f]">
@@ -659,7 +671,10 @@ export const TopOfensores: React.FC = () => {
                 </th>
                 {/* D - TOTAL LINHAS */}
                 <th className="px-3 py-3.5 min-w-[120px] text-center border-r border-[#1e456f] bg-red-950/80 text-red-200">
-                  TOTAL LINHAS (OFENSORES)
+                  <div className="flex items-center justify-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>TOTAL LINHAS (OFENSORES)</span>
+                  </div>
                 </th>
                 {/* E–M Status Columns with uniform 130px width and colored headers */}
                 {FPD_STATUSES.map((status) => (
@@ -685,7 +700,10 @@ export const TopOfensores: React.FC = () => {
                   <td colSpan={13} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-6 h-6 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
-                      <span>Carregando ranking de ofensores...</span>
+                      <span className="flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                        <span>Carregando ranking de ofensores...</span>
+                      </span>
                     </div>
                   </td>
                 </tr>
@@ -694,11 +712,14 @@ export const TopOfensores: React.FC = () => {
                   <td colSpan={13} className="py-12 text-center text-[#5B6B82]">
                     {' '}
                     <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
-                      <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
-                      <p className="font-medium text-[#12365A]">
-                        {userAccess.hasNoStoreAssigned
-                          ? 'Nenhuma loja vinculada ao seu usuário'
-                          : 'Nenhum ofensor encontrado'}
+                      <AlertTriangle className="w-8 h-8 text-amber-500" />
+                      <p className="font-medium text-[#12365A] flex items-center justify-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                        <span>
+                          {userAccess.hasNoStoreAssigned
+                            ? 'Nenhuma loja vinculada ao seu usuário'
+                            : 'Nenhum ofensor encontrado'}
+                        </span>
                       </p>
                       <p className="text-xs text-[#5B6B82]">
                         {userAccess.hasNoStoreAssigned

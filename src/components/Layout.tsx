@@ -210,7 +210,13 @@ export const Layout: React.FC = () => {
                     collapsed && 'justify-center px-0',
                   )}
                 >
-                  <Icon className="w-5 h-5 shrink-0 text-slate-500" />
+                  <Icon
+                    className={cn(
+                      item.to === '/top-ofensores'
+                        ? 'w-6 h-6 shrink-0 text-slate-500'
+                        : 'w-5 h-5 shrink-0 text-slate-500',
+                    )}
+                  />
                   {(!collapsed || mobileOpen) && (
                     <div className="flex items-center justify-between gap-2 flex-1 min-w-0">
                       <span className="truncate line-through decoration-slate-500/60">
@@ -262,8 +268,14 @@ export const Layout: React.FC = () => {
                 )}
                 <Icon
                   className={cn(
-                    'w-5 h-5 shrink-0 transition-colors',
-                    isActive ? 'text-[#0E9F8A]' : 'text-slate-400 group-hover:text-white',
+                    item.to === '/top-ofensores'
+                      ? 'w-6 h-6 shrink-0 transition-colors'
+                      : 'w-5 h-5 shrink-0 transition-colors',
+                    isActive
+                      ? item.to === '/top-ofensores'
+                        ? 'text-amber-400'
+                        : 'text-[#0E9F8A]'
+                      : 'text-slate-400 group-hover:text-white',
                   )}
                 />
                 {(!collapsed || mobileOpen) && <span className="truncate">{item.label}</span>}
@@ -344,7 +356,10 @@ export const Layout: React.FC = () => {
             </button>
             <div>
               <h1 className="text-lg sm:text-xl font-bold text-[#12233A] tracking-tight leading-tight">
-                {pageInfo.title}
+                {location.pathname === '/top-ofensores' && (
+                  <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-amber-500 inline-block mr-2 align-middle shrink-0" />
+                )}
+                <span>{pageInfo.title}</span>
               </h1>
               <p className="hidden sm:block text-xs text-[#5B6B82]">{pageInfo.subtitle}</p>
             </div>
