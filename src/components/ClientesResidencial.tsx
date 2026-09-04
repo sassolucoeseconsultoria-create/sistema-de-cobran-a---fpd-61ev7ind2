@@ -136,29 +136,38 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
           filterParts.push(storeClause)
         }
       } else if (!userAccess.isAdm) {
-        // User is not ADM and has "TODAS" selected -> filter by all allowed stores
-        if (availableLojas.length > 0) {
-          const expandedStoreNames = new Set<string>()
-          for (const l of availableLojas) {
-            if (!l || !l.trim()) continue
-            const variants = getStoreVariants(l)
-            variants.forEach((v) => expandedStoreNames.add(v))
-          }
+        // Se usuário não é ADM e TODAS está selecionado, filtrar por todas as lojas permitidas
+        const expandedStoreNames = new Set<string>()
 
+        // 1. Variantes das lojas em availableLojas
+        for (const l of availableLojas) {
+          if (!l || !l.trim()) continue
+          const variants = getStoreVariants(l)
+          variants.forEach((v) => expandedStoreNames.add(v))
+        }
+
+        // 2. Variantes das lojas oficiais vinculadas ao perfil
+        const allowedOfficialStores = stores.filter((s) => userAccess.isStoreIdAllowed(s.id))
+        for (const s of allowedOfficialStores) {
+          if (!s.name || !s.name.trim()) continue
+          const variants = getStoreVariants(s.name)
+          variants.forEach((v) => expandedStoreNames.add(v))
+        }
+
+        if (expandedStoreNames.size > 0) {
           const storeFilters = Array.from(expandedStoreNames).map(
             (l) => `loja = "${l.replace(/"/g, '\\"')}"`,
           )
-          if (storeFilters.length > 0) {
-            filterParts.push(`(${storeFilters.join(' || ')})`)
-          }
+          filterParts.push(`(${storeFilters.join(' || ')})`)
         } else {
-          // No allowed store names identified
+          // Nenhuma loja permitida encontrada para o perfil
           setRecords([])
           setTotalItems(0)
           setTotalPages(1)
           return
         }
       }
+      // Se userAccess.isAdm e selectedLoja === 'TODAS', não filtra por loja no backend => traz todas as lojas
 
       if (debouncedSearch.trim()) {
         const s = debouncedSearch.trim().replace(/"/g, '\\"')
@@ -183,12 +192,12 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
         requestKey: null,
       })
 
-      // If non-ADM, only retain records whose store is allowed
+      // Se não é ADM, reter apenas os registros das lojas permitidas
       let filteredItems = userAccess.isAdm
         ? res.items
         : res.items.filter((item) => userAccess.isStoreNameAllowed(item.loja, stores))
 
-      // Extra safeguard: if a specific store is selected, ensure every returned item strictly matches it
+      // Salvaguarda exclusiva para quando uma loja ESPECÍFICA está selecionada
       if (selectedLoja && selectedLoja !== 'TODAS') {
         filteredItems = filteredItems.filter((item) => {
           return isSameStore(item.loja, selectedLoja)
@@ -197,6 +206,7 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
 
       setRecords(filteredItems)
 
+      // Total de itens: quando TODAS está selecionado, totalItems é a soma exata vinda do backend
       let accurateTotal = res.totalItems
       if (selectedLoja && selectedLoja !== 'TODAS' && filteredItems.length === 0 && page === 1) {
         accurateTotal = 0

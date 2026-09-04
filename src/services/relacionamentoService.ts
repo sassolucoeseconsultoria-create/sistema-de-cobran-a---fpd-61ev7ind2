@@ -259,25 +259,30 @@ export async function fetchDistinctAnalyticalLojas(): Promise<string[]> {
 
   const fetchPromise = (async () => {
     try {
-      // Query first page with max batch to avoid 429
       const [recordsMovel, recordsResidencial] = await Promise.all([
-        pb.collection('movel').getList<MovelRecord>(1, 200, {
-          fields: 'loja',
-          sort: 'loja',
-          requestKey: null,
-        }),
-        pb.collection('residencial').getList<ResidencialRecord>(1, 200, {
-          fields: 'loja',
-          sort: 'loja',
-          requestKey: null,
-        }),
+        pb
+          .collection('movel')
+          .getFullList<MovelRecord>({
+            fields: 'loja',
+            sort: 'loja',
+            requestKey: null,
+          })
+          .catch(() => []),
+        pb
+          .collection('residencial')
+          .getFullList<ResidencialRecord>({
+            fields: 'loja',
+            sort: 'loja',
+            requestKey: null,
+          })
+          .catch(() => []),
       ])
 
       const lojasSet = new Set<string>()
-      for (const r of recordsMovel.items) {
+      for (const r of recordsMovel) {
         if (r.loja && r.loja.trim()) lojasSet.add(r.loja.trim())
       }
-      for (const r of recordsResidencial.items) {
+      for (const r of recordsResidencial) {
         if (r.loja && r.loja.trim()) lojasSet.add(r.loja.trim())
       }
 

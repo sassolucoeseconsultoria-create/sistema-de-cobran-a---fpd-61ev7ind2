@@ -23,6 +23,11 @@ vi.mock('@/services/relacionamentoService', () => {
     insertMovelBatch: vi.fn(),
     insertResidencialBatch: vi.fn(),
     invalidateAnalyticalCache: vi.fn(),
+    clearAllAnalyticalRows: vi.fn().mockResolvedValue({
+      success: true,
+      movelCount: 10,
+      residencialCount: 5,
+    }),
   }
 })
 
@@ -62,104 +67,109 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
     refreshAuth: vi.fn(),
   })
 
+  let mockMovelGetList: any
+  let mockResidencialGetList: any
+
   beforeEach(() => {
     vi.clearAllMocks()
     vi.spyOn(AuthContext, 'useAuth').mockReturnValue(createMockAuth())
 
-    // Mock collection getList and getFullList
-    const mockMovel = {
-      getList: vi.fn().mockImplementation((page, perPage, options) => {
-        const filter = options?.filter || ''
-        // If filter is specific to a loja without records (e.g. CELNET PLANALTINA GO or 0 records)
-        if (filter.includes('CELNET PLANALTINA GO')) {
-          return Promise.resolve({
-            items: [],
-            totalItems: 0,
-            totalPages: 1,
-            page: 1,
-            perPage: 25,
-          })
-        }
-        if (filter.includes('CELNET AGUAS CLARA')) {
-          return Promise.resolve({
-            items: [
-              {
-                id: 'm1',
-                linha: 2,
-                loja: 'CELNET AGUAS CLARA',
-                cliente: 'Cliente Teste Aguas',
-                vendedor: 'Vendedor Teste',
-                ocorrencias: 'Não Tratados',
-                dados: {},
-              },
-            ],
-            totalItems: 15,
-            totalPages: 1,
-            page: 1,
-            perPage: 25,
-          })
-        }
-        // Total global or default
+    mockMovelGetList = vi.fn().mockImplementation((page, perPage, options) => {
+      const filter = options?.filter || ''
+      if (filter.includes('CELNET PLANALTINA GO')) {
+        return Promise.resolve({
+          items: [],
+          totalItems: 0,
+          totalPages: 1,
+          page: 1,
+          perPage: 25,
+        })
+      }
+      if (filter.includes('CELNET AGUAS CLARA')) {
         return Promise.resolve({
           items: [
             {
-              id: 'm2',
-              linha: 1,
-              loja: 'CELNET MATRIZ PLANALTINA DF',
-              cliente: 'Cliente Planaltina',
-              vendedor: 'Vendedor 2',
+              id: 'm1',
+              linha: 2,
+              loja: 'CELNET AGUAS CLARA',
+              cliente: 'Cliente Teste Aguas',
+              vendedor: 'Vendedor Teste',
               ocorrencias: 'Não Tratados',
               dados: {},
             },
           ],
-          totalItems: 147,
-          totalPages: 6,
+          totalItems: 15,
+          totalPages: 1,
           page: 1,
           perPage: 25,
         })
-      }),
+      }
+      // Total global / TODAS
+      return Promise.resolve({
+        items: [
+          {
+            id: 'm2',
+            linha: 1,
+            loja: 'CELNET MATRIZ PLANALTINA DF',
+            cliente: 'Cliente Planaltina',
+            vendedor: 'Vendedor 2',
+            ocorrencias: 'Não Tratados',
+            dados: {},
+          },
+        ],
+        totalItems: 147,
+        totalPages: 6,
+        page: 1,
+        perPage: 25,
+      })
+    })
+
+    mockResidencialGetList = vi.fn().mockImplementation((page, perPage, options) => {
+      const filter = options?.filter || ''
+      if (filter.includes('CELNET PLANALTINA GO')) {
+        return Promise.resolve({
+          items: [],
+          totalItems: 0,
+          totalPages: 1,
+          page: 1,
+          perPage: 25,
+        })
+      }
+      if (filter.includes('CELNET AGUAS CLARA')) {
+        return Promise.resolve({
+          items: [
+            {
+              id: 'r1',
+              linha: 2,
+              loja: 'CELNET AGUAS CLARA',
+              cliente: 'Cliente Residencial Aguas',
+              vendedor: 'Vendedor Res',
+              ocorrencias: 'Fatura(s) Paga(s)',
+              dados: {},
+            },
+          ],
+          totalItems: 6,
+          totalPages: 1,
+          page: 1,
+          perPage: 25,
+        })
+      }
+      return Promise.resolve({
+        items: [],
+        totalItems: 98,
+        totalPages: 4,
+        page: 1,
+        perPage: 25,
+      })
+    })
+
+    const mockMovel = {
+      getList: mockMovelGetList,
       getFullList: vi.fn().mockResolvedValue([]),
     }
 
     const mockResidencial = {
-      getList: vi.fn().mockImplementation((page, perPage, options) => {
-        const filter = options?.filter || ''
-        if (filter.includes('CELNET PLANALTINA GO')) {
-          return Promise.resolve({
-            items: [],
-            totalItems: 0,
-            totalPages: 1,
-            page: 1,
-            perPage: 25,
-          })
-        }
-        if (filter.includes('CELNET AGUAS CLARA')) {
-          return Promise.resolve({
-            items: [
-              {
-                id: 'r1',
-                linha: 2,
-                loja: 'CELNET AGUAS CLARA',
-                cliente: 'Cliente Residencial Aguas',
-                vendedor: 'Vendedor Res',
-                ocorrencias: 'Fatura(s) Paga(s)',
-                dados: {},
-              },
-            ],
-            totalItems: 6,
-            totalPages: 1,
-            page: 1,
-            perPage: 25,
-          })
-        }
-        return Promise.resolve({
-          items: [],
-          totalItems: 98,
-          totalPages: 4,
-          page: 1,
-          perPage: 25,
-        })
-      }),
+      getList: mockResidencialGetList,
       getFullList: vi.fn().mockResolvedValue([]),
     }
 
@@ -208,7 +218,6 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
   })
 
   it('mostra 0 nos badges e estado vazio quando loja não possui registros', async () => {
-    // Add a store with 0 records to distinct analytical lojas
     const { fetchDistinctAnalyticalLojas } = await import('@/services/relacionamentoService')
     vi.mocked(fetchDistinctAnalyticalLojas).mockResolvedValueOnce([
       'CELNET AGUAS CLARA',
@@ -238,5 +247,32 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
     await waitFor(() => {
       expect(screen.getByText(/nenhum cliente móvel encontrado/i)).toBeDefined()
     })
+  })
+
+  it('queries all records without store filter when ADM has TODAS selected', async () => {
+    render(<Relacionamento />)
+
+    await waitFor(() => {
+      expect(mockMovelGetList).toHaveBeenCalledWith(
+        1,
+        1,
+        expect.objectContaining({
+          filter: undefined,
+        }),
+      )
+      expect(mockResidencialGetList).toHaveBeenCalledWith(
+        1,
+        1,
+        expect.objectContaining({
+          filter: undefined,
+        }),
+      )
+    })
+
+    // Badges should display the sum of all stores (147 for movel, 98 for residencial)
+    const movelBadges = await screen.findAllByText('147')
+    expect(movelBadges.length).toBeGreaterThan(0)
+    const resBadges = await screen.findAllByText('98')
+    expect(resBadges.length).toBeGreaterThan(0)
   })
 })

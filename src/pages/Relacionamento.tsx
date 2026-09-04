@@ -102,24 +102,34 @@ export const Relacionamento: React.FC = () => {
           filterParts.push(storeClause)
         }
       } else if (!userAccess.isAdm) {
-        if (allowedLojas.length > 0) {
-          const expandedStoreNames = new Set<string>()
-          for (const l of allowedLojas) {
-            if (!l || !l.trim()) continue
-            const variants = getStoreVariants(l)
-            variants.forEach((v) => expandedStoreNames.add(v))
-          }
+        // Se usuário não é ADM e TODAS está selecionado, somar todas as lojas do escopo do perfil
+        const expandedStoreNames = new Set<string>()
 
+        // 1. Variantes das lojas detectadas no banco pertencentes ao perfil
+        for (const l of allowedLojas) {
+          if (!l || !l.trim()) continue
+          const variants = getStoreVariants(l)
+          variants.forEach((v) => expandedStoreNames.add(v))
+        }
+
+        // 2. Variantes das lojas oficiais vinculadas ao perfil
+        const allowedOfficialStores = stores.filter((s) => userAccess.isStoreIdAllowed(s.id))
+        for (const s of allowedOfficialStores) {
+          if (!s.name || !s.name.trim()) continue
+          const variants = getStoreVariants(s.name)
+          variants.forEach((v) => expandedStoreNames.add(v))
+        }
+
+        if (expandedStoreNames.size > 0) {
           const storeFilters = Array.from(expandedStoreNames).map(
             (l) => `loja = "${l.replace(/"/g, '\\"')}"`,
           )
-          if (storeFilters.length > 0) {
-            filterParts.push(`(${storeFilters.join(' || ')})`)
-          }
+          filterParts.push(`(${storeFilters.join(' || ')})`)
         } else {
           return '__NO_ACCESS__'
         }
       }
+      // Se userAccess.isAdm e loja === 'TODAS', não adiciona cláusula de loja => soma todas as lojas da base
 
       if (selectedDataReferencia && selectedDataReferencia !== 'TODAS') {
         const escapedRef = selectedDataReferencia.replace(/"/g, '\\"')
