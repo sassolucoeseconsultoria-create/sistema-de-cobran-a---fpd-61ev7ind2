@@ -93,8 +93,9 @@ describe('analyticalImportParser', () => {
     const ws = XLSX.utils.aoa_to_sheet(rows)
     const parsed = parseAnalyticalWorksheet(ws, 'Residencial', 'residencial')
 
+    // Linha 2 com célula vazia na coluna de ocorrências deve ser EXPURGADA (não aparece em nenhuma categoria)
+    expect(parsed.rows).toHaveLength(2)
     expect(parsed.rows[0].ocorrencias).toBe('Texto livre preenchido na loja')
-    expect(parsed.rows[1].ocorrencias).toBe('Não Tratados')
-    expect(parsed.rows[2].ocorrencias).toBe('Fatura(s) Paga(s)')
+    expect(parsed.rows[1].ocorrencias).toBe('Fatura(s) Paga(s)')
   })
 })

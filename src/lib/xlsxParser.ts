@@ -826,13 +826,13 @@ export function findValidatedStatusColumnIndex(
 /**
  * Classifies the cell value of a dedicated occurrences/status column.
  * Rules:
- * 1. Empty/blank -> 'nao_tratados'
+ * 1. Empty/blank -> null (expurgada das quantidades)
  * 2. Matches official categories -> category key
  * 3. Does not match -> fallback to classifyRow(norm) or 'nao_tratados'
  */
-export function classifyStatusCell(cellVal: unknown): FpdStatusKey {
+export function classifyStatusCell(cellVal: unknown): FpdStatusKey | null {
   const norm = normalizeText(cellVal)
-  if (!norm) return 'nao_tratados'
+  if (!norm) return null
 
   // Exact/priority checks
   // 1. Enviado fatura: "enviad", "envio", "2 via", "2a via"
@@ -922,21 +922,21 @@ export function classifyStatusCell(cellVal: unknown): FpdStatusKey {
 /**
  * Checks if a cell value matches any official canonical category.
  * If yes, returns the canonical label.
- * If empty/blank, returns "Não Tratados".
- * If not matching any official category, returns null (so the original raw text can be used).
+ * If empty/blank, returns "" (empty string: expurgada).
+ * If not matching any official category, returns the original raw text (trimmed).
  */
 export function getCanonicalCategoryOrRaw(cellVal: unknown): string {
   if (cellVal === null || cellVal === undefined) {
-    return 'Não Tratados'
+    return ''
   }
   const originalStr = String(cellVal).trim()
   if (!originalStr) {
-    return 'Não Tratados'
+    return ''
   }
 
   const norm = normalizeText(originalStr)
   if (!norm) {
-    return 'Não Tratados'
+    return ''
   }
 
   // Check official categories
@@ -1340,20 +1340,27 @@ export function parseWorksheet(
       continue
     }
 
-    let category: FpdStatusKey
+    let category: FpdStatusKey | null
     if (statusColIndex >= 0) {
       // Status column identified: classify exclusively by this column's cell value
-      // Empty -> 'nao_tratados'; never scan other cells across the row.
+      // Empty/blank -> EXPURGADA (não deve ser contada em nenhuma categoria nem gerar ocorrência)
       const rawStatusCell = statusColIndex < row.length ? row[statusColIndex] : ''
       const normalizedStatusCell = normalizeText(rawStatusCell)
       if (!normalizedStatusCell) {
-        category = 'nao_tratados'
+        category = null
       } else {
         category = classifyStatusCell(normalizedStatusCell)
       }
     } else {
-      // Fallback when no status column detected at all
+      // Fallback when no status column detected at all:
+      // Try classifying across the whole row; if completely empty/unmatched, it falls back to 'nao_tratados'
       category = 'nao_tratados'
+    }
+
+    // Se a célula de ocorrências estiver vazia (category === null),
+    // a linha é EXPURGADA das quantidades (não incrementa nenhuma categoria nem vendorLines nem totalRows)
+    if (!category) {
+      continue
     }
 
     // Determine quantity for this row:

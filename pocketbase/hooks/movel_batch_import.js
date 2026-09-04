@@ -28,6 +28,12 @@ routerAdd(
       for (let i = 0; i < items.length; i++) {
         const item = items[i] || {}
         try {
+          // Se ocorrência vazia ou explicitamente ignorada/expurgada, não grava no banco
+          const ocorrenciaStr = item.ocorrencias ? String(item.ocorrencias).trim() : ''
+          if (!ocorrenciaStr) {
+            continue
+          }
+
           const record = new Record(colMovel)
           record.set('arquivo', item.arquivo ? String(item.arquivo).trim() : '')
           if (item.linha !== undefined && item.linha !== null) {
@@ -37,10 +43,7 @@ routerAdd(
           record.set('vendedor', item.vendedor ? String(item.vendedor).trim() : '')
           record.set('cliente', item.cliente ? String(item.cliente).trim() : '')
           record.set('dados', item.dados && typeof item.dados === 'object' ? item.dados : {})
-          record.set(
-            'ocorrencias',
-            item.ocorrencias ? String(item.ocorrencias).trim() : 'Não Tratados',
-          )
+          record.set('ocorrencias', ocorrenciaStr)
           if (item.data_promessa_de_pagto) {
             record.set('data_promessa_de_pagto', String(item.data_promessa_de_pagto).trim())
           }

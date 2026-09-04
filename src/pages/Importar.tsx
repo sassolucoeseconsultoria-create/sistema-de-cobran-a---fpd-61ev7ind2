@@ -432,7 +432,8 @@ export const Importar: React.FC = () => {
             <p>
               As ocorrências são agrupadas nos status do consolidado: Fatura(s) Paga(s), Enviado
               Fatura(s), Promessa de Pagto., Sem Contato, Cancelados, Pendente, Contato Realizado e
-              Não Tratados.
+              Não Tratados. Célula vazia na coluna Ocorrências é ignorada nas quantidades (não entra
+              em nenhuma categoria).
             </p>
           </div>
           <div className="p-3 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] space-y-1">

@@ -425,7 +425,7 @@ export const Relacionamento: React.FC = () => {
               cliente: r.cliente,
               dados: r.dados,
               data_referencia: fileRefDate,
-              ocorrencias: r.ocorrencias || 'Não Tratados',
+              ocorrencias: r.ocorrencias,
             }
           })
 
@@ -468,7 +468,7 @@ export const Relacionamento: React.FC = () => {
               dados: r.dados,
               data_referencia: fileRefDate,
               typedFields: r.typedFields,
-              ocorrencias: r.ocorrencias || 'Não Tratados',
+              ocorrencias: r.ocorrencias,
             }
           })
 
@@ -625,9 +625,9 @@ export const Relacionamento: React.FC = () => {
               : 'Visualização de Clientes em Tratamento'}
           </p>
           <p className="text-[#5B6B82]">
-            Total de Clientes em tratamento analítico (linhas únicas). Para total de
-            ocorrências/faturas por loja, consulte o <strong>Painel de Lojas</strong> (fonte da
-            verdade).
+            Total de Clientes em tratamento analítico (linhas únicas). Célula vazia na coluna
+            Ocorrências é ignorada nas quantidades. Para total de ocorrências/faturas por loja,
+            consulte o <strong>Painel de Lojas</strong> (fonte da verdade).
           </p>
         </div>
       </div>
@@ -851,7 +851,8 @@ export const Relacionamento: React.FC = () => {
             </div>
             <DialogDescription className="text-xs text-[#5B6B82]">
               As abas correspondentes serão identificadas automaticamente e inseridas nas tabelas
-              analíticas <strong>Móvel</strong> e <strong>Residencial</strong>.
+              analíticas <strong>Móvel</strong> e <strong>Residencial</strong>. Linhas com célula
+              vazia na coluna Ocorrências são ignoradas nas quantidades.
             </DialogDescription>
           </DialogHeader>
 

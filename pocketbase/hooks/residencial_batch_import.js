@@ -80,6 +80,12 @@ routerAdd(
       for (let i = 0; i < items.length; i++) {
         const item = items[i] || {}
         try {
+          // Se ocorrência vazia ou explicitamente ignorada/expurgada, não grava no banco
+          const ocorrenciaStr = item.ocorrencias ? String(item.ocorrencias).trim() : ''
+          if (!ocorrenciaStr) {
+            continue
+          }
+
           const record = new Record(colResidencial)
           record.set('arquivo', item.arquivo ? String(item.arquivo).trim() : '')
           if (item.linha !== undefined && item.linha !== null) {
@@ -103,11 +109,7 @@ routerAdd(
             }
           }
 
-          // Ensure default ocorrencias is 'Não Tratados' if empty
-          const currentOcorr = record.getString('ocorrencias')
-          if (!currentOcorr || currentOcorr.trim() === '' || currentOcorr === 'Pendente') {
-            record.set('ocorrencias', 'Não Tratados')
-          }
+          record.set('ocorrencias', ocorrenciaStr)
 
           txApp.save(record)
           inserted++

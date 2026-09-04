@@ -799,8 +799,9 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     // getCanonicalCategoryOrRaw directly
     expect(getCanonicalCategoryOrRaw('FATURA PAGA')).toBe('Fatura(s) Paga(s)')
     expect(getCanonicalCategoryOrRaw('Enviado 2a via')).toBe('Enviado Fatura(s)')
-    expect(getCanonicalCategoryOrRaw('  ')).toBe('Não Tratados')
-    expect(getCanonicalCategoryOrRaw(null)).toBe('Não Tratados')
+    // Célula vazia ou nula retorna "" (expurgada)
+    expect(getCanonicalCategoryOrRaw('  ')).toBe('')
+    expect(getCanonicalCategoryOrRaw(null)).toBe('')
     expect(getCanonicalCategoryOrRaw('Cliente solicitou contestação de valores')).toBe(
       'Cliente solicitou contestação de valores',
     )
@@ -809,6 +810,7 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     )
 
     // Spreadsheet import through parseAnalyticalWorksheet
+    // Linha C com célula vazia deve ser expurgada (não entra em nenhuma categoria)
     const customHeader = ['LOJA', 'CLIENTE', 'OCORRÊNCIAS', 'VENDEDOR']
     const customRows = [
       ['CELNET LOJA 1', 'CLIENTE A', 'Cliente em viagem até dia 20', 'VEND 1'],
@@ -819,10 +821,51 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     const ws = XLSX.utils.aoa_to_sheet([customHeader, ...customRows])
     const parsed = parseAnalyticalWorksheet(ws, 'Móvel', 'movel')
 
+    expect(parsed.rows).toHaveLength(3)
     expect(parsed.rows[0].ocorrencias).toBe('Cliente em viagem até dia 20')
     expect(parsed.rows[1].ocorrencias).toBe('Reclamação Anatel em andamento')
-    expect(parsed.rows[2].ocorrencias).toBe('Não Tratados')
-    expect(parsed.rows[3].ocorrencias).toBe('Fatura(s) Paga(s)')
+    expect(parsed.rows[2].ocorrencias).toBe('Fatura(s) Paga(s)')
+  })
+
+  it('regression test: empty cell in occurrences column must be purged (expurgada) from counts', async () => {
+    const { classifyStatusCell, getCanonicalCategoryOrRaw, parseWorksheet } =
+      await import('@/lib/xlsxParser')
+    const { parseAnalyticalWorksheet } = await import('@/lib/analyticalImportParser')
+
+    // 1. classifyStatusCell must return null for empty/blank values
+    expect(classifyStatusCell('')).toBeNull()
+    expect(classifyStatusCell('   ')).toBeNull()
+    expect(classifyStatusCell(null)).toBeNull()
+    expect(classifyStatusCell(undefined)).toBeNull()
+
+    // 2. getCanonicalCategoryOrRaw must return empty string "" for empty/blank values
+    expect(getCanonicalCategoryOrRaw('')).toBe('')
+    expect(getCanonicalCategoryOrRaw('   ')).toBe('')
+    expect(getCanonicalCategoryOrRaw(null)).toBe('')
+    expect(getCanonicalCategoryOrRaw(undefined)).toBe('')
+
+    // 3. parseWorksheet should purge empty occurrences lines from all counts
+    const header = ['LOJA', 'CLIENTE', 'OCORRÊNCIAS', 'VENDEDOR']
+    const data = [
+      ['CELNET CENTRO', 'CLIENTE 1', 'FATURA PAGA', 'VEND 1'],
+      ['CELNET CENTRO', 'CLIENTE 2', '', 'VEND 2'], // vazia -> expurgada
+      ['CELNET CENTRO', 'CLIENTE 3', '   ', 'VEND 3'], // em branco -> expurgada
+      ['CELNET CENTRO', 'CLIENTE 4', 'ENVIADO FATURA', 'VEND 4'],
+    ]
+    const ws = XLSX.utils.aoa_to_sheet([header, ...data])
+    const counts = parseWorksheet(ws, 'Móvel', 'movel')
+
+    expect(counts.fatura_paga).toBe(1)
+    expect(counts.envio_fatura).toBe(1)
+    expect(counts.nao_tratados).toBe(0) // NENHUM em Não Tratados
+    expect(counts.totalRows).toBe(2) // Apenas 2 linhas contabilizadas
+    expect(counts.totalLinesCount).toBe(2)
+    expect(counts.vendorLines).toHaveLength(2)
+
+    // 4. parseAnalyticalWorksheet should purge empty occurrences lines from rows
+    const parsedAnalytical = parseAnalyticalWorksheet(ws, 'Móvel', 'movel')
+    expect(parsedAnalytical.rows).toHaveLength(2)
+    expect(parsedAnalytical.rows.map((r) => r.cliente)).toEqual(['CLIENTE 1', 'CLIENTE 4'])
   })
 
   it('regression test: should count exactly 19 fatura_paga, not 20, when spreadsheet has 19 rows with FATURA(S) PAGA(S) in ocorrencias column and loose PAGO/PAGA cells in other columns', () => {
@@ -883,13 +926,13 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
 
     // Expect fatura_paga to be EXACTLY 19, never 20!
     expect(counts.fatura_paga).toBe(19)
-    // 2 empty ocorrencias rows -> nao_tratados = 2
-    expect(counts.nao_tratados).toBe(2)
+    // 2 empty ocorrencias rows -> EXPURGADAS das quantidades (nao_tratados = 0)
+    expect(counts.nao_tratados).toBe(0)
     // 1 enviado fatura -> envio_fatura = 1
     expect(counts.envio_fatura).toBe(1)
-    // Total physical rows: 1 + 1 + 19 + 1 = 22
-    expect(counts.totalRows).toBe(22)
-    expect(counts.totalLinesCount).toBe(22)
+    // Linhas válidas com ocorrências não vazias: 19 + 1 = 20 (as 2 vazias foram expurgadas)
+    expect(counts.totalRows).toBe(20)
+    expect(counts.totalLinesCount).toBe(20)
   })
 
   it('should ensure each analytical row counts as exactly 1 occurrence without multiplying by residual columns', () => {

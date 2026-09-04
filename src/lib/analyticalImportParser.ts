@@ -251,15 +251,21 @@ export function parseAnalyticalWorksheet(
 
     // Determine occurrences classification:
     // Exclusively by the status/occurrences column cell value:
-    // - Vazia -> "Não Tratados"
+    // - Vazia -> EXPURGADA (linha não deve gerar contagem nem registro de ocorrência)
     // - Casa com categoria oficial -> rótulo canônico
     // - Não casa -> texto original da célula (trim)
-    let rowOcorrenciaLabel = 'Não Tratados'
+    let rowOcorrenciaLabel = ''
     if (statusColIndex >= 0 && statusColIndex < row.length) {
       const rawStatusCell = row[statusColIndex]
       rowOcorrenciaLabel = getCanonicalCategoryOrRaw(rawStatusCell)
     } else {
-      rowOcorrenciaLabel = 'Não Tratados'
+      // Se não há coluna de status identificada
+      rowOcorrenciaLabel = ''
+    }
+
+    // Célula vazia na coluna de ocorrências: a linha deve ser expurgada das quantidades / registros analíticos
+    if (!rowOcorrenciaLabel || !rowOcorrenciaLabel.trim()) {
+      continue
     }
 
     rows.push({
