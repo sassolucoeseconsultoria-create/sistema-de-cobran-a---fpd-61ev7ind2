@@ -812,4 +812,93 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     expect(FPD_STATUSES.map((s) => s.label)).toEqual(expectedLabels)
     expect(FPD_STATUSES).toHaveLength(9)
   })
+
+  it('regression test: should count exactly 19 fatura_paga, not 20, when spreadsheet has 19 rows with FATURA(S) PAGA(S) in ocorrencias column and loose PAGO/PAGA cells in other columns', () => {
+    // Header simulating analytical spreadsheet with 'LOJA', 'CLIENTE', 'FATURA', 'PAGO', 'DEVENDO', 'OCORRENCIAS'
+    const headerRow = ['LOJA', 'CLIENTE', 'FATURA', 'PAGO', 'DEVENDO', 'OCORRENCIAS', 'VENDEDOR']
+
+    // Line 1: LOUISE DELITE (row 2 in Excel): ocorrencias is empty (or Em Aberto in fatura column, pago = 0)
+    // loose cells like FATURA = "Em Aberto", PAGO = 0 (or even loose text "PAGO" in other column)
+    // but ocorrencias is EMPTY -> must be nao_tratados, NOT fatura_paga!
+    const rowLouise = [
+      'CELNET AGUAS CLARA',
+      'LOUISE DELITE B DE MATTOS MESQUITA',
+      'Em Aberto',
+      0, // pago = 0
+      1, // devendo = 1
+      '', // ocorrencias is empty
+      'VICTOR GABRIEL CHAVES DO NASCIMENTO',
+    ]
+
+    // Another line with loose 'PAGO' in column FATURA, but ocorrencias is empty
+    const rowLoosePago = [
+      'CELNET AGUAS CLARA',
+      'CLIENTE TESTE COM PAGO EM OUTRA COLUNA',
+      'PAGO',
+      100,
+      0,
+      '', // ocorrencias is empty
+      'VICTOR GABRIEL CHAVES DO NASCIMENTO',
+    ]
+
+    // 19 rows with "FATURA(S) PAGA(S)" explicitly in the OCORRENCIAS column
+    const rows19FaturaPaga = Array(19)
+      .fill(null)
+      .map((_, idx) => [
+        'CELNET AGUAS CLARA',
+        `CLIENTE PAGO ${idx + 1}`,
+        'Quitado',
+        1,
+        0,
+        'FATURA(S) PAGA(S)',
+        'VENDEDOR TESTE',
+      ])
+
+    // Additional row with other status in ocorrencias column
+    const rowEnviado = [
+      'CELNET AGUAS CLARA',
+      'CLIENTE ENVIADO',
+      'Em Aberto',
+      0,
+      1,
+      'ENVIADO FATURA(S)',
+      'VENDEDOR TESTE',
+    ]
+
+    const allRows = [headerRow, rowLouise, rowLoosePago, ...rows19FaturaPaga, rowEnviado]
+    const ws = XLSX.utils.aoa_to_sheet(allRows)
+    const counts = parseWorksheet(ws, 'Residencial', 'residencial')
+
+    // Expect fatura_paga to be EXACTLY 19, never 20!
+    expect(counts.fatura_paga).toBe(19)
+    // 2 empty ocorrencias rows -> nao_tratados = 2
+    expect(counts.nao_tratados).toBe(2)
+    // 1 enviado fatura -> envio_fatura = 1
+    expect(counts.envio_fatura).toBe(1)
+    // Total physical rows: 1 + 1 + 19 + 1 = 22
+    expect(counts.totalRows).toBe(22)
+    expect(counts.totalLinesCount).toBe(22)
+  })
+
+  it('should ensure each analytical row counts as exactly 1 occurrence without multiplying by residual columns', () => {
+    // Header with columns including AE or AW index positions having residual numbers
+    const headerRow = Array(50).fill('')
+    headerRow[0] = 'LOJA'
+    headerRow[1] = 'CLIENTE'
+    headerRow[2] = 'OCORRENCIAS'
+    headerRow[48] = 'COLUNA_AW_QUALQUER' // column AW (index 48) with residual value 999
+
+    const row = Array(50).fill('')
+    row[0] = 'CELNET AGUAS CLARAS'
+    row[1] = 'CLIENTE QUALQUER'
+    row[2] = 'FATURA(S) PAGA(S)'
+    row[48] = 999 // residual number that would have inflated count if mistaken for quantity
+
+    const ws = XLSX.utils.aoa_to_sheet([headerRow, row])
+    const counts = parseWorksheet(ws, 'Residencial', 'residencial')
+
+    // Valid quantity must be 1, NOT 999
+    expect(counts.fatura_paga).toBe(1)
+    expect(counts.totalRows).toBe(1)
+  })
 })

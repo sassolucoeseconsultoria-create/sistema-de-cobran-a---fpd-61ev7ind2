@@ -662,38 +662,126 @@ export function parseWorksheet(
     return counts
   }
 
-  // Determine target quantity column index:
-  // For 'movel': column AE (index 30)
-  // For 'residencial': column AW (index 48)
-  const qtyColIndex =
+  // Identify status/occurrences column from detected headers
+  // Accepted normalized names: 'ocorrencias', 'ocorrencia', 'status', 'substatus', 'situacao', 'status cobranca', 'motivo'
+  const ACCEPTED_STATUS_HEADERS = new Set([
+    'ocorrencias',
+    'ocorrencia',
+    'status',
+    'substatus',
+    'situacao',
+    'status cobranca',
+    'motivo',
+  ])
+
+  let statusColIndex = -1
+  for (const col of detectedColumns) {
+    const normColName = normalizeText(col.name)
+    if (ACCEPTED_STATUS_HEADERS.has(normColName)) {
+      statusColIndex = col.columnIndex
+      break
+    }
+  }
+
+  // Determine explicit quantity column index from detected headers if any
+  // If column header explicitly indicates quantity ('quantidade', 'qtde', 'qtd', 'quantidades', 'faturas')
+  const ACCEPTED_QTY_HEADERS = new Set([
+    'quantidade',
+    'qtde',
+    'qtd',
+    'quantidades',
+    'faturas',
+    'total de faturas',
+    'qtde faturas',
+    'qtd faturas',
+  ])
+
+  let explicitQtyColIndex = -1
+  if (qtyColIndexOverride !== undefined) {
+    explicitQtyColIndex = qtyColIndexOverride
+  } else {
+    for (const col of detectedColumns) {
+      const normColName = normalizeText(col.name)
+      if (ACCEPTED_QTY_HEADERS.has(normColName)) {
+        explicitQtyColIndex = col.columnIndex
+        break
+      }
+    }
+  }
+
+  // Fallback fixed quantity column index only when NO status/occurrences column is detected
+  // and explicit template position was requested or sheet is template-based
+  const fallbackQtyColIndex =
     qtyColIndexOverride !== undefined
       ? qtyColIndexOverride
-      : sheetType === 'movel'
-        ? columnLetterToIndex('AE') // 30
-        : sheetType === 'residencial'
-          ? columnLetterToIndex('AW') // 48
-          : -1
+      : statusColIndex === -1
+        ? sheetType === 'movel'
+          ? columnLetterToIndex('AE') // 30
+          : sheetType === 'residencial'
+            ? columnLetterToIndex('AW') // 48
+            : -1
+        : -1
+
+  const activeQtyColIndex = explicitQtyColIndex !== -1 ? explicitQtyColIndex : fallbackQtyColIndex
 
   // Determine Vendor & Store column indices:
+  // First check detected header names
+  let vendorColIndex =
+    colMappingOverride?.vendorColIndex !== undefined ? colMappingOverride.vendorColIndex : -1
+  let storeColIndex =
+    colMappingOverride?.storeColIndex !== undefined ? colMappingOverride.storeColIndex : -1
+
+  if (vendorColIndex === -1) {
+    for (const col of detectedColumns) {
+      const normColName = normalizeText(col.name)
+      if (
+        normColName === 'vendedor' ||
+        normColName === 'vendedores' ||
+        normColName === 'consultor' ||
+        normColName === 'operador' ||
+        normColName === 'nm vendedor'
+      ) {
+        vendorColIndex = col.columnIndex
+        break
+      }
+    }
+  }
+
+  if (storeColIndex === -1) {
+    for (const col of detectedColumns) {
+      const normColName = normalizeText(col.name)
+      if (
+        normColName === 'loja' ||
+        normColName === 'lojas' ||
+        normColName === 'nm loja' ||
+        normColName === 'nome loja'
+      ) {
+        storeColIndex = col.columnIndex
+        break
+      }
+    }
+  }
+
+  // Fallback to fixed template positions if not found by header
   // Aba Móvel: Vendedor está na coluna D (index 3), Loja está na coluna E (index 4)
   // Aba Residencial: Vendedor está na coluna AV (index 47), Loja está na coluna AU (index 46)
-  const vendorColIndex =
-    colMappingOverride?.vendorColIndex !== undefined
-      ? colMappingOverride.vendorColIndex
-      : sheetType === 'movel'
-        ? columnLetterToIndex('D') // 3
+  if (vendorColIndex === -1) {
+    vendorColIndex =
+      sheetType === 'movel'
+        ? columnLetterToIndex('D')
         : sheetType === 'residencial'
-          ? columnLetterToIndex('AV') // 47
+          ? columnLetterToIndex('AV')
           : -1
+  }
 
-  const storeColIndex =
-    colMappingOverride?.storeColIndex !== undefined
-      ? colMappingOverride.storeColIndex
-      : sheetType === 'movel'
-        ? columnLetterToIndex('E') // 4
+  if (storeColIndex === -1) {
+    storeColIndex =
+      sheetType === 'movel'
+        ? columnLetterToIndex('E')
         : sheetType === 'residencial'
-          ? columnLetterToIndex('AU') // 46
+          ? columnLetterToIndex('AU')
           : -1
+  }
 
   // Iterate rows (skip empty and headers/totals)
   for (let i = 0; i < jsonData.length; i++) {
@@ -708,12 +796,29 @@ export function parseWorksheet(
       continue
     }
 
-    const normalizedCells = row.map(normalizeText)
-    // Never discard a valid data row: if classifyRow does not match, default to 'outros'
-    const category: FpdStatusKey = classifyRow(normalizedCells) || 'outros'
+    let category: FpdStatusKey
+    if (statusColIndex >= 0) {
+      // Status column identified: classify exclusively by this column's cell value
+      const rawStatusCell = statusColIndex < row.length ? row[statusColIndex] : ''
+      const normalizedStatusCell = normalizeText(rawStatusCell)
+      if (!normalizedStatusCell) {
+        category = 'nao_tratados'
+      } else {
+        category = classifyRow(normalizedStatusCell) || 'outros'
+      }
+    } else {
+      // Fallback: classify scanning the whole row to keep compatibility with sheets lacking status header
+      const normalizedCells = row.map(normalizeText)
+      category = classifyRow(normalizedCells) || 'outros'
+    }
 
-    const qty = Math.round(extractRowQuantity(row, qtyColIndex))
-    const validQty = Number.isFinite(qty) && qty > 0 ? qty : 1
+    // Determine quantity for this row:
+    // For analytical sheets or rows, each row represents 1 occurrence unless an explicit and validated quantity column is present
+    let validQty = 1
+    if (activeQtyColIndex >= 0) {
+      const qty = Math.round(extractRowQuantity(row, activeQtyColIndex))
+      validQty = Number.isFinite(qty) && qty > 0 ? qty : 1
+    }
 
     counts[category] = Math.round((counts[category] || 0) + validQty)
     counts.totalRows = Math.round((counts.totalRows || 0) + validQty)
