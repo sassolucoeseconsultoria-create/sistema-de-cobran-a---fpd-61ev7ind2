@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import * as XLSX from 'xlsx'
 import {
   classifyRow,
+  classifyStatusCell,
   isHeaderOrTotalRow,
   normalizeText,
   columnLetterToIndex,
@@ -487,7 +488,7 @@ describe('isHeaderOrTotalRow', () => {
   })
 
   it('regression test: CELNET ALEXANIA reference numbers should match exact breakdown with unclassified categorized as nao_tratados', () => {
-    // 13 Fatura Paga, 20 Enviado Fatura, 5 Promessa Pagto, 1 Sem Contato, 1 Cancelados, 1 Contato Realizado, 1 Não Tratados (unmatched row falls back to nao_tratados), 0 Pendente
+    // 13 Fatura Paga, 20 Enviado Fatura, 5 Promessa Pagto, 1 Sem Contato, 1 Cancelados, 1 Contato Realizado, 1 Não Tratados, 0 Pendente
     const sampleRows = [
       ['LOJA', 'STATUS', 'OBSERVACAO'], // Header
       ...Array(13).fill(['CELNET ALEXANIA', 'FATURA PAGA', 'CLIENTE PAGOU']),
@@ -496,7 +497,7 @@ describe('isHeaderOrTotalRow', () => {
       ...Array(1).fill(['CELNET ALEXANIA', 'SEM CONTATO', 'NAO ATENDE']),
       ...Array(1).fill(['CELNET ALEXANIA', 'CANCELADO', 'CANCELOU PLANO']),
       ...Array(1).fill(['CELNET ALEXANIA', 'CONTATO REALIZADO', 'FALOU COM O TITULAR']),
-      ['CELNET ALEXANIA', 'LINHA COM TEXTO ALEATORIO SEM STATUS', 'OBSERVACAO QUALQUER'], // Unmatched data row -> nao_tratados
+      ['CELNET ALEXANIA', 'NÃO TRATADO', 'OBSERVACAO QUALQUER'], // Linha explicitamente 'NÃO TRATADO'
     ]
 
     const ws = XLSX.utils.aoa_to_sheet(sampleRows)
@@ -597,7 +598,7 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     row3[1] = 'NÃO TRATADOS'
     row3[30] = 2
 
-    // Row 3b: Unknown row that matches no rule -> fallback to nao_tratados with quantity 99
+    // Row 3b: Unknown row that matches no rule -> expurgada (não incrementa nenhuma categoria)
     const row3b = Array(35).fill('')
     row3b[0] = 'LOJA CENTRO'
     row3b[1] = 'TEXTO DESCONHECIDO SEM MATCH'
@@ -624,11 +625,11 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     expect(counts.columns?.find((c) => c.letter === 'AE')?.name).toBe('QUANTIDADE')
     expect(counts.envio_fatura).toBe(4)
     expect(counts.fatura_paga).toBe(3)
-    expect(counts.nao_tratados).toBe(101) // 2 + 99 (row3 + row3b fallback to nao_tratados)
+    expect(counts.nao_tratados).toBe(2) // Apenas row3 com 'NÃO TRATADOS', row3b expurgada
     expect(counts.sem_contato).toBe(5)
     expect(counts.promessa_pagto).toBe(1)
-    expect(counts.totalRows).toBe(114) // 4 + 3 + 2 + 99 + 5 + 1
-    expect(counts.totalLinesCount).toBe(6)
+    expect(counts.totalRows).toBe(15) // 4 + 3 + 2 + 5 + 1
+    expect(counts.totalLinesCount).toBe(5)
   })
 
   it('should sum quantities from column AW for Residencial worksheet', () => {
@@ -734,24 +735,33 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     })
   })
 
-  it('should never discard unclassified data row and categorize as nao_tratados in vendorLines and counts', () => {
+  it('should classify explicit nao_tratados variations in vendorLines and counts and purge unclassified/empty rows', () => {
     const movelHeader = Array(35).fill('')
-    movelHeader[0] = 'LOJA_HEADER'
-    movelHeader[1] = 'STATUS_HEADER'
+    movelHeader[0] = 'LOJA'
+    movelHeader[1] = 'STATUS'
     movelHeader[3] = 'VENDEDOR'
     movelHeader[4] = 'LOJA'
     movelHeader[30] = 'QUANTIDADE'
 
+    const explicitNaoTratadoRow = Array(35).fill('')
+    explicitNaoTratadoRow[0] = 'CELNET AGUAS CLARAS'
+    explicitNaoTratadoRow[1] = 'NÃO TRATADO'
+    explicitNaoTratadoRow[3] = 'VENDEDOR TESTE'
+    explicitNaoTratadoRow[4] = 'CELNET AGUAS CLARAS'
+    explicitNaoTratadoRow[30] = 1
+
     const unrecognizedRow = Array(35).fill('')
     unrecognizedRow[0] = 'CELNET AGUAS CLARAS'
-    unrecognizedRow[1] = 'STATUS TOTALMENTE DESCONHECIDO'
-    unrecognizedRow[3] = 'VENDEDOR TESTE'
+    unrecognizedRow[1] = 'TEXTO COMPLETAMENTE ALEATORIO'
+    unrecognizedRow[3] = 'VENDEDOR OUTRO'
     unrecognizedRow[4] = 'CELNET AGUAS CLARAS'
     unrecognizedRow[30] = 1
 
-    const movelWs = XLSX.utils.aoa_to_sheet([movelHeader, unrecognizedRow])
+    const movelWs = XLSX.utils.aoa_to_sheet([movelHeader, explicitNaoTratadoRow, unrecognizedRow])
     const counts = parseWorksheet(movelWs, 'Móvel', 'movel')
 
+    // Linha explicitamente 'NÃO TRATADO' conta como nao_tratados: 1
+    // Linha com texto arbitrário não-reconhecido é expurgada (não entra em nao_tratados)
     expect(counts.totalRows).toBe(1)
     expect(counts.nao_tratados).toBe(1)
     expect(counts.vendorLines).toHaveLength(1)
@@ -1176,5 +1186,94 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     expect(enviadas).toHaveLength(1)
     expect(contatos).toHaveLength(1)
     expect(naoTratados).toHaveLength(0)
+  })
+
+  it('regression test: CELNET AGUAS CLARAS header [LOJA, VENDEDOR, CLIENTE, CPF, STATUS, OCORRÊNCIAS] with empty/whitespace occurrence row must not count as Não Tratados and header row must not be parsed as data', () => {
+    // Header where column 0 is 'LOJA' and column 1 is 'VENDEDOR' (previously not recognized as structural header)
+    const header = ['LOJA', 'VENDEDOR', 'CLIENTE', 'CPF', 'STATUS', 'OCORRÊNCIAS']
+
+    // 13 rows with Fatura Paga
+    const pagas = Array(13)
+      .fill(null)
+      .map((_, i) => [
+        'CELNET AGUAS CLARA',
+        'VICTOR GABRIEL',
+        `CLIENTE ${i + 1}`,
+        '12345678900',
+        'Adimplente',
+        'FATURA PAGA',
+      ])
+
+    // 1 row Enviado Fatura
+    const enviada = [
+      'CELNET AGUAS CLARA',
+      'WANESSA RODRIGUES',
+      'CLIENTE ENVIADA',
+      '98765432100',
+      'Inadimplente',
+      'ENVIADO FATURA(S)',
+    ]
+
+    // 1 row Contato Realizado
+    const contato = [
+      'CELNET AGUAS CLARA',
+      'FABIO DANILO',
+      'CLIENTE CONTATO',
+      '45678912300',
+      'Inadimplente',
+      'CONTATO REALIZADO',
+    ]
+
+    // 1 row with empty/spaces in Ocorrências (must be purged, NOT counted as Não Tratados)
+    const emptyRow = [
+      'CELNET AGUAS CLARA',
+      'VENDEDOR TESTE',
+      'CLIENTE SEM STATUS',
+      '11122233344',
+      'Inadimplente',
+      '   ',
+    ]
+
+    const ws = XLSX.utils.aoa_to_sheet([header, ...pagas, enviada, contato, emptyRow])
+    const counts = parseWorksheet(ws, 'Móvel', 'movel')
+
+    // Must be exactly 13 pagas, 1 enviada, 1 contato, 0 nao_tratados, total 15
+    expect(counts.fatura_paga).toBe(13)
+    expect(counts.envio_fatura).toBe(1)
+    expect(counts.contato_realizado).toBe(1)
+    expect(counts.nao_tratados).toBe(0)
+    expect(counts.totalRows).toBe(15)
+    expect(counts.totalLinesCount).toBe(15)
+  })
+
+  it('regression test: classifyStatusCell conforms to user rule: whitespace -> null, official categories -> key, explicit nao_tratados variations -> nao_tratados, other arbitrary text -> null', () => {
+    // 1. Whitespace / empty / invisible chars -> null
+    expect(classifyStatusCell('')).toBeNull()
+    expect(classifyStatusCell('   ')).toBeNull()
+    expect(classifyStatusCell('\t\n')).toBeNull()
+    expect(classifyStatusCell(null)).toBeNull()
+    expect(classifyStatusCell(undefined)).toBeNull()
+
+    // 2. Official categories -> canonical key
+    expect(classifyStatusCell('FATURA PAGA')).toBe('fatura_paga')
+    expect(classifyStatusCell('Fatura(s) Paga(s)')).toBe('fatura_paga')
+    expect(classifyStatusCell('ENVIADO FATURA')).toBe('envio_fatura')
+    expect(classifyStatusCell('Promessa de Pagto.')).toBe('promessa_pagto')
+    expect(classifyStatusCell('SEM CONTATO')).toBe('sem_contato')
+    expect(classifyStatusCell('CANCELADO')).toBe('cancelados')
+    expect(classifyStatusCell('PENDENTE')).toBe('pendente')
+    expect(classifyStatusCell('CONTATO REALIZADO')).toBe('contato_realizado')
+
+    // 3. Explicit Não Tratados variations -> nao_tratados
+    expect(classifyStatusCell('NÃO TRATADO')).toBe('nao_tratados')
+    expect(classifyStatusCell('nao tratada')).toBe('nao_tratados')
+    expect(classifyStatusCell('sem tratamento')).toBe('nao_tratados')
+    expect(classifyStatusCell('a tratar')).toBe('nao_tratados')
+    expect(classifyStatusCell('nao trabalhado')).toBe('nao_tratados')
+
+    // 4. Other arbitrary text (such as header text "OCORRÊNCIAS" or unknown note) -> does NOT fall back to nao_tratados
+    expect(classifyStatusCell('OCORRÊNCIAS')).toBeNull()
+    expect(classifyStatusCell('OCORRENCIA')).toBeNull()
+    expect(classifyStatusCell('QUALQUER OUTRO TEXTO ALEATORIO')).toBeNull()
   })
 })

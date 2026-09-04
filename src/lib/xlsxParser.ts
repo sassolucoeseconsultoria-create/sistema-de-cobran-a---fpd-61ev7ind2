@@ -345,6 +345,10 @@ export const HEADER_SECOND_CELL_KEYWORDS = new Set([
   'motivo',
   'cliente',
   'loja',
+  'vendedor',
+  'vendedores',
+  'consultor',
+  'operador',
   'data',
   'acoes',
   'cpf',
@@ -354,8 +358,6 @@ export const HEADER_SECOND_CELL_KEYWORDS = new Set([
   'vencimento',
   'observacao',
   'protocolo',
-  'operador',
-  'consultor',
   'regional',
   'ddd',
   'telefone',
@@ -834,7 +836,7 @@ export function classifyStatusCell(cellVal: unknown): FpdStatusKey | null {
   const norm = normalizeText(cellVal)
   if (!norm) return null
 
-  // Exact/priority checks
+  // Priority checks
   // 1. Enviado fatura: "enviad", "envio", "2 via", "2a via"
   if (
     norm.includes('enviad') ||
@@ -908,15 +910,19 @@ export function classifyStatusCell(cellVal: unknown): FpdStatusKey | null {
   // 8. Não Tratados
   if (
     norm.includes('nao tratado') ||
+    norm.includes('nao tratada') ||
+    norm.includes('naotratado') ||
+    norm.includes('naotratada') ||
     norm.includes('nao trabalh') ||
     norm.includes('a tratar') ||
+    norm.includes('sem tratamento') ||
     EXACT_NAO_TRATADOS.has(norm)
   ) {
     return 'nao_tratados'
   }
 
-  // Fallback to classifyRow or 'nao_tratados'
-  return classifyRow(norm) || 'nao_tratados'
+  // Fallback to strict classifyRow (no automatic nao_tratados fallback for arbitrary text)
+  return classifyRow(norm)
 }
 
 /**
@@ -1327,8 +1333,49 @@ export function parseWorksheet(
           : -1
   }
 
-  // Iterate rows (skip empty and headers/totals)
-  for (let i = 0; i < jsonData.length; i++) {
+  // Determine header row index (matching extractWorksheetColumns and analytical parser)
+  let headerRowIndex = -1
+  for (let i = 0; i < Math.min(jsonData.length, 10); i++) {
+    const row = jsonData[i]
+    if (!Array.isArray(row) || row.length === 0) continue
+    const nonBlank = row.filter((c) => c !== null && c !== undefined && String(c).trim() !== '')
+    if (nonBlank.length === 0) continue
+
+    if (isHeaderOrTotalRow(row)) {
+      const normalizedCells = row.map(normalizeText).filter(Boolean)
+      const firstCell = normalizedCells[0] || ''
+      const isTotal =
+        firstCell === 'total' ||
+        firstCell === 'totais' ||
+        firstCell === 'total geral' ||
+        firstCell === 'resumo' ||
+        firstCell.startsWith('total ') ||
+        firstCell.startsWith('totais ')
+      if (!isTotal) {
+        headerRowIndex = i
+        break
+      }
+    }
+  }
+
+  // Fallback: if no structural header found, pick the first non-empty row as header
+  if (headerRowIndex === -1) {
+    for (let i = 0; i < Math.min(jsonData.length, 5); i++) {
+      const row = jsonData[i]
+      if (
+        Array.isArray(row) &&
+        row.some((c) => c !== null && c !== undefined && String(c).trim() !== '')
+      ) {
+        headerRowIndex = i
+        break
+      }
+    }
+  }
+
+  const dataStartRowIndex = headerRowIndex >= 0 ? headerRowIndex + 1 : 0
+
+  // Iterate rows starting strictly after header row (skip empty and headers/totals)
+  for (let i = dataStartRowIndex; i < jsonData.length; i++) {
     const row = jsonData[i]
     if (!Array.isArray(row) || row.length === 0) continue
 
@@ -1340,7 +1387,7 @@ export function parseWorksheet(
       continue
     }
 
-    let category: FpdStatusKey | null
+    let category: FpdStatusKey | null = null
     if (statusColIndex >= 0) {
       // Status column identified: classify exclusively by this column's cell value
       // Empty/blank -> EXPURGADA (não deve ser contada em nenhuma categoria nem gerar ocorrência)
@@ -1353,11 +1400,12 @@ export function parseWorksheet(
       }
     } else {
       // Fallback when no status column detected at all:
-      // Try classifying across the whole row; if completely empty/unmatched, it falls back to 'nao_tratados'
-      category = 'nao_tratados'
+      // Try classifying across the whole row; only valid matching status counts
+      const normalizedRow = row.map(normalizeText)
+      category = matchRowStatusByKnownPhrase(row) || classifyRow(normalizedRow)
     }
 
-    // Se a célula de ocorrências estiver vazia (category === null),
+    // Se a célula de ocorrências estiver vazia ou não casar com nenhuma categoria válida (category === null),
     // a linha é EXPURGADA das quantidades (não incrementa nenhuma categoria nem vendorLines nem totalRows)
     if (!category) {
       continue
