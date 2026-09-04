@@ -200,8 +200,8 @@ export const TopOfensores: React.FC = () => {
   }, [userAccess.isGerente, userAccess.isSupervisor, userAccess.isCoordenador])
 
   // Título e legenda dinâmicos por perfil
-  const rankingTitle = `Top ${rankingLimit} Ofensores`
-  const rankingCardLabel = `Linhas no Top ${rankingLimit}`
+  const rankingTitle = `Principais Ofensores (Top ${rankingLimit})`
+  const rankingCardLabel = `Linhas nos Principais Ofensores`
   const profileLabel = userAccess.isGerente
     ? 'Gerente'
     : userAccess.isSupervisor
@@ -262,7 +262,7 @@ export const TopOfensores: React.FC = () => {
     return candidateRowsBeforeSlice.slice(0, rankingLimit)
   }, [candidateRowsBeforeSlice, rankingLimit])
 
-  // Summary Totals for Top 20
+  // Summary Totals for Principais Ofensores
   const totals = useMemo(() => {
     return filteredAndSorted.reduce(
       (acc, r) => {
@@ -307,7 +307,7 @@ export const TopOfensores: React.FC = () => {
     return filteredAndSorted[0] || null
   }, [filteredAndSorted])
 
-  // Share of Top 20 vs Total General
+  // Share of Principais Ofensores vs Total General
   const top20Share = useMemo(() => {
     if (grandTotalLinhas === 0) return 0
     return ((totals.totalLinhas / grandTotalLinhas) * 100).toFixed(1)
@@ -339,7 +339,7 @@ export const TopOfensores: React.FC = () => {
       return
     }
     exportVendorsToXlsx(filteredAndSorted, totals, effectiveReferente || undefined, {
-      sheetName: `Top_${rankingLimit}_Ofensores`,
+      sheetName: `Principais_${rankingLimit}_Ofensores`,
       filePrefix: `Ranking_${rankingLimit}_Principais_Ofensores_FPD`,
     })
     toast({
@@ -366,11 +366,11 @@ export const TopOfensores: React.FC = () => {
     <div className="space-y-6">
       {/* Top summary cards banner */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: 20 Principais Ofensores */}
+        {/* Card 1: Principais Ofensores */}
         <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82]">
-              Ranking Ofensores
+              Principais Ofensores
             </p>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-bold text-[#DC2626] tabular-nums">
@@ -386,7 +386,7 @@ export const TopOfensores: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 2: Total de Linhas no Top N */}
+        {/* Card 2: Total de Linhas nos Principais Ofensores */}
         <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82]">
@@ -404,7 +404,7 @@ export const TopOfensores: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 3: % de Concentração do Top N */}
+        {/* Card 3: % de Concentração dos Principais Ofensores */}
         <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82]">
@@ -631,12 +631,12 @@ export const TopOfensores: React.FC = () => {
               className="h-9 border-[#E3E9F2] text-[#12365A] hover:bg-[#F3F6FA] font-medium text-xs sm:text-sm gap-2"
             >
               <Download className="w-4 h-4 text-[#0E9F8A]" />
-              <span>Exportar Top {rankingLimit} (.xlsx)</span>
+              <span>Exportar Principais Ofensores (.xlsx)</span>
             </Button>
           </div>
         </div>
 
-        {/* Top 20 Table */}
+        {/* Tabela dos Principais Ofensores */}
         <div className="relative overflow-x-auto max-h-[70vh] border-b border-[#E3E9F2]">
           <table className="w-full text-left border-collapse text-[13px]">
             {/* Header */}
@@ -705,7 +705,7 @@ export const TopOfensores: React.FC = () => {
                         {userAccess.hasNoStoreAssigned
                           ? 'Solicite ao Administrador que vincule uma ou mais lojas ao seu perfil para visualizar os dados de ofensores.'
                           : allVendorRows.length === 0
-                            ? 'Importe arquivos .xlsx na aba Importar para gerar o ranking dos 20 principais ofensores.'
+                            ? 'Importe arquivos .xlsx na aba Importar para gerar o ranking dos principais ofensores.'
                             : 'Tente ajustar os termos de busca ou o filtro de loja.'}
                       </p>
                     </div>
@@ -822,11 +822,11 @@ export const TopOfensores: React.FC = () => {
               <tr>
                 {/* POS */}
                 <td className="px-3 py-3 border-r border-[#1e456f] text-center text-xs text-red-300">
-                  TOP {rankingLimit}
+                  PRINCIPAIS {rankingLimit}
                 </td>
                 {/* A: Totais */}
                 <td className="sticky left-0 z-30 bg-[#12365A] px-3.5 py-3 border-r border-[#1e456f] text-white uppercase tracking-wider">
-                  Totais dos {rankingLimit} Ofensores ({filteredAndSorted.length})
+                  Totais dos Principais {rankingLimit} Ofensores ({filteredAndSorted.length})
                 </td>
                 {/* B */}
                 <td className="px-3 py-3 border-r border-[#1e456f]"></td>

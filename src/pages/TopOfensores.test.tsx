@@ -178,9 +178,9 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
       </MemoryRouter>,
     )
 
-    // Título dinâmico: "Top 3 Ofensores"
+    // Título dinâmico: "Principais Ofensores (Top 3)"
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /Top 3 Ofensores/i })).toBeDefined()
+      expect(screen.getByRole('heading', { name: /Principais Ofensores \(Top 3\)/i })).toBeDefined()
     })
 
     // Badges / Informação textual de limite
@@ -208,12 +208,12 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
     // Lojas de outros locais não devem aparecer
     expect(screen.queryByText('Vendedor Taguatinga 1')).toBeNull()
 
-    // Rodapé deve exibir TOP 3
-    expect(screen.getByText('TOP 3')).toBeDefined()
-    expect(screen.getByText(/Totais dos 3 Ofensores \(3\)/i)).toBeDefined()
+    // Rodapé deve exibir PRINCIPAIS 3
+    expect(screen.getByText('PRINCIPAIS 3')).toBeDefined()
+    expect(screen.getByText(/Totais dos Principais 3 Ofensores \(3\)/i)).toBeDefined()
 
     // Exportação para Excel: deve exportar apenas os 3 registros
-    const exportBtn = screen.getByRole('button', { name: /Exportar Top 3/i })
+    const exportBtn = screen.getByRole('button', { name: /Exportar Principais Ofensores/i })
     expect(exportBtn).toBeDefined()
     await user.click(exportBtn)
 
@@ -227,7 +227,7 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
     ])
     const exportOptions = exportVendorsSpy.mock.calls[0][3]
     expect(exportOptions).toEqual({
-      sheetName: 'Top_3_Ofensores',
+      sheetName: 'Principais_3_Ofensores',
       filePrefix: 'Ranking_3_Principais_Ofensores_FPD',
     })
   })
@@ -260,9 +260,11 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
       </MemoryRouter>,
     )
 
-    // Título dinâmico: "Top 10 Ofensores"
+    // Título dinâmico: "Principais Ofensores (Top 10)"
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /Top 10 Ofensores/i })).toBeDefined()
+      expect(
+        screen.getByRole('heading', { name: /Principais Ofensores \(Top 10\)/i }),
+      ).toBeDefined()
     })
 
     // Badges / Informação textual de limite: 10 de 20 possíveis — limite do perfil Supervisor: 10
@@ -278,12 +280,12 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
     // Ceilândia não está vinculada ao Supervisor, então nunca deve aparecer
     expect(screen.queryByText('Vendedor Ceilandia 1')).toBeNull()
 
-    // Rodapé deve exibir TOP 10
-    expect(screen.getByText('TOP 10')).toBeDefined()
-    expect(screen.getByText(/Totais dos 10 Ofensores \(10\)/i)).toBeDefined()
+    // Rodapé deve exibir PRINCIPAIS 10
+    expect(screen.getByText('PRINCIPAIS 10')).toBeDefined()
+    expect(screen.getByText(/Totais dos Principais 10 Ofensores \(10\)/i)).toBeDefined()
 
     // Exportação deve exportar apenas os 10 itens
-    const exportBtn = screen.getByRole('button', { name: /Exportar Top 10/i })
+    const exportBtn = screen.getByRole('button', { name: /Exportar Principais Ofensores/i })
     await user.click(exportBtn)
 
     expect(exportVendorsSpy).toHaveBeenCalledTimes(1)
@@ -291,7 +293,7 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
     expect(exportedRows).toHaveLength(10)
     const exportOptions = exportVendorsSpy.mock.calls[0][3]
     expect(exportOptions).toEqual({
-      sheetName: 'Top_10_Ofensores',
+      sheetName: 'Principais_10_Ofensores',
       filePrefix: 'Ranking_10_Principais_Ofensores_FPD',
     })
   })
@@ -324,9 +326,11 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
       </MemoryRouter>,
     )
 
-    // Título dinâmico: "Top 20 Ofensores"
+    // Título dinâmico: "Principais Ofensores (Top 20)"
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /Top 20 Ofensores/i })).toBeDefined()
+      expect(
+        screen.getByRole('heading', { name: /Principais Ofensores \(Top 20\)/i }),
+      ).toBeDefined()
     })
 
     // Badges / Informação textual de limite: 20 de 30 possíveis — limite do perfil Coordenador: 20
@@ -335,12 +339,12 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
       'Exibindo 20 de 30 possíveis — limite do perfil Coordenador: 20',
     )
 
-    // Rodapé deve exibir TOP 20
-    expect(screen.getByText('TOP 20')).toBeDefined()
-    expect(screen.getByText(/Totais dos 20 Ofensores \(20\)/i)).toBeDefined()
+    // Rodapé deve exibir PRINCIPAIS 20
+    expect(screen.getByText('PRINCIPAIS 20')).toBeDefined()
+    expect(screen.getByText(/Totais dos Principais 20 Ofensores \(20\)/i)).toBeDefined()
 
     // Exportação deve exportar 20 itens
-    const exportBtn = screen.getByRole('button', { name: /Exportar Top 20/i })
+    const exportBtn = screen.getByRole('button', { name: /Exportar Principais Ofensores/i })
     await user.click(exportBtn)
 
     expect(exportVendorsSpy).toHaveBeenCalledTimes(1)
@@ -348,7 +352,7 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
     expect(exportedRows).toHaveLength(20)
     const exportOptions = exportVendorsSpy.mock.calls[0][3]
     expect(exportOptions).toEqual({
-      sheetName: 'Top_20_Ofensores',
+      sheetName: 'Principais_20_Ofensores',
       filePrefix: 'Ranking_20_Principais_Ofensores_FPD',
     })
   })

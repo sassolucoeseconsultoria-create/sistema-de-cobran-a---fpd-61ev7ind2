@@ -46,9 +46,9 @@ export const Layout: React.FC = () => {
     },
     {
       to: '/top-ofensores',
-      label: 'Top 20 Ofensores',
+      label: 'Principais Ofensores',
       icon: Flame,
-      description: 'Ranking dos 20 principais ofensores por linhas',
+      description: 'Ranking dos principais ofensores por linhas',
       disabled: false,
     },
     {
@@ -109,8 +109,9 @@ export const Layout: React.FC = () => {
         }
       case '/top-ofensores':
         return {
-          title: 'Ranking dos 20 Principais Ofensores',
-          subtitle: 'Top 20 vendedores com maior volume de linhas em atraso (Móvel + Residencial)',
+          title: 'Ranking dos Principais Ofensores',
+          subtitle:
+            'Principais vendedores com maior volume de linhas em atraso (Móvel + Residencial)',
         }
       case '/importar':
         return {
