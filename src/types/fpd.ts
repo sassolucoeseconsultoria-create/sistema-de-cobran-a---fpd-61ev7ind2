@@ -35,7 +35,6 @@ export const OCORRENCIAS_OPTIONS = [
   'Sem Contato',
   'Promessa de Pagto.',
   'Cancelados',
-  'Outros Motivos',
   'Contato Realizado',
 ] as const
 
@@ -270,7 +269,6 @@ export type FpdStatusKey =
   | 'cancelados'
   | 'pendente'
   | 'contato_realizado'
-  | 'outros'
   | 'nao_tratados'
 
 export interface FpdStatusConfig {
@@ -339,14 +337,6 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
     textColor: '#0F766E',
     bgTint: 'rgba(13, 148, 136, 0.08)',
     borderTint: 'rgba(13, 148, 136, 0.25)',
-  },
-  {
-    key: 'outros',
-    label: 'Outros Motivos',
-    color: '#8B5CF6',
-    textColor: '#7C3AED',
-    bgTint: 'rgba(139, 92, 246, 0.08)',
-    borderTint: 'rgba(139, 92, 246, 0.25)',
   },
   {
     key: 'nao_tratados',

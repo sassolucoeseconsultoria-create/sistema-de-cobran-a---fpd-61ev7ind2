@@ -296,7 +296,7 @@ export const Importar: React.FC = () => {
         cancelados: item.parsedData.aggregated.cancelados,
         nao_tratados: item.parsedData.aggregated.nao_tratados,
         contato_realizado: item.parsedData.aggregated.contato_realizado,
-        outros: item.parsedData.aggregated.outros,
+        outros: 0,
       })
 
       // 2. Save/update consolidated FPD Record (upsert by store + referente)
@@ -312,7 +312,7 @@ export const Importar: React.FC = () => {
         cancelados: item.parsedData.aggregated.cancelados,
         nao_tratados: item.parsedData.aggregated.nao_tratados,
         contato_realizado: item.parsedData.aggregated.contato_realizado,
-        outros: item.parsedData.aggregated.outros,
+        outros: 0,
       })
 
       // 3. Save/update Vendor Consolidations from vendor lines
@@ -431,8 +431,8 @@ export const Importar: React.FC = () => {
             <span className="font-bold text-[#12365A] block">2. Classificação Automática</span>
             <p>
               As ocorrências são agrupadas nos status do consolidado: Fatura(s) Paga(s), Enviado
-              Fatura(s), Promessa de Pagto., Sem Contato, Cancelados, Pendente, Contato Realizado,
-              Outros Motivos e Não Tratados.
+              Fatura(s), Promessa de Pagto., Sem Contato, Cancelados, Pendente, Contato Realizado e
+              Não Tratados.
             </p>
           </div>
           <div className="p-3 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] space-y-1">
@@ -678,10 +678,6 @@ export const Importar: React.FC = () => {
                               <span>•</span>
                               <span className="text-[#0D9488] font-medium">
                                 Contato: {item.parsedData.aggregated.contato_realizado}
-                              </span>
-                              <span>•</span>
-                              <span className="text-[#8B5CF6] font-medium">
-                                Outros: {item.parsedData.aggregated.outros}
                               </span>
                               <span>•</span>
                               <span className="text-[#EA580C] font-medium">

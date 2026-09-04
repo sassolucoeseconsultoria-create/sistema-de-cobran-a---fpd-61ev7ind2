@@ -202,7 +202,6 @@ export const TopOfensores: React.FC = () => {
         acc.cancelados += r.cancelados
         acc.naoTratados += r.naoTratados
         acc.contatoRealizado += r.contatoRealizado
-        acc.outros += r.outros
         return acc
       },
       {
@@ -218,10 +217,10 @@ export const TopOfensores: React.FC = () => {
         outros: 0,
       },
     )
-  }, [filteredAndSorted])
+  }, [])
 
-  // Animated counters
-  const animatedTop20Linhas = useCountUp(totals.totalLinhas)
+  // Animated totals
+  const animatedTotalLinhas = useCountUp(totals.totalLinhas)
   const animatedEnvioFatura = useCountUp(totals.envioFatura)
   const animatedPendente = useCountUp(totals.pendente)
   const animatedFaturaPaga = useCountUp(totals.faturaPaga)
@@ -230,8 +229,6 @@ export const TopOfensores: React.FC = () => {
   const animatedCancelados = useCountUp(totals.cancelados)
   const animatedNaoTratados = useCountUp(totals.naoTratados)
   const animatedContatoRealizado = useCountUp(totals.contatoRealizado)
-  const animatedOutros = useCountUp(totals.outros)
-
   // Top #1 Offender
   const top1Offender = useMemo(() => {
     return filteredAndSorted[0] || null
@@ -320,7 +317,7 @@ export const TopOfensores: React.FC = () => {
             </p>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-bold text-[#12365A] tabular-nums">
-                {animatedTop20Linhas.toLocaleString('pt-BR')}
+                {animatedTotalLinhas.toLocaleString('pt-BR')}
               </span>
               <span className="text-xs text-[#5B6B82]">linhas</span>
             </div>
@@ -538,16 +535,17 @@ export const TopOfensores: React.FC = () => {
             <tbody className="divide-y divide-[#E3E9F2]">
               {loading ? (
                 <tr>
-                  <td colSpan={14} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={13} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-6 h-6 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
-                      <span>Carregando os 20 principais ofensores...</span>
+                      <span>Carregando ranking de ofensores...</span>
                     </div>
                   </td>
                 </tr>
               ) : filteredAndSorted.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={13} className="py-12 text-center text-[#5B6B82]">
+                    {' '}
                     <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
                       <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
                       <p className="font-medium text-[#12365A]">
@@ -688,7 +686,7 @@ export const TopOfensores: React.FC = () => {
                 <td className="px-3 py-3 border-r border-[#1e456f]"></td>
                 {/* D: TOTAL LINHAS */}
                 <td className="px-3 py-3 text-center text-red-200 tabular-nums border-r border-[#1e456f] bg-red-950 font-black">
-                  {animatedTop20Linhas.toLocaleString('pt-BR')}
+                  {animatedTotalLinhas.toLocaleString('pt-BR')}
                 </td>
                 {/* E: 1. Fatura(s) Paga(s) */}
                 <td className="px-2.5 py-3 text-center text-[#67e8f9] tabular-nums border-r border-[#1e456f]">
@@ -718,11 +716,7 @@ export const TopOfensores: React.FC = () => {
                 <td className="px-2.5 py-3 text-center text-[#5eead4] tabular-nums border-r border-[#1e456f]">
                   {animatedContatoRealizado.toLocaleString('pt-BR')}
                 </td>
-                {/* L: 8. Outros Motivos */}
-                <td className="px-2.5 py-3 text-center text-[#c4b5fd] tabular-nums border-r border-[#1e456f]">
-                  {animatedOutros.toLocaleString('pt-BR')}
-                </td>
-                {/* M: 9. Não Tratados */}
+                {/* L: 8. Não Tratados */}
                 <td className="px-2.5 py-3 text-center text-[#fdba74] tabular-nums border-r border-[#1e456f]">
                   {animatedNaoTratados.toLocaleString('pt-BR')}
                 </td>

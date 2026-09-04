@@ -335,22 +335,6 @@ describe('classifyRow', () => {
     expect(classifyRow(['nao trabalhad'])).toBeNull()
   })
 
-  it('should classify ONLY exact matches for 9. "Outros Motivos" (outros)', () => {
-    const exactOutrosVariations = [
-      'outros motivos',
-      'outros',
-      'outro motivo',
-      'outro',
-      'demais motivos',
-      'demais',
-    ]
-
-    for (const variation of exactOutrosVariations) {
-      expect(classifyRow([variation])).toBe('outros')
-      expect(classifyRow(['cliente 1', variation])).toBe('outros')
-    }
-  })
-
   it('should return null (ignore silently) for unclassified or unrecognized text without exact match', () => {
     expect(classifyRow(['algum texto desconhecido'])).toBeNull()
     expect(classifyRow(['reclamacao anatel'])).toBeNull()
@@ -359,9 +343,10 @@ describe('classifyRow', () => {
     expect(classifyRow(['cliente em viagem'])).toBeNull()
     expect(classifyRow(['solicitou estorno parcial'])).toBeNull()
     expect(classifyRow(['negociacao com a gerencia'])).toBeNull()
+    expect(classifyRow(['outros motivos'])).toBeNull()
   })
 
-  it('should respect exact priority order: 1. Enviado Fatura > 2. Promessa Pagto > 3. Fatura Paga > 4. Sem Contato > 5. Cancelados > 6. Pendente > 7. Contato Realizado > 8. Não Tratados > 9. Outros Motivos', () => {
+  it('should respect exact priority order: 1. Enviado Fatura > 2. Promessa Pagto > 3. Fatura Paga > 4. Sem Contato > 5. Cancelados > 6. Pendente > 7. Contato Realizado > 8. Não Tratados', () => {
     // 1. Enviado Fatura vs 2. Promessa Pagto
     expect(classifyRow(['enviado fatura', 'promessa de pagto'])).toBe('envio_fatura')
 
@@ -385,9 +370,6 @@ describe('classifyRow', () => {
 
     // 7. Contato Realizado vs 8. Não Tratados
     expect(classifyRow(['contato realizado', 'nao tratado'])).toBe('contato_realizado')
-
-    // 8. Não Tratados vs 9. Outros Motivos
-    expect(classifyRow(['nao tratado', 'outros motivos'])).toBe('nao_tratados')
   })
 
   it('regression tests: unified text containing a keyword when NO cell has exact value MUST NOT classify as that status', () => {
@@ -504,8 +486,8 @@ describe('isHeaderOrTotalRow', () => {
     expect(movelCount + resCount).toBe(20)
   })
 
-  it('regression test: CELNET ALEXANIA reference numbers should match exact breakdown with unclassified categorized as outros', () => {
-    // 13 Fatura Paga, 20 Enviado Fatura, 5 Promessa Pagto, 1 Sem Contato, 1 Cancelados, 1 Contato Realizado, 1 Outros (unmatched row falls back to outros), 0 Pendente, 0 Não Tratados
+  it('regression test: CELNET ALEXANIA reference numbers should match exact breakdown with unclassified categorized as nao_tratados', () => {
+    // 13 Fatura Paga, 20 Enviado Fatura, 5 Promessa Pagto, 1 Sem Contato, 1 Cancelados, 1 Contato Realizado, 1 Não Tratados (unmatched row falls back to nao_tratados), 0 Pendente
     const sampleRows = [
       ['LOJA', 'STATUS', 'OBSERVACAO'], // Header
       ...Array(13).fill(['CELNET ALEXANIA', 'FATURA PAGA', 'CLIENTE PAGOU']),
@@ -514,7 +496,7 @@ describe('isHeaderOrTotalRow', () => {
       ...Array(1).fill(['CELNET ALEXANIA', 'SEM CONTATO', 'NAO ATENDE']),
       ...Array(1).fill(['CELNET ALEXANIA', 'CANCELADO', 'CANCELOU PLANO']),
       ...Array(1).fill(['CELNET ALEXANIA', 'CONTATO REALIZADO', 'FALOU COM O TITULAR']),
-      ['CELNET ALEXANIA', 'LINHA COM TEXTO ALEATORIO SEM STATUS', 'OBSERVACAO QUALQUER'], // Unmatched data row -> never discarded, classified as 'outros'
+      ['CELNET ALEXANIA', 'LINHA COM TEXTO ALEATORIO SEM STATUS', 'OBSERVACAO QUALQUER'], // Unmatched data row -> nao_tratados
     ]
 
     const ws = XLSX.utils.aoa_to_sheet(sampleRows)
@@ -526,9 +508,8 @@ describe('isHeaderOrTotalRow', () => {
     expect(counts.sem_contato).toBe(1)
     expect(counts.cancelados).toBe(1)
     expect(counts.contato_realizado).toBe(1)
-    expect(counts.outros).toBe(1)
     expect(counts.pendente).toBe(0)
-    expect(counts.nao_tratados).toBe(0)
+    expect(counts.nao_tratados).toBe(1)
     expect(counts.totalRows).toBe(42) // 13 + 20 + 5 + 1 + 1 + 1 + 1 = 42
     expect(counts.totalLinesCount).toBe(42)
   })
@@ -610,13 +591,13 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     row2[1] = 'FATURA PAGA'
     row2[30] = 3
 
-    // Row 3: Outros Motivos with quantity 2 in column AE (exact match "OUTROS MOTIVOS")
+    // Row 3: Não Tratados with quantity 2 in column AE
     const row3 = Array(35).fill('')
     row3[0] = 'LOJA CENTRO'
-    row3[1] = 'OUTROS MOTIVOS'
+    row3[1] = 'NÃO TRATADOS'
     row3[30] = 2
 
-    // Row 3b: Unknown row that matches no rule -> fallback to 'outros' with quantity 99
+    // Row 3b: Unknown row that matches no rule -> fallback to nao_tratados with quantity 99
     const row3b = Array(35).fill('')
     row3b[0] = 'LOJA CENTRO'
     row3b[1] = 'TEXTO DESCONHECIDO SEM MATCH'
@@ -643,7 +624,7 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     expect(counts.columns?.find((c) => c.letter === 'AE')?.name).toBe('QUANTIDADE')
     expect(counts.envio_fatura).toBe(4)
     expect(counts.fatura_paga).toBe(3)
-    expect(counts.outros).toBe(101) // 2 + 99 (row3b falls back to outros)
+    expect(counts.nao_tratados).toBe(101) // 2 + 99 (row3 + row3b fallback to nao_tratados)
     expect(counts.sem_contato).toBe(5)
     expect(counts.promessa_pagto).toBe(1)
     expect(counts.totalRows).toBe(114) // 4 + 3 + 2 + 99 + 5 + 1
@@ -753,7 +734,7 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     })
   })
 
-  it('should never discard unclassified data row and categorize as outros in vendorLines and counts', () => {
+  it('should never discard unclassified data row and categorize as nao_tratados in vendorLines and counts', () => {
     const movelHeader = Array(35).fill('')
     movelHeader[0] = 'LOJA_HEADER'
     movelHeader[1] = 'STATUS_HEADER'
@@ -772,17 +753,17 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     const counts = parseWorksheet(movelWs, 'Móvel', 'movel')
 
     expect(counts.totalRows).toBe(1)
-    expect(counts.outros).toBe(1)
+    expect(counts.nao_tratados).toBe(1)
     expect(counts.vendorLines).toHaveLength(1)
     expect(counts.vendorLines[0]).toEqual({
       vendedor: 'VENDEDOR TESTE',
       loja: 'CELNET AGUAS CLARAS',
-      status: 'outros',
+      status: 'nao_tratados',
       quantidade: 1,
     })
   })
 
-  it('should verify FPD_STATUSES order matches exact 9 status specification from E to M', async () => {
+  it('should verify FPD_STATUSES order matches exact 8 official status specification', async () => {
     const { FPD_STATUSES } = await import('@/types/fpd')
     const expectedKeys = [
       'fatura_paga',
@@ -792,7 +773,6 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
       'cancelados',
       'pendente',
       'contato_realizado',
-      'outros',
       'nao_tratados',
     ]
 
@@ -804,13 +784,45 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
       'Cancelados',
       'Pendente',
       'Contato Realizado',
-      'Outros Motivos',
       'Não Tratados',
     ]
 
     expect(FPD_STATUSES.map((s) => s.key)).toEqual(expectedKeys)
     expect(FPD_STATUSES.map((s) => s.label)).toEqual(expectedLabels)
-    expect(FPD_STATUSES).toHaveLength(9)
+    expect(FPD_STATUSES).toHaveLength(8)
+  })
+
+  it('regression test: cell with text outside official categories must record original text faithfully', async () => {
+    const { getCanonicalCategoryOrRaw } = await import('@/lib/xlsxParser')
+    const { parseAnalyticalWorksheet } = await import('@/lib/analyticalImportParser')
+
+    // getCanonicalCategoryOrRaw directly
+    expect(getCanonicalCategoryOrRaw('FATURA PAGA')).toBe('Fatura(s) Paga(s)')
+    expect(getCanonicalCategoryOrRaw('Enviado 2a via')).toBe('Enviado Fatura(s)')
+    expect(getCanonicalCategoryOrRaw('  ')).toBe('Não Tratados')
+    expect(getCanonicalCategoryOrRaw(null)).toBe('Não Tratados')
+    expect(getCanonicalCategoryOrRaw('Cliente solicitou contestação de valores')).toBe(
+      'Cliente solicitou contestação de valores',
+    )
+    expect(getCanonicalCategoryOrRaw('Aguardando retorno do jurídico')).toBe(
+      'Aguardando retorno do jurídico',
+    )
+
+    // Spreadsheet import through parseAnalyticalWorksheet
+    const customHeader = ['LOJA', 'CLIENTE', 'OCORRÊNCIAS', 'VENDEDOR']
+    const customRows = [
+      ['CELNET LOJA 1', 'CLIENTE A', 'Cliente em viagem até dia 20', 'VEND 1'],
+      ['CELNET LOJA 1', 'CLIENTE B', 'Reclamação Anatel em andamento', 'VEND 2'],
+      ['CELNET LOJA 1', 'CLIENTE C', '  ', 'VEND 3'],
+      ['CELNET LOJA 1', 'CLIENTE D', 'FATURA PAGA', 'VEND 4'],
+    ]
+    const ws = XLSX.utils.aoa_to_sheet([customHeader, ...customRows])
+    const parsed = parseAnalyticalWorksheet(ws, 'Móvel', 'movel')
+
+    expect(parsed.rows[0].ocorrencias).toBe('Cliente em viagem até dia 20')
+    expect(parsed.rows[1].ocorrencias).toBe('Reclamação Anatel em andamento')
+    expect(parsed.rows[2].ocorrencias).toBe('Não Tratados')
+    expect(parsed.rows[3].ocorrencias).toBe('Fatura(s) Paga(s)')
   })
 
   it('regression test: should count exactly 19 fatura_paga, not 20, when spreadsheet has 19 rows with FATURA(S) PAGA(S) in ocorrencias column and loose PAGO/PAGA cells in other columns', () => {
@@ -962,7 +974,6 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     expect(movelCounts.envio_fatura).toBe(1)
     expect(movelCounts.contato_realizado).toBe(1)
     expect(movelCounts.nao_tratados).toBe(0)
-    expect(movelCounts.outros).toBe(0)
 
     // 2. Aba Residencial - 6 linhas
     // Cabeçalhos reais contendo 'LOJA', 'VENDEDOR', 'CLIENTE', 'FATURA', 'PAGO', 'DEVENDO', 'INDICADOR', 'OCORRÊNCIAS'
@@ -1004,7 +1015,6 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     expect(resCounts.totalLinesCount).toBe(6)
     expect(resCounts.fatura_paga).toBe(6)
     expect(resCounts.nao_tratados).toBe(0)
-    expect(resCounts.outros).toBe(0)
 
     // 3. Teste parseAnalyticalWorksheet para garantir classificação analítica
     const { parseAnalyticalWorksheet } = await import('@/lib/analyticalImportParser')
@@ -1109,7 +1119,6 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     expect(counts.envio_fatura).toBe(1)
     expect(counts.contato_realizado).toBe(1)
     expect(counts.nao_tratados).toBe(0)
-    expect(counts.outros).toBe(0)
 
     // Also verify parseAnalyticalWorksheet produces exactly 13 / 1 / 1 / 0
     const { parseAnalyticalWorksheet } = await import('@/lib/analyticalImportParser')

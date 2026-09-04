@@ -79,4 +79,22 @@ describe('analyticalImportParser', () => {
       ).toBe(true)
     }
   })
+
+  it('preserves exact cell text when occurrence is outside official categories', async () => {
+    const { parseAnalyticalWorksheet } = await import('./analyticalImportParser')
+    const XLSX = await import('xlsx')
+
+    const rows = [
+      ['LOJA', 'CLIENTE', 'Ocorrências', 'VENDEDOR'],
+      ['CELNET CENTRO', 'CLIENTE TESTE 1', 'Texto livre preenchido na loja', 'JOAO'],
+      ['CELNET CENTRO', 'CLIENTE TESTE 2', '', 'MARIA'],
+      ['CELNET CENTRO', 'CLIENTE TESTE 3', 'Fatura Paga', 'JOSE'],
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+    const parsed = parseAnalyticalWorksheet(ws, 'Residencial', 'residencial')
+
+    expect(parsed.rows[0].ocorrencias).toBe('Texto livre preenchido na loja')
+    expect(parsed.rows[1].ocorrencias).toBe('Não Tratados')
+    expect(parsed.rows[2].ocorrencias).toBe('Fatura(s) Paga(s)')
+  })
 })

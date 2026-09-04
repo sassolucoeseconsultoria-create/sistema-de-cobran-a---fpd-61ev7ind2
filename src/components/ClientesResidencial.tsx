@@ -783,20 +783,34 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
                                   'text-[#9333EA] bg-purple-50/40 border-purple-200',
                                 edit.ocorrencias === 'Cancelados' &&
                                   'text-[#0F172A] bg-slate-100 border-slate-300 font-semibold',
-                                edit.ocorrencias === 'Outros Motivos' &&
-                                  'text-[#8B5CF6] bg-violet-50/40 border-violet-200',
                                 edit.ocorrencias === 'Contato Realizado' &&
                                   'text-[#0D9488] bg-teal-50/40 border-teal-200',
+                                edit.ocorrencias &&
+                                  !(OCORRENCIAS_OPTIONS as readonly string[]).includes(
+                                    edit.ocorrencias,
+                                  ) &&
+                                  'text-[#0284c7] bg-sky-50/40 border-sky-200 font-medium',
                               )}
                             >
                               <SelectValue placeholder="Selecione ocorrência" />
                             </SelectTrigger>
-                            <SelectContent className="bg-white">
+                            <SelectContent className="bg-white max-h-60 overflow-y-auto">
                               {OCORRENCIAS_OPTIONS.map((opt) => (
                                 <SelectItem key={opt} value={opt} className="text-xs font-medium">
                                   {opt}
                                 </SelectItem>
                               ))}
+                              {edit.ocorrencias &&
+                                !(OCORRENCIAS_OPTIONS as readonly string[]).includes(
+                                  edit.ocorrencias,
+                                ) && (
+                                  <SelectItem
+                                    value={edit.ocorrencias}
+                                    className="text-xs font-medium italic text-[#0284c7]"
+                                  >
+                                    {edit.ocorrencias} (Planilha)
+                                  </SelectItem>
+                                )}
                             </SelectContent>
                           </Select>
                         </div>

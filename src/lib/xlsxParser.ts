@@ -20,7 +20,6 @@ export interface ParsedSheetCounts {
   cancelados: number
   nao_tratados: number
   contato_realizado: number
-  outros: number
   vendorLines: ParsedVendorLine[]
   columns?: DetectedColumn[]
 }
@@ -46,7 +45,6 @@ export interface ParsedFileData {
     cancelados: number
     nao_tratados: number
     contato_realizado: number
-    outros: number
   }
 }
 
@@ -302,15 +300,6 @@ export const EXACT_NAO_TRATADOS = new Set([
   'aguardando',
 ])
 
-export const EXACT_OUTROS = new Set([
-  'outros motivos',
-  'outros',
-  'outro motivo',
-  'outro',
-  'demais motivos',
-  'demais',
-])
-
 // First cell structural headers
 export const HEADER_FIRST_CELL_KEYWORDS = new Set([
   'status',
@@ -392,20 +381,16 @@ export const HEADER_SECOND_CELL_KEYWORDS = new Set([
  * 6. Pendente (key 'pendente') - coluna J do consolidado
  * 7. Contato Realizado (key 'contato_realizado') - coluna K do consolidado
  * 8. Não Tratados (key 'nao_tratados') - coluna M do consolidado
- * 9. Outros Motivos (key 'outros') - coluna L do consolidado (EXACT MATCH ONLY)
  *
  * Returns null if no status matches. Unmatched rows are ignored silently.
  */
-export function classifyRow(
-  input: string | string[],
-  explicitCells?: string[],
-): FpdStatusKey | null {
-  // Support both classifyRow(cells) and classifyRow(rowText, cells) or classifyRow(singleCellString)
+export function classifyRow(input: string | string[], extraCells?: unknown[]): FpdStatusKey | null {
+  // Support both classifyRow(cells) and classifyRow(rowText, extraCells) or classifyRow(singleCellString)
   let cells: string[]
   if (Array.isArray(input)) {
     cells = input
-  } else if (explicitCells && Array.isArray(explicitCells)) {
-    cells = explicitCells
+  } else if (extraCells && Array.isArray(extraCells)) {
+    cells = extraCells.map((c) => (c !== null && c !== undefined ? normalizeText(c) : ''))
   } else if (typeof input === 'string') {
     cells = [input]
   } else {
@@ -450,11 +435,6 @@ export function classifyRow(
   // 8. Não Tratados
   if (cells.some((cell) => EXACT_NAO_TRATADOS.has(cell))) {
     return 'nao_tratados'
-  }
-
-  // 9. Outros Motivos (EXACT MATCH ONLY)
-  if (cells.some((cell) => EXACT_OUTROS.has(cell))) {
-    return 'outros'
   }
 
   // No match -> ignore row silently
@@ -847,11 +827,8 @@ export function findValidatedStatusColumnIndex(
  * Classifies the cell value of a dedicated occurrences/status column.
  * Rules:
  * 1. Empty/blank -> 'nao_tratados'
- * 2. Texts containing "paga" or "pago" (or "quitad", "liquidad") -> 'fatura_paga'
- * 3. Texts containing "enviad" (or "2 via", "2a via", "reenvio") -> 'envio_fatura'
- * 4. Texts containing "contato" or "atendid" -> 'contato_realizado'
- * 5. Other categories via exact/known matches (promessa_pagto, sem_contato, cancelados, pendente, nao_tratados)
- * 6. Fallback to classifyRow or 'outros'
+ * 2. Matches official categories -> category key
+ * 3. Does not match -> fallback to classifyRow(norm) or 'nao_tratados'
  */
 export function classifyStatusCell(cellVal: unknown): FpdStatusKey {
   const norm = normalizeText(cellVal)
@@ -938,8 +915,118 @@ export function classifyStatusCell(cellVal: unknown): FpdStatusKey {
     return 'nao_tratados'
   }
 
-  // 9. Standard classifyRow fallback or 'outros'
-  return classifyRow(norm) || 'outros'
+  // Fallback to classifyRow or 'nao_tratados'
+  return classifyRow(norm) || 'nao_tratados'
+}
+
+/**
+ * Checks if a cell value matches any official canonical category.
+ * If yes, returns the canonical label.
+ * If empty/blank, returns "Não Tratados".
+ * If not matching any official category, returns null (so the original raw text can be used).
+ */
+export function getCanonicalCategoryOrRaw(cellVal: unknown): string {
+  if (cellVal === null || cellVal === undefined) {
+    return 'Não Tratados'
+  }
+  const originalStr = String(cellVal).trim()
+  if (!originalStr) {
+    return 'Não Tratados'
+  }
+
+  const norm = normalizeText(originalStr)
+  if (!norm) {
+    return 'Não Tratados'
+  }
+
+  // Check official categories
+  // 1. Enviado Fatura(s)
+  if (
+    norm.includes('enviad') ||
+    norm.includes('envio') ||
+    norm.includes('2 via') ||
+    norm.includes('2a via') ||
+    EXACT_ENVIO_FATURA.has(norm)
+  ) {
+    return 'Enviado Fatura(s)'
+  }
+
+  // 2. Promessa de Pagto.
+  if (norm.includes('promessa') || EXACT_PROMESSA_PAGTO.has(norm)) {
+    return 'Promessa de Pagto.'
+  }
+
+  // 3. Fatura(s) Paga(s)
+  if (
+    norm.includes('paga') ||
+    norm.includes('pago') ||
+    norm.includes('quitad') ||
+    norm.includes('liquidad') ||
+    EXACT_FATURA_PAGA.has(norm)
+  ) {
+    return 'Fatura(s) Paga(s)'
+  }
+
+  // 4. Sem Contato
+  if (
+    norm.includes('sem contato') ||
+    norm.includes('nao atende') ||
+    norm.includes('caixa postal') ||
+    EXACT_SEM_CONTATO.has(norm)
+  ) {
+    return 'Sem Contato'
+  }
+
+  // 5. Cancelados
+  if (
+    norm.includes('cancel') ||
+    norm.includes('fraude') ||
+    norm.includes('desist') ||
+    norm.includes('devolv') ||
+    EXACT_CANCELADOS.has(norm)
+  ) {
+    return 'Cancelados'
+  }
+
+  // 6. Pendente
+  if (
+    norm.includes('pendente') ||
+    norm.includes('em analise') ||
+    norm.includes('em tratativa') ||
+    norm.includes('aguardando') ||
+    EXACT_PENDENTE.has(norm)
+  ) {
+    return 'Pendente'
+  }
+
+  // 7. Contato Realizado
+  if (
+    norm.includes('contato') ||
+    norm.includes('atendid') ||
+    norm.includes('falou') ||
+    norm.includes('recado') ||
+    EXACT_CONTATO_REALIZADO.has(norm)
+  ) {
+    return 'Contato Realizado'
+  }
+
+  // 8. Não Tratados
+  if (
+    norm.includes('nao tratado') ||
+    norm.includes('nao trabalh') ||
+    norm.includes('a tratar') ||
+    EXACT_NAO_TRATADOS.has(norm)
+  ) {
+    return 'Não Tratados'
+  }
+
+  const rowMatch = classifyRow(norm)
+  if (rowMatch) {
+    return fpdStatusKeyToOcorrenciaLabel(rowMatch)
+  }
+
+  // Return the original trimmed text faithful to spreadsheet
+  return originalStr
 }
 
 /**
@@ -961,8 +1048,6 @@ export function fpdStatusKeyToOcorrenciaLabel(key: FpdStatusKey): string {
       return 'Pendente'
     case 'contato_realizado':
       return 'Contato Realizado'
-    case 'outros':
-      return 'Outros Motivos'
     case 'nao_tratados':
     default:
       return 'Não Tratados'
@@ -1129,7 +1214,6 @@ export function parseWorksheet(
     cancelados: 0,
     nao_tratados: 0,
     contato_realizado: 0,
-    outros: 0,
     vendorLines,
     columns: detectedColumns,
   }
@@ -1259,24 +1343,17 @@ export function parseWorksheet(
     let category: FpdStatusKey
     if (statusColIndex >= 0) {
       // Status column identified: classify exclusively by this column's cell value
+      // Empty -> 'nao_tratados'; never scan other cells across the row.
       const rawStatusCell = statusColIndex < row.length ? row[statusColIndex] : ''
       const normalizedStatusCell = normalizeText(rawStatusCell)
       if (!normalizedStatusCell) {
-        // If the identified column cell is empty, check fallback by known status phrase in the row cells
-        const phraseMatch = matchRowStatusByKnownPhrase(row)
-        category = phraseMatch || 'nao_tratados'
+        category = 'nao_tratados'
       } else {
         category = classifyStatusCell(normalizedStatusCell)
       }
     } else {
-      // Fallback: check known phrases in cells, then classifyRow
-      const phraseMatch = matchRowStatusByKnownPhrase(row)
-      if (phraseMatch) {
-        category = phraseMatch
-      } else {
-        const normalizedCells = row.map(normalizeText)
-        category = classifyRow(normalizedCells) || 'outros'
-      }
+      // Fallback when no status column detected at all
+      category = 'nao_tratados'
     }
 
     // Determine quantity for this row:
@@ -1327,7 +1404,6 @@ export function parseWorksheet(
   counts.cancelados = Math.round(counts.cancelados || 0)
   counts.nao_tratados = Math.round(counts.nao_tratados || 0)
   counts.contato_realizado = Math.round(counts.contato_realizado || 0)
-  counts.outros = Math.round(counts.outros || 0)
   counts.totalRows = Math.round(counts.totalRows || 0)
   counts.vendorLines = vendorLines
 
@@ -1426,7 +1502,6 @@ export async function parseXlsxFile(file: File): Promise<ParsedFileData> {
     contato_realizado: safeInt(
       (movelCounts?.contato_realizado || 0) + (residencialCounts?.contato_realizado || 0),
     ),
-    outros: safeInt((movelCounts?.outros || 0) + (residencialCounts?.outros || 0)),
   }
 
   return {

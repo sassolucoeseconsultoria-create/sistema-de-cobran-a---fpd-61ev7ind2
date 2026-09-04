@@ -4,10 +4,7 @@ import {
   extractWorksheetColumns,
   findStatusColumnIndex,
   findValidatedStatusColumnIndex,
-  classifyStatusCell,
-  classifyRow,
-  matchRowStatusByKnownPhrase,
-  fpdStatusKeyToOcorrenciaLabel,
+  getCanonicalCategoryOrRaw,
   isHeaderOrTotalRow,
   guessReferenteDate,
 } from './xlsxParser'
@@ -253,37 +250,16 @@ export function parseAnalyticalWorksheet(
     }
 
     // Determine occurrences classification:
-    // 1. If status/occurrences column is detected and has a non-empty cell value: classify by its cell value.
-    // 2. If the cell is empty or no status column detected, check fallback by known status phrase across row cells.
-    // 3. Otherwise fallback to classifyRow or 'Não Tratados'.
+    // Exclusively by the status/occurrences column cell value:
+    // - Vazia -> "Não Tratados"
+    // - Casa com categoria oficial -> rótulo canônico
+    // - Não casa -> texto original da célula (trim)
     let rowOcorrenciaLabel = 'Não Tratados'
-    if (statusColIndex >= 0) {
-      const rawStatusCell = statusColIndex < row.length ? row[statusColIndex] : ''
-      const normalizedStatusCell = normalizeText(rawStatusCell)
-      if (!normalizedStatusCell) {
-        // Fallback: search known status phrases in the row cells
-        const phraseKey = matchRowStatusByKnownPhrase(row)
-        if (phraseKey) {
-          rowOcorrenciaLabel = fpdStatusKeyToOcorrenciaLabel(phraseKey)
-        } else {
-          rowOcorrenciaLabel = 'Não Tratados'
-        }
-      } else {
-        const statusKey = classifyStatusCell(normalizedStatusCell)
-        rowOcorrenciaLabel = fpdStatusKeyToOcorrenciaLabel(statusKey)
-      }
+    if (statusColIndex >= 0 && statusColIndex < row.length) {
+      const rawStatusCell = row[statusColIndex]
+      rowOcorrenciaLabel = getCanonicalCategoryOrRaw(rawStatusCell)
     } else {
-      // No status column detected: search known status phrases first, then classifyRow
-      const phraseKey = matchRowStatusByKnownPhrase(row)
-      if (phraseKey) {
-        rowOcorrenciaLabel = fpdStatusKeyToOcorrenciaLabel(phraseKey)
-      } else {
-        const normalizedCells = row.map(normalizeText)
-        const matchedKey = classifyRow(normalizedCells)
-        if (matchedKey) {
-          rowOcorrenciaLabel = fpdStatusKeyToOcorrenciaLabel(matchedKey)
-        }
-      }
+      rowOcorrenciaLabel = 'Não Tratados'
     }
 
     rows.push({

@@ -14,7 +14,7 @@ export function exportVendorsToXlsx(
     cancelados: number
     pendente: number
     contatoRealizado: number
-    outros: number
+    outros?: number
     naoTratados: number
   }>,
   totals: {
@@ -26,7 +26,7 @@ export function exportVendorsToXlsx(
     cancelados: number
     pendente: number
     contatoRealizado: number
-    outros: number
+    outros?: number
     naoTratados: number
   },
   referenteLabel?: string,
@@ -45,7 +45,6 @@ export function exportVendorsToXlsx(
     'Cancelados',
     'Pendente',
     'Contato Realizado',
-    'Outros Motivos',
     'Não Tratados',
   ]
 
@@ -62,7 +61,6 @@ export function exportVendorsToXlsx(
     r.cancelados,
     r.pendente,
     r.contatoRealizado,
-    r.outros,
     r.naoTratados,
   ])
 
@@ -79,7 +77,6 @@ export function exportVendorsToXlsx(
     totals.cancelados,
     totals.pendente,
     totals.contatoRealizado,
-    totals.outros,
     totals.naoTratados,
   ]
 
@@ -99,7 +96,6 @@ export function exportVendorsToXlsx(
     { wch: 15 }, // Cancelados
     { wch: 15 }, // Pendente
     { wch: 18 }, // Contato Realizado
-    { wch: 18 }, // Outros Motivos
     { wch: 16 }, // Não Tratados
   ]
 
@@ -127,12 +123,12 @@ export function exportConsolidatedToXlsx(
     cancelados: number
     pendente: number
     contatoRealizado: number
-    outros: number
+    outros?: number
     naoTratados: number
   },
   referenteLabel?: string,
 ) {
-  // Headers matching the 9 FPD columns in exact order
+  // Headers matching the 8 FPD columns in exact order
   const headers = [
     'LOJAS',
     'COORDENAÇÃO',
@@ -145,7 +141,6 @@ export function exportConsolidatedToXlsx(
     'Cancelados',
     'Pendente',
     'Contato Realizado',
-    'Outros Motivos',
     'Não Tratados',
   ]
 
@@ -161,7 +156,6 @@ export function exportConsolidatedToXlsx(
     r.hasData ? r.cancelados : '',
     r.hasData ? r.pendente : '',
     r.hasData ? r.contatoRealizado : '',
-    r.hasData ? r.outros : '',
     r.hasData ? r.naoTratados : '',
   ])
 
@@ -178,7 +172,6 @@ export function exportConsolidatedToXlsx(
     totals.cancelados,
     totals.pendente,
     totals.contatoRealizado,
-    totals.outros,
     totals.naoTratados,
   ]
 
@@ -199,7 +192,6 @@ export function exportConsolidatedToXlsx(
     { wch: 15 }, // Cancelados
     { wch: 15 }, // Pendente
     { wch: 18 }, // Contato Realizado
-    { wch: 18 }, // Outros Motivos
     { wch: 16 }, // Não Tratados
   ]
 
@@ -225,7 +217,7 @@ export function exportImportedFilesToXlsx(
     cancelados: number
     pendente: number
     contatoRealizado: number
-    outros: number
+    outros?: number
     naoTratados: number
   },
 ) {
@@ -242,7 +234,6 @@ export function exportImportedFilesToXlsx(
     'Cancelados',
     'Pendente',
     'Contato Realizado',
-    'Outros Motivos',
     'Não Tratados',
   ]
 
@@ -265,7 +256,6 @@ export function exportImportedFilesToXlsx(
       f.cancelados || 0,
       f.pendente || 0,
       f.contato_realizado || 0,
-      f.outros || 0,
       f.nao_tratados || 0,
     ]
   })
@@ -286,7 +276,6 @@ export function exportImportedFilesToXlsx(
       totals.cancelados,
       totals.pendente,
       totals.contatoRealizado,
-      totals.outros,
       totals.naoTratados,
     ]
     wsData = [...wsData, totalsRow]
@@ -307,7 +296,6 @@ export function exportImportedFilesToXlsx(
     { wch: 15 }, // Cancelados
     { wch: 15 }, // Pendente
     { wch: 18 }, // Contato Realizado
-    { wch: 18 }, // Outros Motivos
     { wch: 16 }, // Não Tratados
   ]
 

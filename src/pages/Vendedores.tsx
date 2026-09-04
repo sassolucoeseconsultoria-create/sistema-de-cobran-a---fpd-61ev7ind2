@@ -203,7 +203,6 @@ export const Vendedores: React.FC = () => {
         acc.cancelados += r.cancelados
         acc.naoTratados += r.naoTratados
         acc.contatoRealizado += r.contatoRealizado
-        acc.outros += r.outros
         return acc
       },
       {
@@ -221,7 +220,7 @@ export const Vendedores: React.FC = () => {
     )
   }, [filteredRows])
 
-  // Animated counters
+  // Animated totals
   const animatedTotalLinhas = useCountUp(totals.totalLinhas)
   const animatedEnvioFatura = useCountUp(totals.envioFatura)
   const animatedPendente = useCountUp(totals.pendente)
@@ -231,8 +230,6 @@ export const Vendedores: React.FC = () => {
   const animatedCancelados = useCountUp(totals.cancelados)
   const animatedNaoTratados = useCountUp(totals.naoTratados)
   const animatedContatoRealizado = useCountUp(totals.contatoRealizado)
-  const animatedOutros = useCountUp(totals.outros)
-
   // Indicator: Loja com mais vendedores
   const lojaComMaisVendedores = useMemo(() => {
     if (vendorRows.length === 0) return { nome: 'Nenhuma', count: 0 }
@@ -584,16 +581,17 @@ export const Vendedores: React.FC = () => {
             <tbody className="divide-y divide-[#E3E9F2]">
               {loading ? (
                 <tr>
-                  <td colSpan={13} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={12} className="py-12 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-6 h-6 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
-                      <span>Carregando ranking por vendedor...</span>
+                      <span>Carregando dados dos vendedores...</span>
                     </div>
                   </td>
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="py-12 text-center text-[#5B6B82]">
+                  <td colSpan={12} className="py-12 text-center text-[#5B6B82]">
+                    {' '}
                     <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
                       <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
                       <p className="font-medium text-[#12365A]">
@@ -738,11 +736,7 @@ export const Vendedores: React.FC = () => {
                 <td className="px-2.5 py-3 text-center text-[#5eead4] tabular-nums border-r border-[#1e456f]">
                   {animatedContatoRealizado.toLocaleString('pt-BR')}
                 </td>
-                {/* L: 8. Outros Motivos */}
-                <td className="px-2.5 py-3 text-center text-[#c4b5fd] tabular-nums border-r border-[#1e456f]">
-                  {animatedOutros.toLocaleString('pt-BR')}
-                </td>
-                {/* M: 9. Não Tratados */}
+                {/* L: 8. Não Tratados */}
                 <td className="px-2.5 py-3 text-center text-[#fdba74] tabular-nums border-r border-[#1e456f]">
                   {animatedNaoTratados.toLocaleString('pt-BR')}
                 </td>
