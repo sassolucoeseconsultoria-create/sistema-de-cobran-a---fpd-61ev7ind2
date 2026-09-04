@@ -107,8 +107,7 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
       setSelectedLoja('TODAS')
       setPage(1)
     }
-  }, [selectedLoja, userAccess, stores])
-
+  }, [selectedLoja, userAccess, stores, setSelectedLoja])
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
@@ -208,8 +207,10 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
 
       // Total de itens: quando TODAS está selecionado, totalItems é a soma exata vinda do backend
       let accurateTotal = res.totalItems
-      if (selectedLoja && selectedLoja !== 'TODAS' && filteredItems.length === 0 && page === 1) {
-        accurateTotal = 0
+      if (selectedLoja && selectedLoja !== 'TODAS') {
+        if (filteredItems.length === 0 && page === 1) {
+          accurateTotal = 0
+        }
       }
 
       setTotalItems(accurateTotal)

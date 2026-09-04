@@ -207,14 +207,56 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
     await user.click(option)
 
     // The badge for Móvel should now update to 15 (count of Aguas Clara in Móvel)
+    // and Residencial should update to 6 (count of Aguas Clara in Residencial)
     await waitFor(() => {
       expect(screen.getByText('15')).toBeDefined()
+      expect(screen.getByText('6')).toBeDefined()
     })
 
     // Verify Clientes Móvel table displays the row for Aguas Clara
     await waitFor(() => {
       expect(screen.getByText('Cliente Teste Aguas')).toBeDefined()
     })
+  })
+
+  it('contagem Móvel e Residencial mantêm a mesma loja selecionada após troca de aba', async () => {
+    const user = userEvent.setup()
+    render(<Relacionamento />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Clientes Móvel')).toBeDefined()
+    })
+
+    // Seleciona "CELNET AGUAS CLARA" na aba Móvel
+    const storeSelectTrigger = screen.getByRole('combobox', { name: /loja:/i })
+    await user.click(storeSelectTrigger)
+    const option = await screen.findByRole('option', { name: /CELNET AGUAS CLARA/i })
+    await user.click(option)
+
+    // Verifica que os dois badges já refletem a loja selecionada (15 Móvel e 6 Residencial)
+    await waitFor(() => {
+      expect(screen.getByText('15')).toBeDefined()
+      expect(screen.getByText('6')).toBeDefined()
+    })
+
+    // Troca para a aba "Clientes Residencial"
+    const tabResidencial = screen.getByRole('button', { name: /Clientes Residencial/i })
+    await user.click(tabResidencial)
+
+    // A loja selecionada no seletor da aba Residencial deve permanecer "CELNET AGUAS CLARA"
+    await waitFor(() => {
+      expect(screen.getByText(/Loja:\s*CELNET AGUAS CLARA/i)).toBeDefined()
+    })
+
+    // A tabela Residencial deve exibir os dados da loja selecionada e NÃO de Planaltina
+    await waitFor(() => {
+      expect(screen.getByText('Cliente Residencial Aguas')).toBeDefined()
+      expect(screen.queryByText('Cliente Planaltina')).toBeNull()
+    })
+
+    // Ambos os badges continuam sincronizados
+    expect(screen.getByText('15')).toBeDefined()
+    expect(screen.getByText('6')).toBeDefined()
   })
 
   it('mostra 0 nos badges e estado vazio quando loja não possui registros', async () => {
@@ -238,14 +280,23 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
     const option = await screen.findByRole('option', { name: /CELNET PLANALTINA GO/i })
     await user.click(option)
 
-    // Móvel badge should now be 0
+    // Badges should now both be 0
     await waitFor(() => {
-      expect(screen.getByText('0')).toBeDefined()
+      const zeros = screen.getAllByText('0')
+      expect(zeros.length).toBeGreaterThanOrEqual(2)
     })
 
     // Table should show empty message
     await waitFor(() => {
       expect(screen.getByText(/nenhum cliente móvel encontrado/i)).toBeDefined()
+    })
+
+    // Troca para Residencial e também deve estar vazio com 0
+    const tabResidencial = screen.getByRole('button', { name: /Clientes Residencial/i })
+    await user.click(tabResidencial)
+
+    await waitFor(() => {
+      expect(screen.getByText(/nenhum cliente residencial encontrado/i)).toBeDefined()
     })
   })
 

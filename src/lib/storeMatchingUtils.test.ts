@@ -46,6 +46,19 @@ describe('storeMatchingUtils', () => {
     // False cases (Must NOT confuse Aguas Claras with Planaltina)
     expect(isSameStore('CELNET AGUAS CLARAS', 'CELNET PLANALTINA DF')).toBe(false)
     expect(isSameStore('CELNET AGUAS CLARAS', 'CELNET MATRIZ PLANALTINA DF')).toBe(false)
+    expect(isSameStore('CELNET AGUAS CLARA', 'CELNET MATRIZ PLANALTINA DF')).toBe(false)
     expect(isSameStore('CELNET PLANALTINA DF', 'CELNET PLANALTINA GO')).toBe(false)
+  })
+
+  it('buildStoreFilterClause for CELNET AGUAS CLARA does NOT match CELNET MATRIZ PLANALTINA DF and vice-versa', () => {
+    const clauseAguas = buildStoreFilterClause('CELNET AGUAS CLARA')
+    expect(clauseAguas).toContain('"CELNET AGUAS CLARA"')
+    expect(clauseAguas).not.toContain('PLANALTINA')
+
+    const clausePlanaltina = buildStoreFilterClause('CELNET MATRIZ PLANALTINA DF')
+    expect(clausePlanaltina).toContain('"CELNET MATRIZ PLANALTINA DF"')
+    expect(clausePlanaltina).toContain('"CELNET PLANALTINA DF"')
+    expect(clausePlanaltina).not.toContain('AGUAS')
+    expect(clausePlanaltina).not.toContain('PLANALTINA GO')
   })
 })

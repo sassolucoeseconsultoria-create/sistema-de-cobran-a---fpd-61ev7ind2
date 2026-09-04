@@ -60,8 +60,7 @@ export const Relacionamento: React.FC = () => {
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [totalMovel, setTotalMovel] = useState(0)
   const [totalResidencial, setTotalResidencial] = useState(0)
-  const [selectedLojaMovel, setSelectedLojaMovel] = useState<string>('TODAS')
-  const [selectedLojaResidencial, setSelectedLojaResidencial] = useState<string>('TODAS')
+  const [selectedLoja, setSelectedLoja] = useState<string>('TODAS')
   const [rawAvailableLojas, setRawAvailableLojas] = useState<string[]>([])
   const [availableDates, setAvailableDates] = useState<string[]>([])
   const [selectedDataReferencia, setSelectedDataReferencia] = useState<string>('TODAS')
@@ -226,9 +225,9 @@ export const Relacionamento: React.FC = () => {
     return unified.sort((a, b) => a.localeCompare(b, 'pt-BR'))
   }, [rawAvailableLojas, stores, userAccess])
 
-  // Recalculate Móvel count whenever selectedLojaMovel, availableLojas or selectedDataReferencia change
+  // Recalculate Móvel count whenever selectedLoja, availableLojas or selectedDataReferencia change
   const refreshMovelCount = useCallback(async () => {
-    const filter = buildCountFilter(selectedLojaMovel, availableLojas)
+    const filter = buildCountFilter(selectedLoja, availableLojas)
     if (filter === '__NO_ACCESS__') {
       setTotalMovel(0)
       return
@@ -244,11 +243,11 @@ export const Relacionamento: React.FC = () => {
       console.error('Erro ao contar clientes móvel:', err)
       setTotalMovel(0)
     }
-  }, [buildCountFilter, selectedLojaMovel, availableLojas])
+  }, [buildCountFilter, selectedLoja, availableLojas])
 
-  // Recalculate Residencial count whenever selectedLojaResidencial, availableLojas or selectedDataReferencia change
+  // Recalculate Residencial count whenever selectedLoja, availableLojas or selectedDataReferencia change
   const refreshResidencialCount = useCallback(async () => {
-    const filter = buildCountFilter(selectedLojaResidencial, availableLojas)
+    const filter = buildCountFilter(selectedLoja, availableLojas)
     if (filter === '__NO_ACCESS__') {
       setTotalResidencial(0)
       return
@@ -264,7 +263,7 @@ export const Relacionamento: React.FC = () => {
       console.error('Erro ao contar clientes residencial:', err)
       setTotalResidencial(0)
     }
-  }, [buildCountFilter, selectedLojaResidencial, availableLojas])
+  }, [buildCountFilter, selectedLoja, availableLojas])
 
   useEffect(() => {
     refreshMovelCount()
@@ -684,16 +683,16 @@ export const Relacionamento: React.FC = () => {
           availableLojas={availableLojas}
           stores={stores}
           dataReferencia={selectedDataReferencia}
-          selectedLoja={selectedLojaMovel}
-          onLojaChange={setSelectedLojaMovel}
+          selectedLoja={selectedLoja}
+          onLojaChange={setSelectedLoja}
         />
       ) : (
         <ClientesResidencial
           availableLojas={availableLojas}
           stores={stores}
           dataReferencia={selectedDataReferencia}
-          selectedLoja={selectedLojaResidencial}
-          onLojaChange={setSelectedLojaResidencial}
+          selectedLoja={selectedLoja}
+          onLojaChange={setSelectedLoja}
         />
       )}
 
