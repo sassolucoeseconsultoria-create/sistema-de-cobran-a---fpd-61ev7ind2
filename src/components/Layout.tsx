@@ -15,13 +15,17 @@ import {
   UserCheck,
   Flame,
   Layers,
+  Lock,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 export const Layout: React.FC = () => {
   const { user, logout } = useAuth()
+  const { isAdm } = useUserStoreAccess()
   const navigate = useNavigate()
   const location = useLocation()
   const [collapsed, setCollapsed] = useState(false)
@@ -38,36 +42,44 @@ export const Layout: React.FC = () => {
       label: 'Ranking por Vendedor',
       icon: UserCheck,
       description: 'Ranking agrupado por vendedor',
+      disabled: false,
     },
     {
       to: '/top-ofensores',
       label: 'Top 20 Ofensores',
       icon: Flame,
       description: 'Ranking dos 20 principais ofensores por linhas',
+      disabled: false,
     },
     {
       to: '/importar',
       label: 'Importar Arquivos',
       icon: FileSpreadsheet,
       description: 'Upload e processamento .xlsx',
+      disabled: !isAdm,
+      disabledReason: 'Exclusivo do perfil ADM',
     },
     {
       to: '/arquivos',
       label: 'Painel de Lojas',
       icon: FolderOpen,
       description: 'Painel consolidado agrupado por loja',
+      disabled: false,
     },
     {
       to: '/relacionamento',
       label: 'Inadimplência',
       icon: Layers,
       description: 'Gestão de clientes das carteiras Móvel e Residencial',
+      disabled: false,
     },
     {
       to: '/lojas',
       label: 'Lojas',
       icon: Store,
       description: 'Gerenciamento de lojas',
+      disabled: !isAdm,
+      disabledReason: 'Exclusivo do perfil ADM',
     },
     ...(user?.role === 'ADM'
       ? [
@@ -76,6 +88,7 @@ export const Layout: React.FC = () => {
             label: 'Administração',
             icon: Settings,
             description: 'Gestão de usuários e perfis',
+            disabled: false,
           },
         ]
       : []),
@@ -183,6 +196,50 @@ export const Layout: React.FC = () => {
           {navItems.map((item) => {
             const Icon = item.icon
             const isActive = location.pathname === item.to
+            const isDisabled = !!item.disabled
+
+            if (isDisabled) {
+              const disabledContent = (
+                <div
+                  aria-disabled="true"
+                  tabIndex={-1}
+                  className={cn(
+                    'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium select-none cursor-not-allowed opacity-40 bg-black/10 text-slate-400 transition-all group',
+                    collapsed && 'justify-center px-0',
+                  )}
+                >
+                  <Icon className="w-5 h-5 shrink-0 text-slate-500" />
+                  {(!collapsed || mobileOpen) && (
+                    <div className="flex items-center justify-between gap-2 flex-1 min-w-0">
+                      <span className="truncate line-through decoration-slate-500/60">
+                        {item.label}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-300 shrink-0">
+                        <Lock className="w-2.5 h-2.5" />
+                        <span>ADM</span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )
+
+              return (
+                <Tooltip key={item.to}>
+                  <TooltipTrigger asChild>
+                    <div>{disabledContent}</div>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="right"
+                    className="bg-[#0E2A47] text-white border border-[#1e456f] text-xs font-medium max-w-[220px]"
+                  >
+                    <p className="font-semibold text-amber-300">Acesso Restrito</p>
+                    <p className="text-[11px] text-slate-300 mt-0.5">
+                      {item.label}: exclusivo do perfil Administrador (ADM).
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              )
+            }
 
             return (
               <NavLink
@@ -292,23 +349,24 @@ export const Layout: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            {![
-              '/importar',
-              '/top-ofensores',
-              '/vendedores',
-              '/arquivos',
-              '/relacionamento',
-              '/lojas',
-              '/admin',
-            ].includes(location.pathname) && (
-              <Button
-                onClick={() => navigate('/importar')}
-                className="bg-[#0E9F8A] hover:bg-[#0c8a77] text-white shadow-sm font-medium text-xs sm:text-sm h-9 px-3 sm:px-4 gap-2"
-              >
-                <UploadCloud className="w-4 h-4" />
-                <span>Importar Planilhas</span>
-              </Button>
-            )}
+            {isAdm &&
+              ![
+                '/importar',
+                '/top-ofensores',
+                '/vendedores',
+                '/arquivos',
+                '/relacionamento',
+                '/lojas',
+                '/admin',
+              ].includes(location.pathname) && (
+                <Button
+                  onClick={() => navigate('/importar')}
+                  className="bg-[#0E9F8A] hover:bg-[#0c8a77] text-white shadow-sm font-medium text-xs sm:text-sm h-9 px-3 sm:px-4 gap-2"
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  <span>Importar Planilhas</span>
+                </Button>
+              )}
           </div>
         </header>
 

@@ -40,14 +40,28 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/vendedores" element={<Vendedores />} />
             <Route path="/top-ofensores" element={<TopOfensores />} />
-            <Route path="/importar" element={<Importar />} />
+            <Route
+              path="/importar"
+              element={
+                <ProtectedRoute requireRole="ADM" showRestrictedFeedback>
+                  <Importar />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/arquivos" element={<Arquivos />} />
             <Route path="/relacionamento" element={<Relacionamento />} />
-            <Route path="/lojas" element={<Lojas />} />
+            <Route
+              path="/lojas"
+              element={
+                <ProtectedRoute requireRole="ADM" showRestrictedFeedback>
+                  <Lojas />
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/admin"
               element={
-                <ProtectedRoute requireRole="ADM">
+                <ProtectedRoute requireRole="ADM" showRestrictedFeedback>
                   <Admin />
                 </ProtectedRoute>
               }

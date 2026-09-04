@@ -492,12 +492,14 @@ export const Index: React.FC = () => {
               relatório.
             </p>
           </div>
-          <Link to="/importar">
-            <Button className="bg-[#0E9F8A] hover:bg-[#0c8a77] text-white shadow-lg shadow-[#0E9F8A]/30 font-semibold px-6 py-6 h-auto text-base gap-2.5 shrink-0">
-              <UploadCloud className="w-5 h-5" />
-              <span>Importar Arquivos Agora</span>
-            </Button>
-          </Link>
+          {userAccess.isAdm && (
+            <Link to="/importar">
+              <Button className="bg-[#0E9F8A] hover:bg-[#0c8a77] text-white shadow-lg shadow-[#0E9F8A]/30 font-semibold px-6 py-6 h-auto text-base gap-2.5 shrink-0">
+                <UploadCloud className="w-5 h-5" />
+                <span>Importar Arquivos Agora</span>
+              </Button>
+            </Link>
+          )}
         </div>
       )}
 
