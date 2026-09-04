@@ -26,11 +26,12 @@ routerAdd(
         storeList.forEach((storeName, index) => {
           const pName = 's' + index
           params[pName] = storeName
-          // Variações comuns (com/sem S, case)
           conditions.push(`loja = {:${pName}}`)
           if (storeName.toUpperCase().includes('AGUAS CLARA')) {
-            conditions.push(`loja LIKE '%AGUAS CLARA%'`)
-            conditions.push(`loja LIKE '%ÁGUAS CLARA%'`)
+            conditions.push(`loja = 'CELNET AGUAS CLARAS'`)
+            conditions.push(`loja = 'CELNET AGUAS CLARA'`)
+            conditions.push(`loja = 'CELNET ÁGUAS CLARAS'`)
+            conditions.push(`loja = 'CELNET ÁGUAS CLARA'`)
             conditions.push(`arquivo = 'CELNET AGUAS CLARAS.xlsx'`)
           }
           if (
@@ -38,12 +39,11 @@ routerAdd(
             storeName.toUpperCase().includes('MATRIZ PLANALTINA')
           ) {
             conditions.push(
-              `(loja LIKE '%PLANALTINA%DF%' OR loja = 'CELNET PLANALTINA' OR loja LIKE '%MATRIZ PLANALTINA%') AND loja NOT LIKE '%PLANALTINA%GO%'`,
+              `(loja = 'CELNET PLANALTINA DF' OR loja = 'CELNET MATRIZ PLANALTINA DF' OR loja = 'CELNET PLANALTINA' OR loja = 'MATRIZ PLANALTINA DF') AND loja NOT LIKE '%PLANALTINA%GO%'`,
             )
             conditions.push(`arquivo = 'CELNET PLANALTINA DF.xlsx'`)
           }
         })
-
         const whereSql = `WHERE (${conditions.join(' OR ')})`
 
         if (targetAba === 'TODAS' || targetAba === 'Móvel') {

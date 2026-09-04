@@ -1,4 +1,5 @@
 import pb from '@/lib/pocketbase/client'
+import { buildStoreFilterClause, getStoreVariants } from '@/lib/storeMatchingUtils'
 import type {
   MovelRecord,
   ResidencialRecord,
@@ -85,17 +86,9 @@ export async function fetchAnalyticalRows(
     const filterParts: string[] = []
 
     if (loja && loja !== 'TODAS' && loja.trim() !== '') {
-      const escaped = loja.replace(/"/g, '\\"')
-      // Also generate unaccented version if different for query filter fallback
-      const unaccented = loja
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .trim()
-        .replace(/"/g, '\\"')
-      if (unaccented && unaccented.toLowerCase() !== escaped.toLowerCase()) {
-        filterParts.push(`(loja = "${escaped}" || loja = "${unaccented}")`)
-      } else {
-        filterParts.push(`loja = "${escaped}"`)
+      const storeClause = buildStoreFilterClause(loja)
+      if (storeClause) {
+        filterParts.push(storeClause)
       }
     } else if (allowedStoreNames !== undefined) {
       if (allowedStoreNames.length === 0) {
@@ -112,14 +105,8 @@ export async function fetchAnalyticalRows(
         const expandedStoreNames = new Set<string>()
         for (const st of allowedStoreNames) {
           if (!st || !st.trim()) continue
-          expandedStoreNames.add(st.trim())
-          const unaccented = st
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .trim()
-          if (unaccented) {
-            expandedStoreNames.add(unaccented)
-          }
+          const variants = getStoreVariants(st)
+          variants.forEach((v) => expandedStoreNames.add(v))
         }
 
         const storeFilters = Array.from(expandedStoreNames).map(
@@ -844,21 +831,12 @@ export async function clearAllAnalyticalRows(
     if (lojas.length === 0) return undefined
     const parts: string[] = []
     for (const l of lojas) {
-      const esc = l.replace(/"/g, '\\"')
-      parts.push(`loja = "${esc}"`)
-      if (l.toUpperCase().includes('AGUAS CLARA')) {
-        parts.push(`loja ~ "AGUAS CLARA"`)
-        parts.push(`arquivo ~ "AGUAS CLARAS"`)
-      }
-      if (
-        l.toUpperCase().includes('PLANALTINA DF') ||
-        l.toUpperCase().includes('MATRIZ PLANALTINA')
-      ) {
-        parts.push(`(loja ~ "PLANALTINA DF" || loja ~ "MATRIZ PLANALTINA")`)
-        parts.push(`arquivo ~ "PLANALTINA DF"`)
+      const storeClause = buildStoreFilterClause(l)
+      if (storeClause) {
+        parts.push(storeClause)
       }
     }
-    return `(${parts.join(' || ')})`
+    return parts.length > 0 ? `(${parts.join(' || ')})` : undefined
   }
 
   const filter = buildLojaFilter()

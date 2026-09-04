@@ -33,6 +33,7 @@ import {
 } from '@/lib/clientFormatters'
 import { updateClientManualFields } from '@/services/relacionamentoService'
 import { cn } from '@/lib/utils'
+import { getStoreVariants, buildStoreFilterClause, isSameStore } from '@/lib/storeMatchingUtils'
 
 import type { StoreRecord } from '@/types/fpd'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
@@ -130,32 +131,9 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
           return
         }
 
-        const lojaVariants = new Set<string>()
-        lojaVariants.add(selectedLoja)
-        // Check if there is an alternative form with or without trailing S (e.g., AGUAS CLARA vs AGUAS CLARAS)
-        if (selectedLoja.endsWith('S') || selectedLoja.endsWith('s')) {
-          lojaVariants.add(selectedLoja.slice(0, -1))
-        } else {
-          lojaVariants.add(`${selectedLoja}S`)
-        }
-
-        const clauses: string[] = []
-        for (const variant of lojaVariants) {
-          const esc = variant.replace(/"/g, '\\"')
-          clauses.push(`loja = "${esc}"`)
-          const unacc = variant
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .trim()
-            .replace(/"/g, '\\"')
-          if (unacc && unacc.toLowerCase() !== esc.toLowerCase()) {
-            clauses.push(`loja = "${unacc}"`)
-          }
-        }
-        if (clauses.length === 1) {
-          filterParts.push(clauses[0])
-        } else {
-          filterParts.push(`(${clauses.join(' || ')})`)
+        const storeClause = buildStoreFilterClause(selectedLoja)
+        if (storeClause) {
+          filterParts.push(storeClause)
         }
       } else if (!userAccess.isAdm) {
         // User is not ADM and has "TODAS" selected -> filter by all allowed stores
@@ -163,14 +141,8 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
           const expandedStoreNames = new Set<string>()
           for (const l of availableLojas) {
             if (!l || !l.trim()) continue
-            expandedStoreNames.add(l.trim())
-            const unaccented = l
-              .normalize('NFD')
-              .replace(/[\u0300-\u036f]/g, '')
-              .trim()
-            if (unaccented) {
-              expandedStoreNames.add(unaccented)
-            }
+            const variants = getStoreVariants(l)
+            variants.forEach((v) => expandedStoreNames.add(v))
           }
 
           const storeFilters = Array.from(expandedStoreNames).map(
@@ -218,16 +190,8 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
 
       // Extra safeguard: if a specific store is selected, ensure every returned item strictly matches it
       if (selectedLoja && selectedLoja !== 'TODAS') {
-        const selNorm = selectedLoja.trim().toLowerCase()
-        const unaccentedSelNorm = selectedLoja
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .trim()
-          .toLowerCase()
-        const altVariant = selNorm.endsWith('s') ? selNorm.slice(0, -1) : `${selNorm}s`
         filteredItems = filteredItems.filter((item) => {
-          const itemLoja = (item.loja || '').trim().toLowerCase()
-          return itemLoja === selNorm || itemLoja === unaccentedSelNorm || itemLoja === altVariant
+          return isSameStore(item.loja, selectedLoja)
         })
       }
 

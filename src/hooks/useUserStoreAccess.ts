@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import type { StoreRecord } from '@/types/fpd'
 import { matchStore, normalizeStoreString } from '@/services/fpdService'
+import { isSameStore } from '@/lib/storeMatchingUtils'
 
 export interface UserStoreAccess {
   /**
@@ -128,14 +129,13 @@ export function useUserStoreAccess(): UserStoreAccess {
 
         // 3. Robust normalized token and string comparisons against allowedStores
         return allowedStores.some((store) => {
+          if (isSameStore(store.name, raw)) return true
           const normStore = normalizeStoreString(store.name)
           if (normStore === normInput) return true
-          if (normInput.includes(normStore) || normStore.includes(normInput)) return true
 
           const storeTokens = cleanTokens(store.name)
           if (inputTokens && storeTokens) {
             if (inputTokens === storeTokens) return true
-            if (inputTokens.includes(storeTokens) || storeTokens.includes(inputTokens)) return true
           }
 
           return false

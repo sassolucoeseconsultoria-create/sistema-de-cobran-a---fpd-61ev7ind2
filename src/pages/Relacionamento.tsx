@@ -38,6 +38,7 @@ import {
   invalidateAnalyticalCache,
   clearAllAnalyticalRows,
 } from '@/services/relacionamentoService'
+import { getStoreVariants, buildStoreFilterClause, isSameStore } from '@/lib/storeMatchingUtils'
 import { Trash2 } from 'lucide-react'
 import { parseAnalyticalXlsxFile, ParsedAnalyticalFileData } from '@/lib/analyticalImportParser'
 import { fetchStores, matchStore } from '@/services/fpdService'
@@ -96,39 +97,17 @@ export const Relacionamento: React.FC = () => {
           return '__NO_ACCESS__'
         }
 
-        const lojaVariants = new Set<string>()
-        lojaVariants.add(loja)
-        if (loja.endsWith('S') || loja.endsWith('s')) {
-          lojaVariants.add(loja.slice(0, -1))
-        } else {
-          lojaVariants.add(`${loja}S`)
+        const storeClause = buildStoreFilterClause(loja)
+        if (storeClause) {
+          filterParts.push(storeClause)
         }
-
-        const clauses: string[] = []
-        for (const variant of lojaVariants) {
-          const esc = variant.replace(/"/g, '\\"')
-          clauses.push(`loja = "${esc}"`)
-          const unacc = variant
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .trim()
-            .replace(/"/g, '\\"')
-          if (unacc && unacc.toLowerCase() !== esc.toLowerCase()) {
-            clauses.push(`loja = "${unacc}"`)
-          }
-        }
-        filterParts.push(clauses.length === 1 ? clauses[0] : `(${clauses.join(' || ')})`)
       } else if (!userAccess.isAdm) {
         if (allowedLojas.length > 0) {
           const expandedStoreNames = new Set<string>()
           for (const l of allowedLojas) {
             if (!l || !l.trim()) continue
-            expandedStoreNames.add(l.trim())
-            const unacc = l
-              .normalize('NFD')
-              .replace(/[\u0300-\u036f]/g, '')
-              .trim()
-            if (unacc) expandedStoreNames.add(unacc)
+            const variants = getStoreVariants(l)
+            variants.forEach((v) => expandedStoreNames.add(v))
           }
 
           const storeFilters = Array.from(expandedStoreNames).map(
@@ -203,26 +182,38 @@ export const Relacionamento: React.FC = () => {
 
   // Filtered available lojas based on user profile and linked stores
   const availableLojas = useMemo(() => {
+    // Collect all candidate store names
+    let candidateNames: string[] = []
     if (userAccess.isAdm) {
-      const allNames = Array.from(
+      candidateNames = Array.from(
         new Set([...rawAvailableLojas, ...stores.map((s) => s.name)]),
       ).filter(Boolean)
-      return allNames.sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    } else {
+      if (userAccess.hasNoStoreAssigned) return []
+
+      // 1. Find which analytical loja strings belong to the user's allowed stores
+      const allowedFromAnalytical = rawAvailableLojas.filter((l) =>
+        userAccess.isStoreNameAllowed(l, stores),
+      )
+
+      // 2. Also retrieve registered store names for assigned stores
+      const userRegisteredStoreNames = userAccess.getAllowedStoreNames(stores)
+
+      candidateNames = Array.from(
+        new Set([...allowedFromAnalytical, ...userRegisteredStoreNames]),
+      ).filter(Boolean)
     }
-    if (userAccess.hasNoStoreAssigned) return []
 
-    // 1. Find which analytical loja strings belong to the user's allowed stores
-    const allowedFromAnalytical = rawAvailableLojas.filter((l) =>
-      userAccess.isStoreNameAllowed(l, stores),
-    )
+    // Unify duplicates that represent the same store (e.g. prioritize registered store name over alias)
+    const unified: string[] = []
+    for (const cand of candidateNames) {
+      const alreadyHas = unified.some((u) => isSameStore(u, cand))
+      if (!alreadyHas) {
+        unified.push(cand)
+      }
+    }
 
-    // 2. Also retrieve registered store names for assigned stores
-    const userRegisteredStoreNames = userAccess.getAllowedStoreNames(stores)
-
-    const combined = Array.from(
-      new Set([...allowedFromAnalytical, ...userRegisteredStoreNames]),
-    ).filter(Boolean)
-    return combined.sort((a, b) => a.localeCompare(b, 'pt-BR'))
+    return unified.sort((a, b) => a.localeCompare(b, 'pt-BR'))
   }, [rawAvailableLojas, stores, userAccess])
 
   // Recalculate Móvel count whenever selectedLojaMovel, availableLojas or selectedDataReferencia change
@@ -284,7 +275,7 @@ export const Relacionamento: React.FC = () => {
         )
       }
       refreshMovelCount()
-    } else if (e.action === 'delete') {
+    } else if (e.action === 'delete' || e.action === 'update') {
       refreshMovelCount()
     }
   })
@@ -299,7 +290,7 @@ export const Relacionamento: React.FC = () => {
         )
       }
       refreshResidencialCount()
-    } else if (e.action === 'delete') {
+    } else if (e.action === 'delete' || e.action === 'update') {
       refreshResidencialCount()
     }
   })
@@ -401,13 +392,19 @@ export const Relacionamento: React.FC = () => {
           const movelBatchData = pf.movelSheet.rows.map((r) => {
             let normalizedLoja = r.loja?.trim() || ''
             if (normalizedLoja) {
+              // Try direct store matching
               const matchedStore = matchStore(normalizedLoja, stores)
               if (matchedStore) {
                 normalizedLoja = matchedStore.name
               } else {
-                console.warn(
-                  `[Importação - Móvel] Loja "${r.loja}" não encontrada no cadastro. Mantendo valor bruto.`,
-                )
+                const same = stores.find((s) => isSameStore(s.name, normalizedLoja))
+                if (same) {
+                  normalizedLoja = same.name
+                } else {
+                  console.warn(
+                    `[Importação - Móvel] Loja "${r.loja}" não encontrada no cadastro. Mantendo valor bruto.`,
+                  )
+                }
               }
             }
 
@@ -442,9 +439,14 @@ export const Relacionamento: React.FC = () => {
               if (matchedStore) {
                 normalizedLoja = matchedStore.name
               } else {
-                console.warn(
-                  `[Importação - Residencial] Loja "${r.loja}" não encontrada no cadastro. Mantendo valor bruto.`,
-                )
+                const same = stores.find((s) => isSameStore(s.name, normalizedLoja))
+                if (same) {
+                  normalizedLoja = same.name
+                } else {
+                  console.warn(
+                    `[Importação - Residencial] Loja "${r.loja}" não encontrada no cadastro. Mantendo valor bruto.`,
+                  )
+                }
               }
             }
 
