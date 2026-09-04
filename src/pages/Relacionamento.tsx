@@ -57,6 +57,8 @@ export const Relacionamento: React.FC = () => {
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [totalMovel, setTotalMovel] = useState(0)
   const [totalResidencial, setTotalResidencial] = useState(0)
+  const [selectedLojaMovel, setSelectedLojaMovel] = useState<string>('TODAS')
+  const [selectedLojaResidencial, setSelectedLojaResidencial] = useState<string>('TODAS')
   const [rawAvailableLojas, setRawAvailableLojas] = useState<string[]>([])
   const [availableDates, setAvailableDates] = useState<string[]>([])
   const [selectedDataReferencia, setSelectedDataReferencia] = useState<string>('TODAS')
@@ -74,44 +76,105 @@ export const Relacionamento: React.FC = () => {
   const isImportingRef = useRef(false)
   isImportingRef.current = isImporting
 
-  // Load distinct store names, registered stores, reference dates and total counts
+  // Build PB filter string for counting a collection based on store, profile and reference date
+  const buildCountFilter = useCallback(
+    (loja: string, allowedLojas: string[]) => {
+      if (userAccess.hasNoStoreAssigned) {
+        return '__NO_ACCESS__'
+      }
+
+      const filterParts: string[] = []
+
+      if (loja && loja !== 'TODAS') {
+        if (!userAccess.isAdm && !userAccess.isStoreNameAllowed(loja, stores)) {
+          return '__NO_ACCESS__'
+        }
+
+        const lojaVariants = new Set<string>()
+        lojaVariants.add(loja)
+        if (loja.endsWith('S') || loja.endsWith('s')) {
+          lojaVariants.add(loja.slice(0, -1))
+        } else {
+          lojaVariants.add(`${loja}S`)
+        }
+
+        const clauses: string[] = []
+        for (const variant of lojaVariants) {
+          const esc = variant.replace(/"/g, '\\"')
+          clauses.push(`loja = "${esc}"`)
+          const unacc = variant
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .replace(/"/g, '\\"')
+          if (unacc && unacc.toLowerCase() !== esc.toLowerCase()) {
+            clauses.push(`loja = "${unacc}"`)
+          }
+        }
+        filterParts.push(clauses.length === 1 ? clauses[0] : `(${clauses.join(' || ')})`)
+      } else if (!userAccess.isAdm) {
+        if (allowedLojas.length > 0) {
+          const expandedStoreNames = new Set<string>()
+          for (const l of allowedLojas) {
+            if (!l || !l.trim()) continue
+            expandedStoreNames.add(l.trim())
+            const unacc = l
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .trim()
+            if (unacc) expandedStoreNames.add(unacc)
+          }
+
+          const storeFilters = Array.from(expandedStoreNames).map(
+            (l) => `loja = "${l.replace(/"/g, '\\"')}"`,
+          )
+          if (storeFilters.length > 0) {
+            filterParts.push(`(${storeFilters.join(' || ')})`)
+          }
+        } else {
+          return '__NO_ACCESS__'
+        }
+      }
+
+      if (selectedDataReferencia && selectedDataReferencia !== 'TODAS') {
+        const escapedRef = selectedDataReferencia.replace(/"/g, '\\"')
+        filterParts.push(
+          `(data_referencia = "${escapedRef}" || data_referencia = "" || data_referencia = null)`,
+        )
+      }
+
+      return filterParts.length > 0 ? filterParts.join(' && ') : undefined
+    },
+    [userAccess, stores, selectedDataReferencia],
+  )
+
+  // Load distinct store names, registered stores, and reference dates
   const loadInitialData = useCallback(async () => {
     try {
-      const [lojas, registeredStores, movelList, resList, distinctMovelDates, distinctResDates] =
-        await Promise.all([
-          fetchDistinctAnalyticalLojas(),
-          fetchStores().catch(() => []),
-          pb
-            .collection('movel')
-            .getList(1, 1, { fields: 'id', requestKey: null })
-            .catch(() => ({ totalItems: 0 })),
-          pb
-            .collection('residencial')
-            .getList(1, 1, { fields: 'id', requestKey: null })
-            .catch(() => ({ totalItems: 0 })),
-          pb
-            .collection('movel')
-            .getFullList<{ data_referencia?: string }>({
-              fields: 'data_referencia',
-              filter: 'data_referencia != "" && data_referencia != null',
-              requestKey: null,
-            })
-            .catch(() => []),
-          pb
-            .collection('residencial')
-            .getFullList<{ data_referencia?: string }>({
-              fields: 'data_referencia',
-              filter: 'data_referencia != "" && data_referencia != null',
-              requestKey: null,
-            })
-            .catch(() => []),
-        ])
+      const [lojas, registeredStores, distinctMovelDates, distinctResDates] = await Promise.all([
+        fetchDistinctAnalyticalLojas(),
+        fetchStores().catch(() => []),
+        pb
+          .collection('movel')
+          .getFullList<{ data_referencia?: string }>({
+            fields: 'data_referencia',
+            filter: 'data_referencia != "" && data_referencia != null',
+            requestKey: null,
+          })
+          .catch(() => []),
+        pb
+          .collection('residencial')
+          .getFullList<{ data_referencia?: string }>({
+            fields: 'data_referencia',
+            filter: 'data_referencia != "" && data_referencia != null',
+            requestKey: null,
+          })
+          .catch(() => []),
+      ])
 
       const set = new Set<string>(Array.isArray(lojas) ? lojas : [])
       setRawAvailableLojas(Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR')))
       setStores(registeredStores)
-      setTotalMovel(movelList.totalItems || 0)
-      setTotalResidencial(resList.totalItems || 0)
 
       const datesSet = new Set<string>()
       distinctMovelDates.forEach((r) => {
@@ -156,19 +219,67 @@ export const Relacionamento: React.FC = () => {
     return combined.sort((a, b) => a.localeCompare(b, 'pt-BR'))
   }, [rawAvailableLojas, stores, userAccess])
 
+  // Recalculate Móvel count whenever selectedLojaMovel, availableLojas or selectedDataReferencia change
+  const refreshMovelCount = useCallback(async () => {
+    const filter = buildCountFilter(selectedLojaMovel, availableLojas)
+    if (filter === '__NO_ACCESS__') {
+      setTotalMovel(0)
+      return
+    }
+    try {
+      const res = await pb.collection('movel').getList(1, 1, {
+        fields: 'id',
+        filter,
+        requestKey: null,
+      })
+      setTotalMovel(res.totalItems || 0)
+    } catch (err) {
+      console.error('Erro ao contar clientes móvel:', err)
+      setTotalMovel(0)
+    }
+  }, [buildCountFilter, selectedLojaMovel, availableLojas])
+
+  // Recalculate Residencial count whenever selectedLojaResidencial, availableLojas or selectedDataReferencia change
+  const refreshResidencialCount = useCallback(async () => {
+    const filter = buildCountFilter(selectedLojaResidencial, availableLojas)
+    if (filter === '__NO_ACCESS__') {
+      setTotalResidencial(0)
+      return
+    }
+    try {
+      const res = await pb.collection('residencial').getList(1, 1, {
+        fields: 'id',
+        filter,
+        requestKey: null,
+      })
+      setTotalResidencial(res.totalItems || 0)
+    } catch (err) {
+      console.error('Erro ao contar clientes residencial:', err)
+      setTotalResidencial(0)
+    }
+  }, [buildCountFilter, selectedLojaResidencial, availableLojas])
+
+  useEffect(() => {
+    refreshMovelCount()
+  }, [refreshMovelCount])
+
+  useEffect(() => {
+    refreshResidencialCount()
+  }, [refreshResidencialCount])
+
   // Real-time subscription to 'movel' and 'residencial'
   useRealtime<MovelRecord>('movel', (e) => {
     if (isImportingRef.current) return
 
     if (e.action === 'create') {
-      setTotalMovel((prev) => prev + 1)
       if (e.record.loja && !rawAvailableLojas.includes(e.record.loja)) {
         setRawAvailableLojas((prev) =>
           [...prev, e.record.loja].sort((a, b) => a.localeCompare(b, 'pt-BR')),
         )
       }
+      refreshMovelCount()
     } else if (e.action === 'delete') {
-      setTotalMovel((prev) => Math.max(0, prev - 1))
+      refreshMovelCount()
     }
   })
 
@@ -176,14 +287,14 @@ export const Relacionamento: React.FC = () => {
     if (isImportingRef.current) return
 
     if (e.action === 'create') {
-      setTotalResidencial((prev) => prev + 1)
       if (e.record.loja && !rawAvailableLojas.includes(e.record.loja)) {
         setRawAvailableLojas((prev) =>
           [...prev, e.record.loja].sort((a, b) => a.localeCompare(b, 'pt-BR')),
         )
       }
+      refreshResidencialCount()
     } else if (e.action === 'delete') {
-      setTotalResidencial((prev) => Math.max(0, prev - 1))
+      refreshResidencialCount()
     }
   })
 
@@ -366,6 +477,8 @@ export const Relacionamento: React.FC = () => {
       setParsedFilesData([])
       setIsImporting(false)
       loadInitialData()
+      refreshMovelCount()
+      refreshResidencialCount()
     } catch (err: unknown) {
       const error = err as Error
       console.error('Erro na importação:', err)
@@ -541,12 +654,16 @@ export const Relacionamento: React.FC = () => {
           availableLojas={availableLojas}
           stores={stores}
           dataReferencia={selectedDataReferencia}
+          selectedLoja={selectedLojaMovel}
+          onLojaChange={setSelectedLojaMovel}
         />
       ) : (
         <ClientesResidencial
           availableLojas={availableLojas}
           stores={stores}
           dataReferencia={selectedDataReferencia}
+          selectedLoja={selectedLojaResidencial}
+          onLojaChange={setSelectedLojaResidencial}
         />
       )}
 

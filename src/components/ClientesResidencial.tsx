@@ -41,12 +41,16 @@ interface ClientesResidencialProps {
   availableLojas: string[]
   stores?: StoreRecord[]
   dataReferencia?: string
+  selectedLoja?: string
+  onLojaChange?: (loja: string) => void
 }
 
 export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
   availableLojas,
   stores = [],
   dataReferencia,
+  selectedLoja: controlledLoja,
+  onLojaChange,
 }) => {
   const { toast } = useToast()
 
@@ -60,7 +64,19 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
   // Filters
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [selectedLoja, setSelectedLoja] = useState('TODAS')
+  const [internalLoja, setInternalLoja] = useState('TODAS')
+
+  const selectedLoja = controlledLoja !== undefined ? controlledLoja : internalLoja
+  const setSelectedLoja = useCallback(
+    (newLoja: string) => {
+      if (onLojaChange) {
+        onLojaChange(newLoja)
+      } else {
+        setInternalLoja(newLoja)
+      }
+    },
+    [onLojaChange],
+  )
 
   // Inline edit state
   const [editValues, setEditValues] = useState<
@@ -114,17 +130,32 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
           return
         }
 
-        const escaped = selectedLoja.replace(/"/g, '\\"')
-        const unaccented = selectedLoja
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .trim()
-          .replace(/"/g, '\\"')
-
-        if (unaccented && unaccented.toLowerCase() !== escaped.toLowerCase()) {
-          filterParts.push(`(loja = "${escaped}" || loja = "${unaccented}")`)
+        const lojaVariants = new Set<string>()
+        lojaVariants.add(selectedLoja)
+        // Check if there is an alternative form with or without trailing S (e.g., AGUAS CLARA vs AGUAS CLARAS)
+        if (selectedLoja.endsWith('S') || selectedLoja.endsWith('s')) {
+          lojaVariants.add(selectedLoja.slice(0, -1))
         } else {
-          filterParts.push(`loja = "${escaped}"`)
+          lojaVariants.add(`${selectedLoja}S`)
+        }
+
+        const clauses: string[] = []
+        for (const variant of lojaVariants) {
+          const esc = variant.replace(/"/g, '\\"')
+          clauses.push(`loja = "${esc}"`)
+          const unacc = variant
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim()
+            .replace(/"/g, '\\"')
+          if (unacc && unacc.toLowerCase() !== esc.toLowerCase()) {
+            clauses.push(`loja = "${unacc}"`)
+          }
+        }
+        if (clauses.length === 1) {
+          filterParts.push(clauses[0])
+        } else {
+          filterParts.push(`(${clauses.join(' || ')})`)
         }
       } else if (!userAccess.isAdm) {
         // User is not ADM and has "TODAS" selected -> filter by all allowed stores
@@ -188,18 +219,27 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
       // Extra safeguard: if a specific store is selected, ensure every returned item strictly matches it
       if (selectedLoja && selectedLoja !== 'TODAS') {
         const selNorm = selectedLoja.trim().toLowerCase()
-        filteredItems = filteredItems.filter(
-          (item) => (item.loja || '').trim().toLowerCase() === selNorm,
-        )
+        const unaccentedSelNorm = selectedLoja
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .trim()
+          .toLowerCase()
+        const altVariant = selNorm.endsWith('s') ? selNorm.slice(0, -1) : `${selNorm}s`
+        filteredItems = filteredItems.filter((item) => {
+          const itemLoja = (item.loja || '').trim().toLowerCase()
+          return itemLoja === selNorm || itemLoja === unaccentedSelNorm || itemLoja === altVariant
+        })
       }
 
       setRecords(filteredItems)
-      setTotalItems(selectedLoja !== 'TODAS' ? filteredItems.length : res.totalItems)
-      setTotalPages(
-        selectedLoja !== 'TODAS'
-          ? Math.max(1, Math.ceil(filteredItems.length / perPage))
-          : res.totalPages,
-      )
+
+      let accurateTotal = res.totalItems
+      if (selectedLoja && selectedLoja !== 'TODAS' && filteredItems.length === 0 && page === 1) {
+        accurateTotal = 0
+      }
+
+      setTotalItems(accurateTotal)
+      setTotalPages(Math.max(1, Math.ceil(accurateTotal / perPage)))
 
       // Initialize edit values
       const initialEdits: Record<
