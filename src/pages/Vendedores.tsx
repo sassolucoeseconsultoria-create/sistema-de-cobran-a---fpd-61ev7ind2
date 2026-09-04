@@ -1,19 +1,21 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Search,
   Download,
-  Filter,
   X,
   RotateCcw,
   UploadCloud,
-  FileSpreadsheet,
   AlertCircle,
   Users,
   TrendingUp,
   Building2,
   Trash2,
   Calendar,
+  Store,
+  Smartphone,
+  Home,
+  Info,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,10 +28,10 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useToast } from '@/hooks/use-toast'
 import useRealtime from '@/hooks/use-realtime'
 import { useCountUp } from '@/hooks/useCountUp'
+import pb from '@/lib/pocketbase/client'
 import {
   fetchVendorConsolidations,
   clearAllVendorConsolidations,
@@ -38,11 +40,14 @@ import {
   fetchDistinctReferenceDates,
 } from '@/services/fpdService'
 import { exportVendorsToXlsx } from '@/lib/xlsxExport'
+import { getStoreVariants, buildStoreFilterClause, isSameStore } from '@/lib/storeMatchingUtils'
 import {
   FPD_STATUSES,
   type VendorConsolidationRecord,
   type VendorRow,
   type StoreRecord,
+  type MovelRecord,
+  type ResidencialRecord,
 } from '@/types/fpd'
 import { cn } from '@/lib/utils'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
@@ -59,7 +64,17 @@ export const Vendedores: React.FC = () => {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [availableReferenceDates, setAvailableReferenceDates] = useState<string[]>([])
   const [selectedReferenceDate, setSelectedReferenceDate] = useState<string>('all')
-  const [selectedLoja, setSelectedLoja] = useState<string>('all')
+  const [selectedLoja, setSelectedLoja] = useState<string>(() => {
+    if (userAccess.isGerente) {
+      if (userAccess.hasNoStoreAssigned) return ''
+      if (userAccess.managerStoreId) return userAccess.managerStoreId
+    }
+    return 'all'
+  })
+
+  // Client counts from collections `movel` and `residencial`
+  const [totalMovel, setTotalMovel] = useState(0)
+  const [totalResidencial, setTotalResidencial] = useState(0)
 
   // Clear dialog
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
@@ -74,7 +89,7 @@ export const Vendedores: React.FC = () => {
   }, [search])
 
   // Initial load
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
       const [fetchedVendors, fetchedStores, fetchedRefDates] = await Promise.all([
@@ -85,6 +100,16 @@ export const Vendedores: React.FC = () => {
       setRecords(fetchedVendors)
       setStores(fetchedStores)
       setAvailableReferenceDates(fetchedRefDates)
+
+      // Se for Gerente e possuir managerStoreId, pré-ajustar selectedLoja
+      if (userAccess.isGerente && !userAccess.hasNoStoreAssigned) {
+        if (userAccess.managerStoreId) {
+          const matchedStore = fetchedStores.find((s) => s.id === userAccess.managerStoreId)
+          if (matchedStore?.name?.trim()) {
+            setSelectedLoja(matchedStore.name.trim())
+          }
+        }
+      }
     } catch (err: unknown) {
       console.error(err)
       toast({
@@ -95,11 +120,11 @@ export const Vendedores: React.FC = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [userAccess.isGerente, userAccess.hasNoStoreAssigned, userAccess.managerStoreId, toast])
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [loadData])
 
   // Realtime subscription
   useRealtime<VendorConsolidationRecord>('vendor_consolidations', (e) => {
@@ -149,16 +174,266 @@ export const Vendedores: React.FC = () => {
       })
   }, [records, stores, userAccess])
 
-  // Unique lojas for filter dropdown (only from permitted vendor rows)
+  // Determina o nome canônico da loja vinculada ao Gerente
+  const managerAssignedStoreName = useMemo(() => {
+    if (!userAccess.isGerente || userAccess.hasNoStoreAssigned) return null
+
+    // 1. Procurar nas stores cadastradas pelo ID vinculado
+    if (userAccess.managerStoreId && stores.length > 0) {
+      const matchedStore = stores.find((s) => s.id === userAccess.managerStoreId)
+      if (matchedStore?.name?.trim()) {
+        return matchedStore.name.trim()
+      }
+    }
+
+    // 2. Se temos linhas de vendedores permitidas
+    if (vendorRows.length > 0) {
+      const firstWithLoja = vendorRows.find((r) => r.loja && r.loja.trim() !== '')
+      if (firstWithLoja) return firstWithLoja.loja.trim()
+    }
+
+    // 3. Fallback: allowedStoreIds
+    if (userAccess.allowedStoreIds.length > 0) {
+      return userAccess.allowedStoreIds[0]
+    }
+
+    return null
+  }, [userAccess, stores, vendorRows])
+
+  // Unique lojas for filter dropdown (only from permitted vendor rows and assigned stores)
   const uniqueLojas = useMemo(() => {
     const set = new Set<string>()
+
+    // Nomes permitidos cadastrados
+    if (!userAccess.isAdm && !userAccess.hasNoStoreAssigned) {
+      userAccess.getAllowedStoreNames(stores).forEach((name) => {
+        if (name && name.trim()) set.add(name.trim())
+      })
+    }
+
     for (const r of vendorRows) {
       if (r.loja && r.loja.trim() !== '') {
         set.add(r.loja.trim())
       }
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b))
-  }, [vendorRows])
+  }, [vendorRows, userAccess, stores])
+
+  // Sincroniza selectedLoja com a loja única do Gerente quando aplicável
+  useEffect(() => {
+    if (!userAccess.isGerente) return
+
+    if (userAccess.hasNoStoreAssigned) {
+      if (selectedLoja !== '') {
+        setSelectedLoja('')
+      }
+      return
+    }
+
+    if (managerAssignedStoreName && selectedLoja !== managerAssignedStoreName) {
+      setSelectedLoja(managerAssignedStoreName)
+    }
+  }, [userAccess.isGerente, userAccess.hasNoStoreAssigned, managerAssignedStoreName, selectedLoja])
+
+  // Effective store to query/display
+  const effectiveStore = useMemo(() => {
+    if (userAccess.isGerente) {
+      return managerAssignedStoreName || selectedLoja || ''
+    }
+    return selectedLoja
+  }, [userAccess.isGerente, managerAssignedStoreName, selectedLoja])
+
+  // Build PB filter string for counting a collection based on store, profile and reference date
+  const buildCountFilter = useCallback(
+    (loja: string, allowedLojas: string[]) => {
+      if (userAccess.hasNoStoreAssigned) {
+        return '__NO_ACCESS__'
+      }
+
+      const filterParts: string[] = []
+
+      // Se for Gerente e loja for TODAS ou all ou vazia, nunca contar todas as lojas da rede
+      if (userAccess.isGerente && (!loja || loja === 'all' || loja === 'TODAS')) {
+        return '__NO_ACCESS__'
+      }
+
+      if (loja && loja !== 'all' && loja !== 'TODAS') {
+        if (!userAccess.isAdm && !userAccess.isStoreNameAllowed(loja, stores)) {
+          return '__NO_ACCESS__'
+        }
+
+        const storeClause = buildStoreFilterClause(loja)
+        if (storeClause) {
+          filterParts.push(storeClause)
+        }
+      } else if (!userAccess.isAdm) {
+        // Se usuário não é ADM e TODAS / all está selecionado, somar todas as lojas do escopo do perfil
+        const expandedStoreNames = new Set<string>()
+
+        // 1. Variantes das lojas detectadas no escopo
+        for (const l of allowedLojas) {
+          if (!l || !l.trim()) continue
+          const variants = getStoreVariants(l)
+          variants.forEach((v) => expandedStoreNames.add(v))
+        }
+
+        // 2. Variantes das lojas oficiais vinculadas ao perfil
+        const allowedOfficialStores = stores.filter((s) => userAccess.isStoreIdAllowed(s.id))
+        for (const s of allowedOfficialStores) {
+          if (!s.name || !s.name.trim()) continue
+          const variants = getStoreVariants(s.name)
+          variants.forEach((v) => expandedStoreNames.add(v))
+        }
+
+        if (expandedStoreNames.size > 0) {
+          const storeFilters = Array.from(expandedStoreNames).map(
+            (l) => `loja = "${l.replace(/"/g, '\\"')}"`,
+          )
+          filterParts.push(`(${storeFilters.join(' || ')})`)
+        } else {
+          return '__NO_ACCESS__'
+        }
+      }
+      // Se userAccess.isAdm e loja === 'all' / 'TODAS', não adiciona cláusula de loja => soma todas as lojas da base
+
+      if (selectedReferenceDate && selectedReferenceDate !== 'all') {
+        if (selectedReferenceDate === 'none') {
+          filterParts.push(`(data_referencia = "" || data_referencia = null)`)
+        } else {
+          const escapedRef = selectedReferenceDate.replace(/"/g, '\\"')
+          filterParts.push(
+            `(data_referencia = "${escapedRef}" || data_referencia = "" || data_referencia = null)`,
+          )
+        }
+      }
+
+      return filterParts.length > 0 ? filterParts.join(' && ') : undefined
+    },
+    [userAccess, stores, selectedReferenceDate],
+  )
+
+  // Recalculate Móvel count
+  const refreshMovelCount = useCallback(async () => {
+    if (userAccess.hasNoStoreAssigned) {
+      setTotalMovel(0)
+      return
+    }
+
+    let targetLoja = effectiveStore
+    if (userAccess.isGerente) {
+      if (managerAssignedStoreName) {
+        targetLoja = managerAssignedStoreName
+      } else if (
+        !targetLoja ||
+        targetLoja === 'all' ||
+        targetLoja === 'TODAS' ||
+        !userAccess.isStoreNameAllowed(targetLoja, stores)
+      ) {
+        const directMatch = stores.find((s) => userAccess.isStoreIdAllowed(s.id))
+        if (directMatch?.name) {
+          targetLoja = directMatch.name
+        } else {
+          setTotalMovel(0)
+          return
+        }
+      }
+    }
+
+    const effectiveAllowed =
+      uniqueLojas.length > 0
+        ? uniqueLojas
+        : managerAssignedStoreName
+          ? [managerAssignedStoreName]
+          : []
+
+    const filter = buildCountFilter(targetLoja, effectiveAllowed)
+    if (filter === '__NO_ACCESS__') {
+      setTotalMovel(0)
+      return
+    }
+
+    try {
+      const res = await pb.collection('movel').getList(1, 1, {
+        fields: 'id',
+        filter,
+        requestKey: null,
+      })
+      setTotalMovel(res.totalItems || 0)
+    } catch (err) {
+      console.error('Erro ao contar clientes móvel em Vendedores:', err)
+      setTotalMovel(0)
+    }
+  }, [userAccess, effectiveStore, managerAssignedStoreName, stores, uniqueLojas, buildCountFilter])
+
+  // Recalculate Residencial count
+  const refreshResidencialCount = useCallback(async () => {
+    if (userAccess.hasNoStoreAssigned) {
+      setTotalResidencial(0)
+      return
+    }
+
+    let targetLoja = effectiveStore
+    if (userAccess.isGerente) {
+      if (managerAssignedStoreName) {
+        targetLoja = managerAssignedStoreName
+      } else if (
+        !targetLoja ||
+        targetLoja === 'all' ||
+        targetLoja === 'TODAS' ||
+        !userAccess.isStoreNameAllowed(targetLoja, stores)
+      ) {
+        const directMatch = stores.find((s) => userAccess.isStoreIdAllowed(s.id))
+        if (directMatch?.name) {
+          targetLoja = directMatch.name
+        } else {
+          setTotalResidencial(0)
+          return
+        }
+      }
+    }
+
+    const effectiveAllowed =
+      uniqueLojas.length > 0
+        ? uniqueLojas
+        : managerAssignedStoreName
+          ? [managerAssignedStoreName]
+          : []
+
+    const filter = buildCountFilter(targetLoja, effectiveAllowed)
+    if (filter === '__NO_ACCESS__') {
+      setTotalResidencial(0)
+      return
+    }
+
+    try {
+      const res = await pb.collection('residencial').getList(1, 1, {
+        fields: 'id',
+        filter,
+        requestKey: null,
+      })
+      setTotalResidencial(res.totalItems || 0)
+    } catch (err) {
+      console.error('Erro ao contar clientes residencial em Vendedores:', err)
+      setTotalResidencial(0)
+    }
+  }, [userAccess, effectiveStore, managerAssignedStoreName, stores, uniqueLojas, buildCountFilter])
+
+  useEffect(() => {
+    refreshMovelCount()
+  }, [refreshMovelCount])
+
+  useEffect(() => {
+    refreshResidencialCount()
+  }, [refreshResidencialCount])
+
+  // Realtime subscription to `movel` and `residencial` for live count updates
+  useRealtime<MovelRecord>('movel', () => {
+    refreshMovelCount()
+  })
+
+  useRealtime<ResidencialRecord>('residencial', () => {
+    refreshResidencialCount()
+  })
 
   // Filtered rows
   const filteredRows = useMemo(() => {
@@ -173,8 +448,9 @@ export const Vendedores: React.FC = () => {
       }
 
       // Filter Loja
-      if (selectedLoja !== 'all') {
-        if (row.loja !== selectedLoja) return false
+      const activeLoja = effectiveStore
+      if (activeLoja !== 'all' && activeLoja !== '') {
+        if (row.loja !== activeLoja && !isSameStore(row.loja, activeLoja)) return false
       }
 
       // Filter Reference Date
@@ -188,7 +464,7 @@ export const Vendedores: React.FC = () => {
 
       return true
     })
-  }, [vendorRows, debouncedSearch, selectedLoja, selectedReferenceDate])
+  }, [vendorRows, debouncedSearch, effectiveStore, selectedReferenceDate])
 
   // Summary Totals
   const totals = useMemo(() => {
@@ -230,6 +506,9 @@ export const Vendedores: React.FC = () => {
   const animatedCancelados = useCountUp(totals.cancelados)
   const animatedNaoTratados = useCountUp(totals.naoTratados)
   const animatedContatoRealizado = useCountUp(totals.contatoRealizado)
+  const animatedTotalMovel = useCountUp(totalMovel)
+  const animatedTotalResidencial = useCountUp(totalResidencial)
+
   // Indicator: Loja com mais vendedores
   const lojaComMaisVendedores = useMemo(() => {
     if (vendorRows.length === 0) return { nome: 'Nenhuma', count: 0 }
@@ -252,8 +531,8 @@ export const Vendedores: React.FC = () => {
 
   // Distinct Vendedores count
   const distinctVendedoresCount = useMemo(() => {
-    return new Set(vendorRows.map((r) => r.vendedor)).size
-  }, [vendorRows])
+    return new Set(filteredRows.map((r) => r.vendedor)).size
+  }, [filteredRows])
 
   // Effective Referente
   const effectiveReferente = useMemo(() => {
@@ -311,31 +590,37 @@ export const Vendedores: React.FC = () => {
   }
 
   const hasActiveFilters =
-    debouncedSearch !== '' || selectedLoja !== 'all' || selectedReferenceDate !== 'all'
+    debouncedSearch !== '' ||
+    (!userAccess.isGerente && selectedLoja !== 'all') ||
+    selectedReferenceDate !== 'all'
 
   const clearFilters = () => {
     setSearch('')
     setDebouncedSearch('')
-    setSelectedLoja('all')
+    if (!userAccess.isGerente) {
+      setSelectedLoja('all')
+    }
     setSelectedReferenceDate('all')
   }
 
+  const displayedStoreName = managerAssignedStoreName || selectedLoja || uniqueLojas[0] || ''
+
   return (
     <div className="space-y-6">
-      {/* Top summary cards banner */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Top summary cards banner - including Clientes Móvel e Clientes Residencial */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
         {/* Card 1: Total de Vendedores */}
         <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82]">
-              Total de Vendedores
+              Vendedores
             </p>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-bold text-[#12365A] tabular-nums">
                 {distinctVendedoresCount}
               </span>
               <span className="text-xs text-[#0E9F8A] font-medium">
-                {vendorRows.length} combinações
+                {filteredRows.length} linhas
               </span>
             </div>
           </div>
@@ -344,7 +629,49 @@ export const Vendedores: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 2: Total de Linhas */}
+        {/* Card 2: Clientes Móvel (solicitado pela regra do usuário) */}
+        <div
+          data-testid="card-clientes-movel"
+          className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between"
+        >
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#12365A]">
+              Clientes Móvel
+            </p>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-2xl font-bold text-[#12365A] tabular-nums">
+                {animatedTotalMovel.toLocaleString('pt-BR')}
+              </span>
+              <span className="text-xs text-[#5B6B82]">em carteira</span>
+            </div>
+          </div>
+          <div className="w-10 h-10 rounded-lg bg-[#12365A]/10 text-[#12365A] flex items-center justify-center">
+            <Smartphone className="w-5 h-5 text-[#12365A]" />
+          </div>
+        </div>
+
+        {/* Card 3: Clientes Residencial (solicitado pela regra do usuário) */}
+        <div
+          data-testid="card-clientes-residencial"
+          className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between"
+        >
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#0E9F8A]">
+              Clientes Residencial
+            </p>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-2xl font-bold text-[#0E9F8A] tabular-nums">
+                {animatedTotalResidencial.toLocaleString('pt-BR')}
+              </span>
+              <span className="text-xs text-[#5B6B82]">em carteira</span>
+            </div>
+          </div>
+          <div className="w-10 h-10 rounded-lg bg-[#0E9F8A]/10 text-[#0E9F8A] flex items-center justify-center">
+            <Home className="w-5 h-5 text-[#0E9F8A]" />
+          </div>
+        </div>
+
+        {/* Card 4: Total de Linhas */}
         <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82]">
@@ -362,7 +689,7 @@ export const Vendedores: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 3: Loja com mais vendedores */}
+        {/* Card 5: Loja com mais vendedores */}
         <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div className="min-w-0 flex-1 mr-2">
             <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82]">
@@ -387,7 +714,7 @@ export const Vendedores: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 4: Faturas Pagas / Data Ref */}
+        {/* Card 6: Faturas Pagas */}
         <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-[#5B6B82]">
@@ -409,6 +736,26 @@ export const Vendedores: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Gerente sem loja vinculada - aviso amigável */}
+      {userAccess.isGerente && userAccess.hasNoStoreAssigned && (
+        <div
+          data-testid="gerente-sem-loja-banner"
+          className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 text-xs text-amber-900"
+        >
+          <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-bold text-sm text-amber-900">
+              Nenhuma loja vinculada ao seu usuário Gerente
+            </p>
+            <p className="text-amber-800">
+              Seu perfil de Gerente ainda não possui uma loja vinculada pelo Administrador. Para
+              visualizar o ranking de vendedores e os dados de clientes (Móvel e Residencial) da sua
+              loja, solicite a vinculação da sua loja à equipe administradora.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Empty State Banner when no records exist */}
       {!loading && vendorRows.length === 0 && (
@@ -485,21 +832,39 @@ export const Vendedores: React.FC = () => {
               </select>
             </div>
 
-            {/* Filter Loja (Dropdown) */}
-            <div className="w-full sm:w-52">
-              <select
-                value={selectedLoja}
-                onChange={(e) => setSelectedLoja(e.target.value)}
-                className="w-full h-9 text-xs rounded-md border border-[#E3E9F2] bg-[#F8FAFC] px-2.5 text-[#12365A] focus:outline-none focus:border-[#0E9F8A]"
-              >
-                <option value="all">Todas as Lojas ({uniqueLojas.length})</option>
-                {uniqueLojas.map((loja) => (
-                  <option key={loja} value={loja}>
-                    {loja}
-                  </option>
-                ))}
-              </select>
+            {/* Filter Loja (Travado para Gerente, Dropdown para Supervisor/Coordenador/ADM) */}
+            <div className="w-full sm:w-56">
+              {userAccess.isGerente ? (
+                <div
+                  data-testid="locked-store-display"
+                  className="h-9 px-3 rounded-md bg-[#F1F5F9] border border-[#CBD5E1] flex items-center gap-2 text-xs text-[#12365A]"
+                  title="Loja vinculada ao perfil de Gerente"
+                >
+                  <Building2 className="w-3.5 h-3.5 text-[#0E9F8A] shrink-0" />
+                  <span className="truncate">
+                    Loja:{' '}
+                    <strong className="uppercase">
+                      {displayedStoreName || 'Não identificada'}
+                    </strong>
+                  </span>
+                </div>
+              ) : (
+                <select
+                  value={selectedLoja}
+                  onChange={(e) => setSelectedLoja(e.target.value)}
+                  className="w-full h-9 text-xs rounded-md border border-[#E3E9F2] bg-[#F8FAFC] px-2.5 text-[#12365A] focus:outline-none focus:border-[#0E9F8A]"
+                  aria-label="Selecionar Loja"
+                >
+                  <option value="all">Todas as Lojas ({uniqueLojas.length})</option>
+                  {uniqueLojas.map((loja) => (
+                    <option key={loja} value={loja}>
+                      {loja}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
+
             {/* Clear filters */}
             {hasActiveFilters && (
               <Button
