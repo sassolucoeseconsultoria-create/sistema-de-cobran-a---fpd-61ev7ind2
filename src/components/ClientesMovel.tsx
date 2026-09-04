@@ -97,17 +97,34 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
 
   const userAccess = useUserStoreAccess()
 
-  // If selected store becomes invalid under user's permissions, reset to TODAS
+  // If selected store becomes invalid under user's permissions, reset to TODAS (para não-Gerente) ou loja do Gerente
   useEffect(() => {
-    if (
-      !userAccess.isAdm &&
-      selectedLoja !== 'TODAS' &&
-      !userAccess.isStoreNameAllowed(selectedLoja, stores)
-    ) {
+    if (userAccess.isAdm) return
+
+    if (userAccess.isGerente) {
+      if (userAccess.hasNoStoreAssigned) {
+        if (selectedLoja !== '') {
+          setSelectedLoja('')
+          setPage(1)
+        }
+        return
+      }
+
+      // Se o Gerente está com 'TODAS' ou com uma loja não permitida, ajustar para a loja vinculada
+      if (selectedLoja === 'TODAS' || !userAccess.isStoreNameAllowed(selectedLoja, stores)) {
+        if (availableLojas.length > 0) {
+          setSelectedLoja(availableLojas[0])
+          setPage(1)
+        }
+      }
+      return
+    }
+
+    if (selectedLoja !== 'TODAS' && !userAccess.isStoreNameAllowed(selectedLoja, stores)) {
       setSelectedLoja('TODAS')
       setPage(1)
     }
-  }, [selectedLoja, userAccess, stores, setSelectedLoja])
+  }, [selectedLoja, userAccess, stores, availableLojas, setSelectedLoja])
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
@@ -402,33 +419,42 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
 
           {/* Loja selector */}
           {availableLojas.length > 0 && (
-            <div className="w-full sm:w-48">
-              <Select
-                value={selectedLoja}
-                onValueChange={(val) => {
-                  setSelectedLoja(val)
-                  setPage(1)
-                }}
-              >
-                <SelectTrigger className="h-9 text-xs bg-[#F8FAFC] border-[#E3E9F2]">
-                  <div className="flex items-center gap-2 truncate">
-                    <Store className="w-3.5 h-3.5 text-[#8A97AC] shrink-0" />
-                    <span className="truncate">
-                      Loja: <strong>{selectedLoja === 'TODAS' ? 'Todas' : selectedLoja}</strong>
-                    </span>
-                  </div>
-                </SelectTrigger>
-                <SelectContent className="bg-white max-h-56">
-                  <SelectItem value="TODAS" className="text-xs">
-                    Todas as Lojas
-                  </SelectItem>
-                  {availableLojas.map((l) => (
-                    <SelectItem key={l} value={l} className="text-xs uppercase">
-                      {l}
+            <div className="w-full sm:w-56">
+              {userAccess.isGerente ? (
+                <div className="h-9 px-3 rounded-md bg-[#F1F5F9] border border-[#CBD5E1] flex items-center gap-2 text-xs text-[#12365A]">
+                  <Store className="w-3.5 h-3.5 text-[#0E9F8A] shrink-0" />
+                  <span className="truncate">
+                    Loja: <strong className="uppercase">{selectedLoja || availableLojas[0]}</strong>
+                  </span>
+                </div>
+              ) : (
+                <Select
+                  value={selectedLoja}
+                  onValueChange={(val) => {
+                    setSelectedLoja(val)
+                    setPage(1)
+                  }}
+                >
+                  <SelectTrigger className="h-9 text-xs bg-[#F8FAFC] border-[#E3E9F2]">
+                    <div className="flex items-center gap-2 truncate">
+                      <Store className="w-3.5 h-3.5 text-[#8A97AC] shrink-0" />
+                      <span className="truncate">
+                        Loja: <strong>{selectedLoja === 'TODAS' ? 'Todas' : selectedLoja}</strong>
+                      </span>
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent className="bg-white max-h-56">
+                    <SelectItem value="TODAS" className="text-xs">
+                      Todas as Lojas
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    {availableLojas.map((l) => (
+                      <SelectItem key={l} value={l} className="text-xs uppercase">
+                        {l}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           )}
 
@@ -438,7 +464,9 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
               size="sm"
               onClick={() => {
                 setSearch('')
-                setSelectedLoja('TODAS')
+                if (!userAccess.isGerente) {
+                  setSelectedLoja('TODAS')
+                }
                 setPage(1)
               }}
               className="h-9 text-xs text-[#5B6B82] hover:text-[#12233A] gap-1"

@@ -11,6 +11,16 @@ export interface UserStoreAccess {
   isAdm: boolean
 
   /**
+   * Se o perfil do usuário logado é Gerente.
+   */
+  isGerente: boolean
+
+  /**
+   * ID da única loja vinculada (quando Gerente), se houver.
+   */
+  managerStoreId: string | null
+
+  /**
    * Se o usuário NÃO é ADM e NÃO possui nenhuma loja vinculada.
    * Nesse caso, as telas devem renderizar estado vazio/sem dados.
    */
@@ -158,8 +168,14 @@ export function useUserStoreAccess(): UserStoreAccess {
       })
     }
 
+    const isGerente = user?.role === 'Gerente'
+    const managerStoreId =
+      isGerente && effectiveAllowedIds.length > 0 ? effectiveAllowedIds[0] : null
+
     return {
       isAdm,
+      isGerente,
+      managerStoreId,
       hasNoStoreAssigned,
       allowedStoreIds: effectiveAllowedIds,
       isStoreIdAllowed,

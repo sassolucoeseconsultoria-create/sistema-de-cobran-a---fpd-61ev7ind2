@@ -60,7 +60,14 @@ export const Relacionamento: React.FC = () => {
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [totalMovel, setTotalMovel] = useState(0)
   const [totalResidencial, setTotalResidencial] = useState(0)
-  const [selectedLoja, setSelectedLoja] = useState<string>('TODAS')
+  // Para Gerente com loja vinculada já conhecida de imediato, inicializar direto com o ID/nome se possível
+  const [selectedLoja, setSelectedLoja] = useState<string>(() => {
+    if (userAccess.isGerente) {
+      if (userAccess.hasNoStoreAssigned) return ''
+      if (userAccess.managerStoreId) return userAccess.managerStoreId
+    }
+    return 'TODAS'
+  })
   const [rawAvailableLojas, setRawAvailableLojas] = useState<string[]>([])
   const [availableDates, setAvailableDates] = useState<string[]>([])
   const [selectedDataReferencia, setSelectedDataReferencia] = useState<string>('TODAS')
@@ -90,6 +97,11 @@ export const Relacionamento: React.FC = () => {
       }
 
       const filterParts: string[] = []
+
+      // Se for Gerente e loja for TODAS ou não definida, nunca contar todas as lojas da rede
+      if (userAccess.isGerente && (!loja || loja === 'TODAS')) {
+        return '__NO_ACCESS__'
+      }
 
       if (loja && loja !== 'TODAS') {
         if (!userAccess.isAdm && !userAccess.isStoreNameAllowed(loja, stores)) {
@@ -170,6 +182,16 @@ export const Relacionamento: React.FC = () => {
       setRawAvailableLojas(Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR')))
       setStores(registeredStores)
 
+      // Se for Gerente, já resolver e travar o selectedLoja imediatamente na loja vinculada
+      if (userAccess.isGerente && !userAccess.hasNoStoreAssigned) {
+        if (userAccess.managerStoreId) {
+          const matchedStore = registeredStores.find((s) => s.id === userAccess.managerStoreId)
+          if (matchedStore?.name?.trim()) {
+            setSelectedLoja(matchedStore.name.trim())
+          }
+        }
+      }
+
       const datesSet = new Set<string>()
       distinctMovelDates.forEach((r) => {
         if (r.data_referencia && r.data_referencia.trim()) datesSet.add(r.data_referencia.trim())
@@ -182,7 +204,7 @@ export const Relacionamento: React.FC = () => {
     } catch (err) {
       console.error('Erro ao carregar dados iniciais de inadimplência:', err)
     }
-  }, [])
+  }, [userAccess.isGerente, userAccess.hasNoStoreAssigned, userAccess.managerStoreId])
 
   // Initial load once on mount
   useEffect(() => {
@@ -225,45 +247,167 @@ export const Relacionamento: React.FC = () => {
     return unified.sort((a, b) => a.localeCompare(b, 'pt-BR'))
   }, [rawAvailableLojas, stores, userAccess])
 
-  // Recalculate Móvel count whenever selectedLoja, availableLojas or selectedDataReferencia change
-  const refreshMovelCount = useCallback(async () => {
-    const filter = buildCountFilter(selectedLoja, availableLojas)
-    if (filter === '__NO_ACCESS__') {
-      setTotalMovel(0)
+  // Identifica o nome canônico da loja vinculada ao Gerente
+  const managerAssignedStoreName = useMemo(() => {
+    if (!userAccess.isGerente || userAccess.hasNoStoreAssigned) return null
+
+    // 1. Procurar nas lojas cadastradas (stores) pelo ID vinculado
+    if (userAccess.managerStoreId && stores.length > 0) {
+      const matchedStore = stores.find((s) => s.id === userAccess.managerStoreId)
+      if (matchedStore?.name?.trim()) {
+        return matchedStore.name.trim()
+      }
+    }
+
+    // 2. Procurar em availableLojas
+    if (availableLojas.length > 0) {
+      return availableLojas[0]
+    }
+
+    // 3. Fallback: se o allowedStoreId for o próprio nome da loja
+    if (userAccess.allowedStoreIds.length > 0) {
+      return userAccess.allowedStoreIds[0]
+    }
+
+    return null
+  }, [userAccess, stores, availableLojas])
+
+  // Efeito para sincronizar a loja selecionada com a loja do Gerente
+  useEffect(() => {
+    if (!userAccess.isGerente) return
+
+    if (userAccess.hasNoStoreAssigned) {
+      if (selectedLoja !== '') {
+        setSelectedLoja('')
+      }
       return
     }
-    try {
-      const res = await pb.collection('movel').getList(1, 1, {
-        fields: 'id',
-        filter,
-        requestKey: null,
-      })
-      setTotalMovel(res.totalItems || 0)
-    } catch (err) {
-      console.error('Erro ao contar clientes móvel:', err)
-      setTotalMovel(0)
+
+    if (managerAssignedStoreName && selectedLoja !== managerAssignedStoreName) {
+      setSelectedLoja(managerAssignedStoreName)
     }
-  }, [buildCountFilter, selectedLoja, availableLojas])
+  }, [userAccess.isGerente, userAccess.hasNoStoreAssigned, managerAssignedStoreName, selectedLoja])
+
+  // Recalculate Móvel count whenever selectedLoja, availableLojas or selectedDataReferencia change
+  const refreshMovelCount = useCallback(
+    async (lojaOverride?: string) => {
+      if (userAccess.hasNoStoreAssigned) {
+        setTotalMovel(0)
+        return
+      }
+
+      // Determina a loja efetiva a ser consultada:
+      // Para Gerente, prioriza loja resolvida se o estado estiver TODAS/inválido
+      const baseLoja = lojaOverride !== undefined ? lojaOverride : selectedLoja
+      let effectiveLoja = baseLoja
+
+      if (userAccess.isGerente) {
+        if (managerAssignedStoreName) {
+          effectiveLoja = managerAssignedStoreName
+        } else if (
+          effectiveLoja === 'TODAS' ||
+          !userAccess.isStoreNameAllowed(effectiveLoja, stores)
+        ) {
+          // Se ainda não temos o nome da loja em stores, verificar se o ID bate com alguma loja ou esperar resolução
+          const directMatch = stores.find((s) => userAccess.isStoreIdAllowed(s.id))
+          if (directMatch?.name) {
+            effectiveLoja = directMatch.name
+          } else {
+            return
+          }
+        }
+      }
+
+      // Construir lista de lojas permitidas: se availableLojas ainda não foi populada mas temos managerAssignedStoreName, usá-lo
+      const effectiveAllowed =
+        availableLojas.length > 0
+          ? availableLojas
+          : managerAssignedStoreName
+            ? [managerAssignedStoreName]
+            : []
+
+      const filter = buildCountFilter(effectiveLoja, effectiveAllowed)
+      if (filter === '__NO_ACCESS__') {
+        setTotalMovel(0)
+        return
+      }
+      try {
+        const res = await pb.collection('movel').getList(1, 1, {
+          fields: 'id',
+          filter,
+          requestKey: null,
+        })
+        setTotalMovel(res.totalItems || 0)
+      } catch (err) {
+        console.error('Erro ao contar clientes móvel:', err)
+        setTotalMovel(0)
+      }
+    },
+    [buildCountFilter, selectedLoja, availableLojas, userAccess, stores, managerAssignedStoreName],
+  )
 
   // Recalculate Residencial count whenever selectedLoja, availableLojas or selectedDataReferencia change
-  const refreshResidencialCount = useCallback(async () => {
-    const filter = buildCountFilter(selectedLoja, availableLojas)
-    if (filter === '__NO_ACCESS__') {
-      setTotalResidencial(0)
-      return
-    }
-    try {
-      const res = await pb.collection('residencial').getList(1, 1, {
-        fields: 'id',
-        filter,
-        requestKey: null,
-      })
-      setTotalResidencial(res.totalItems || 0)
-    } catch (err) {
-      console.error('Erro ao contar clientes residencial:', err)
-      setTotalResidencial(0)
-    }
-  }, [buildCountFilter, selectedLoja, availableLojas])
+  const refreshResidencialCount = useCallback(
+    async (lojaOverride?: string) => {
+      if (userAccess.hasNoStoreAssigned) {
+        setTotalResidencial(0)
+        return
+      }
+
+      // Determina a loja efetiva a ser consultada:
+      const baseLoja = lojaOverride !== undefined ? lojaOverride : selectedLoja
+      let effectiveLoja = baseLoja
+
+      if (userAccess.isGerente) {
+        if (managerAssignedStoreName) {
+          effectiveLoja = managerAssignedStoreName
+        } else if (
+          effectiveLoja === 'TODAS' ||
+          !userAccess.isStoreNameAllowed(effectiveLoja, stores)
+        ) {
+          const directMatch = stores.find((s) => userAccess.isStoreIdAllowed(s.id))
+          if (directMatch?.name) {
+            effectiveLoja = directMatch.name
+          } else {
+            return
+          }
+        }
+      }
+
+      const effectiveAllowed =
+        availableLojas.length > 0
+          ? availableLojas
+          : managerAssignedStoreName
+            ? [managerAssignedStoreName]
+            : []
+
+      const filter = buildCountFilter(effectiveLoja, effectiveAllowed)
+      if (filter === '__NO_ACCESS__') {
+        setTotalResidencial(0)
+        return
+      }
+      try {
+        const res = await pb.collection('residencial').getList(1, 1, {
+          fields: 'id',
+          filter,
+          requestKey: null,
+        })
+        setTotalResidencial(res.totalItems || 0)
+      } catch (err) {
+        console.error('Erro ao contar clientes residencial:', err)
+        setTotalResidencial(0)
+      }
+    },
+    [buildCountFilter, selectedLoja, availableLojas, userAccess, stores, managerAssignedStoreName],
+  )
+
+  useEffect(() => {
+    refreshMovelCount()
+  }, [refreshMovelCount])
+
+  useEffect(() => {
+    refreshResidencialCount()
+  }, [refreshResidencialCount])
 
   useEffect(() => {
     refreshMovelCount()
@@ -615,7 +759,24 @@ export const Relacionamento: React.FC = () => {
         </div>
       </div>
 
-      {/* Information Banner: Clarifying Occurrences (Stores Panel) vs Unique Clients (Inadimplência) */}
+      {/* Gerente sem loja vinculada - aviso / estado vazio amigável */}
+      {userAccess.isGerente && userAccess.hasNoStoreAssigned && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 text-xs text-amber-900">
+          <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-bold text-sm text-amber-900">
+              Nenhuma loja vinculada ao seu usuário Gerente
+            </p>
+            <p className="text-amber-800">
+              Seu perfil de Gerente ainda não possui uma loja vinculada pelo Administrador. Para
+              visualizar e gerenciar os clientes de inadimplência (Móvel e Residencial), solicite a
+              vinculação da sua loja à equipe administradora.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Information Banner: Clarifying Occurrences (Stores Panel) vs Unique Clientes (Inadimplência) */}
       <div className="bg-[#F0F5FC] border border-[#D5E2F1] rounded-xl p-3 sm:p-3.5 flex items-start gap-3 text-xs text-[#12365A]">
         <Info className="w-4 h-4 text-[#12365A] shrink-0 mt-0.5" />
         <div className="space-y-0.5">
@@ -631,7 +792,6 @@ export const Relacionamento: React.FC = () => {
           </p>
         </div>
       </div>
-
       {/* Toggle between Móvel and Residencial */}
       <div className="flex items-center justify-between border-b border-[#E3E9F2] pb-3">
         <div className="flex items-center gap-1.5 p-1 bg-[#E8EEF5] rounded-xl w-fit">

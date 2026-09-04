@@ -87,6 +87,8 @@ describe('useUserStoreAccess', () => {
     const { result } = renderHook(() => useUserStoreAccess())
 
     expect(result.current.isAdm).toBe(false)
+    expect(result.current.isGerente).toBe(true)
+    expect(result.current.managerStoreId).toBe('store_aguas_claras')
     expect(result.current.hasNoStoreAssigned).toBe(false)
     expect(result.current.isStoreIdAllowed('store_aguas_claras')).toBe(true)
     expect(result.current.isStoreIdAllowed('store_taguatinga')).toBe(false)
@@ -130,6 +132,8 @@ describe('useUserStoreAccess', () => {
     const { result } = renderHook(() => useUserStoreAccess())
 
     expect(result.current.isAdm).toBe(false)
+    expect(result.current.isGerente).toBe(true)
+    expect(result.current.managerStoreId).toBe(null)
     expect(result.current.hasNoStoreAssigned).toBe(true)
     expect(result.current.isStoreNameAllowed('Águas Claras', mockStores)).toBe(false)
     expect(result.current.getAllowedStoreNames(mockStores)).toEqual([])

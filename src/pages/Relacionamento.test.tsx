@@ -326,4 +326,110 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
     const resBadges = await screen.findAllByText('98')
     expect(resBadges.length).toBeGreaterThan(0)
   })
+
+  it('para perfil Gerente, carrega automaticamente dados e contadores da loja vinculada e impede troca de loja', async () => {
+    // Configura usuário logado com perfil Gerente vinculado à loja CELNET AGUAS CLARA
+    vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+      user: {
+        id: 'usr_gerente_aguas',
+        collectionId: 'users',
+        collectionName: 'users',
+        email: 'gerente.aguas@celnet.com.br',
+        name: 'Gerente Águas Claras',
+        role: 'Gerente',
+        lojas: ['store_1'], // vinculada a CELNET AGUAS CLARA
+        created: '2025-01-01',
+        updated: '2025-01-01',
+      },
+      token: 'mock-token',
+      loading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshAuth: vi.fn(),
+    })
+
+    const user = userEvent.setup()
+    render(<Relacionamento />)
+
+    // Aguarda carregar
+    await waitFor(() => {
+      expect(screen.getByText('Clientes Móvel')).toBeDefined()
+    })
+
+    // Badges devem exibir os totais da loja vinculada (15 Móvel e 6 Residencial) desde o primeiro instante
+    await waitFor(() => {
+      expect(screen.getByText('15')).toBeDefined()
+      expect(screen.getByText('6')).toBeDefined()
+    })
+
+    // Total de clientes somado no banner superior (15 + 6 = 21)
+    await waitFor(() => {
+      expect(screen.getByText('21')).toBeDefined()
+    })
+
+    // Nunca deve ter chamado com filter: undefined (que somaria a rede inteira)
+    expect(mockMovelGetList).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ filter: undefined }),
+    )
+
+    // O seletor de loja para o Gerente deve ser um elemento fixo/travado, não permitindo abrir dropdown para outras lojas
+    expect(screen.queryByRole('combobox', { name: /loja:/i })).toBeNull()
+    expect(screen.getByText(/Loja:/i)).toBeDefined()
+    expect(screen.getByText(/CELNET AGUAS CLARA/i)).toBeDefined()
+
+    // A tabela Móvel deve conter o registro da loja do Gerente
+    await waitFor(() => {
+      expect(screen.getByText('Cliente Teste Aguas')).toBeDefined()
+      expect(screen.queryByText('Cliente Planaltina')).toBeNull()
+    })
+
+    // Troca para Residencial e confirma comportamento fixo e isolado
+    const tabResidencial = screen.getByRole('button', { name: /Clientes Residencial/i })
+    await user.click(tabResidencial)
+
+    await waitFor(() => {
+      expect(screen.getByText('Cliente Residencial Aguas')).toBeDefined()
+      expect(screen.queryByText('Cliente Planaltina')).toBeNull()
+    })
+  })
+
+  it('para perfil Gerente sem loja vinculada, exibe aviso amigável e contadores zerados sem vazar outras lojas', async () => {
+    vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+      user: {
+        id: 'usr_gerente_sem_loja',
+        collectionId: 'users',
+        collectionName: 'users',
+        email: 'gerente.semloja@celnet.com.br',
+        name: 'Gerente Sem Loja',
+        role: 'Gerente',
+        lojas: [],
+        created: '2025-01-01',
+        updated: '2025-01-01',
+      },
+      token: 'mock-token',
+      loading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshAuth: vi.fn(),
+    })
+
+    render(<Relacionamento />)
+
+    // Deve exibir aviso em português para o Gerente sem loja
+    await waitFor(() => {
+      expect(screen.getByText(/Nenhuma loja vinculada ao seu usuário Gerente/i)).toBeDefined()
+    })
+
+    // Contadores devem ser 0
+    await waitFor(() => {
+      const zeros = screen.getAllByText('0')
+      expect(zeros.length).toBeGreaterThanOrEqual(2)
+    })
+
+    // Não deve exibir registros de nenhuma loja
+    expect(screen.queryByText('Cliente Teste Aguas')).toBeNull()
+    expect(screen.queryByText('Cliente Planaltina')).toBeNull()
+  })
 })
