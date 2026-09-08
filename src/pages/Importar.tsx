@@ -17,10 +17,22 @@ import {
   ChevronDown,
   ChevronUp,
   TableProperties,
+  Smartphone,
+  Home,
+  X,
+  Store,
+  Users,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import {
   fetchStores,
@@ -32,6 +44,12 @@ import {
   matchStore,
 } from '@/services/fpdService'
 import { parseXlsxFile, type ParsedFileData } from '@/lib/xlsxParser'
+import {
+  parseBatchXlsxFile,
+  executeBatchImport,
+  type BatchImportType,
+  type ParsedBatchData,
+} from '@/services/batchImportService'
 import { FPD_STATUSES, type StoreRecord } from '@/types/fpd'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
 import { applyDateMask, isValidDateDDMMAAAA } from '@/lib/clientFormatters'
@@ -62,6 +80,26 @@ export const Importar: React.FC = () => {
   const [expandedColumnsMap, setExpandedColumnsMap] = useState<Record<string, boolean>>({})
   const [isDragging, setIsDragging] = useState(false)
   const [isProcessingAll, setIsProcessingAll] = useState(false)
+
+  // Batch import state
+  const [batchModalOpen, setBatchModalOpen] = useState(false)
+  const [batchType, setBatchType] = useState<BatchImportType>('movel')
+  const [batchFile, setBatchFile] = useState<File | null>(null)
+  const [batchRefDate, setBatchRefDate] = useState<string>('')
+  const [batchRefDateError, setBatchRefDateError] = useState<string>('')
+  const [isParsingBatch, setIsParsingBatch] = useState(false)
+  const [batchParsedData, setBatchParsedData] = useState<ParsedBatchData | null>(null)
+  const [isExecutingBatch, setIsExecutingBatch] = useState(false)
+  const [batchProgressMsg, setBatchProgressMsg] = useState('')
+  const [batchProgressPct, setBatchProgressPct] = useState(0)
+  const [batchImportDone, setBatchImportDone] = useState(false)
+  const [batchExecutionResult, setBatchExecutionResult] = useState<{
+    storesCount: number
+    totalFpdUpdated: number
+    totalVendorSaved: number
+    totalAnalyticalInserted: number
+  } | null>(null)
+  const batchFileInputRef = useRef<HTMLInputElement>(null)
 
   const toggleColumnsExpanded = (itemId: string) => {
     setExpandedColumnsMap((prev) => ({
@@ -408,8 +446,160 @@ export const Importar: React.FC = () => {
 
   const allCompleted = fileQueue.length > 0 && fileQueue.every((q) => q.status === 'done')
 
+  // Open batch import modal for selected type
+  const openBatchModal = (type: BatchImportType) => {
+    setBatchType(type)
+    setBatchFile(null)
+    setBatchRefDate(globalReferenceDate || '')
+    setBatchRefDateError('')
+    setBatchParsedData(null)
+    setIsParsingBatch(false)
+    setIsExecutingBatch(false)
+    setBatchImportDone(false)
+    setBatchExecutionResult(null)
+    setBatchProgressMsg('')
+    setBatchProgressPct(0)
+    setBatchModalOpen(true)
+  }
+
+  // Handle batch file selection
+  const handleBatchFileSelected = async (file: File) => {
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+      toast({
+        title: 'Arquivo inválido',
+        description: 'O arquivo precisa ser uma planilha Excel (.xlsx ou .xls).',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setBatchFile(file)
+    setIsParsingBatch(true)
+    setBatchParsedData(null)
+    setBatchImportDone(false)
+
+    try {
+      const parsed = await parseBatchXlsxFile(file, batchType, stores)
+      setBatchParsedData(parsed)
+
+      if (parsed.totalValidRows === 0) {
+        toast({
+          title: 'Nenhuma ocorrência válida encontrada',
+          description: `O arquivo foi lido, mas nenhuma linha com ocorrência válida foi encontrada na aba ${parsed.targetSheetName}. As linhas vazias foram expurgadas.`,
+          variant: 'destructive',
+        })
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast({
+        title: 'Falha ao processar arquivo em lote',
+        description: msg,
+        variant: 'destructive',
+      })
+      setBatchFile(null)
+    } finally {
+      setIsParsingBatch(false)
+      if (batchFileInputRef.current) {
+        batchFileInputRef.current.value = ''
+      }
+    }
+  }
+
+  // Execute batch import
+  const handleExecuteBatch = async () => {
+    if (!batchParsedData) return
+
+    const refDate = (batchRefDate || globalReferenceDate || '').trim()
+    if (!refDate) {
+      setBatchRefDateError('Data de Referência é obrigatória (ex: 20/08/2026).')
+      toast({
+        title: 'Data de Referência obrigatória',
+        description: 'Informe a Data de Referência antes de iniciar a importação.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (!isValidDateDDMMAAAA(refDate)) {
+      setBatchRefDateError('Formato inválido. Use DD/MM/AAAA (ex: 20/08/2026).')
+      toast({
+        title: 'Data de Referência inválida',
+        description: `A data "${refDate}" não é uma data válida no formato DD/MM/AAAA.`,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setBatchRefDateError('')
+    setIsExecutingBatch(true)
+    setBatchProgressMsg('Iniciando gravação...')
+    setBatchProgressPct(5)
+
+    try {
+      const result = await executeBatchImport(batchParsedData, refDate, stores, (step, pct) => {
+        setBatchProgressMsg(step)
+        setBatchProgressPct(pct)
+      })
+
+      setBatchExecutionResult(result)
+      setBatchImportDone(true)
+      loadStores()
+
+      toast({
+        title: `Importação em Lote — ${batchType === 'movel' ? 'Móvel' : 'Residencial'} Concluída!`,
+        description: `${result.storesCount} loja(s) processadas, ${result.totalAnalyticalInserted} registros analíticos gravados e ranking de vendedores atualizado.`,
+      })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      toast({
+        title: 'Erro na importação em lote',
+        description: msg || 'Ocorreu um erro ao salvar os registros.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsExecutingBatch(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
+      {/* Batch Import Action Banner */}
+      <div className="bg-gradient-to-r from-[#12365A] via-[#1a4975] to-[#0E9F8A] rounded-xl p-5 text-white shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-white/15 text-[11px] font-bold tracking-wide uppercase text-[#E0F2FE]">
+            <Layers className="w-3.5 h-3.5 text-[#0E9F8A]" />
+            <span>Novo • Importação de Arquivo Único Multi-Loja</span>
+          </div>
+          <h2 className="text-base sm:text-lg font-bold tracking-tight">
+            Importação em Lote de Todas as Lojas
+          </h2>
+          <p className="text-xs text-slate-200 max-w-2xl">
+            Importe um único arquivo .xlsx contendo dados de todas as lojas simultaneamente. O
+            sistema identifica a Loja e o Vendedor pelas mesmas colunas da planilha e consolida os
+            dados automaticamente de forma separada para Móvel e Residencial.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <Button
+            type="button"
+            onClick={() => openBatchModal('movel')}
+            className="bg-white hover:bg-slate-100 text-[#12365A] font-bold text-xs h-10 px-4 shadow-sm gap-2 transition-all hover:scale-[1.02]"
+          >
+            <Smartphone className="w-4 h-4 text-[#12365A]" />
+            <span>Importar em Lote — Móvel</span>
+          </Button>
+
+          <Button
+            type="button"
+            onClick={() => openBatchModal('residencial')}
+            className="bg-[#0E9F8A] hover:bg-[#0c8a77] text-white font-bold text-xs h-10 px-4 shadow-sm gap-2 border border-white/20 transition-all hover:scale-[1.02]"
+          >
+            <Home className="w-4 h-4 text-white" />
+            <span>Importar em Lote — Residencial</span>
+          </Button>
+        </div>
+      </div>
       {/* "Como funciona" Help banner */}
       <div className="bg-white rounded-xl p-5 border border-[#E3E9F2] shadow-xs space-y-3">
         <div className="flex items-center gap-2 text-[#12365A]">
@@ -995,6 +1185,408 @@ export const Importar: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Batch Import Dialog Modal */}
+      <Dialog
+        open={batchModalOpen}
+        onOpenChange={(open) => {
+          if (!isExecutingBatch) {
+            setBatchModalOpen(open)
+          }
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white p-6 space-y-4">
+          <DialogHeader className="border-b pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={cn(
+                    'w-9 h-9 rounded-lg flex items-center justify-center',
+                    batchType === 'movel'
+                      ? 'bg-[#12365A]/10 text-[#12365A]'
+                      : 'bg-[#0E9F8A]/10 text-[#0E9F8A]',
+                  )}
+                >
+                  {batchType === 'movel' ? (
+                    <Smartphone className="w-5 h-5" />
+                  ) : (
+                    <Home className="w-5 h-5" />
+                  )}
+                </div>
+                <div>
+                  <DialogTitle className="text-base sm:text-lg font-bold text-[#12365A]">
+                    Importação em Lote — {batchType === 'movel' ? 'Móvel' : 'Residencial'}
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-[#5B6B82]">
+                    Arquivo único contendo dados de todas as lojas. Colunas LOJA e VENDEDOR serão
+                    lidas automaticamente.
+                  </DialogDescription>
+                </div>
+              </div>
+
+              <Badge
+                variant="outline"
+                className={cn(
+                  'text-xs font-bold px-2.5 py-1',
+                  batchType === 'movel'
+                    ? 'bg-blue-50 text-[#12365A] border-blue-200'
+                    : 'bg-teal-50 text-[#0E9F8A] border-teal-200',
+                )}
+              >
+                Aba: {batchType === 'movel' ? 'Móvel' : 'Residencial'}
+              </Badge>
+            </div>
+          </DialogHeader>
+
+          {/* Reference Date input */}
+          <div className="bg-[#F8FAFC] p-4 rounded-xl border border-[#E3E9F2] space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-[#0E9F8A]" />
+                <div>
+                  <span className="text-xs font-bold text-[#12365A] block">
+                    Data de Referência da Importação <span className="text-red-500">*</span>
+                  </span>
+                  <span className="text-[11px] text-[#5B6B82]">
+                    Data referente aos registros do lote (ex: 20/08/2026).
+                  </span>
+                </div>
+              </div>
+              <div className="w-full sm:w-56">
+                <Input
+                  value={batchRefDate}
+                  disabled={isExecutingBatch}
+                  onChange={(e) => {
+                    const masked = applyDateMask(e.target.value)
+                    setBatchRefDate(masked)
+                    if (batchRefDateError) setBatchRefDateError('')
+                  }}
+                  placeholder="DD/MM/AAAA"
+                  maxLength={10}
+                  className={cn(
+                    'h-9 text-xs font-semibold bg-white',
+                    batchRefDateError
+                      ? 'border-red-500 focus-visible:ring-red-400'
+                      : 'border-[#E3E9F2] focus:border-[#0E9F8A]',
+                  )}
+                />
+                {batchRefDateError && (
+                  <p className="text-[10px] text-red-600 mt-1 font-medium">{batchRefDateError}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Hidden File Input for Batch */}
+          <input
+            ref={batchFileInputRef}
+            type="file"
+            accept=".xlsx, .xls"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files && e.target.files[0]) {
+                handleBatchFileSelected(e.target.files[0])
+              }
+            }}
+          />
+
+          {/* File Selector Dropzone */}
+          {!batchFile ? (
+            <div
+              onClick={() => batchFileInputRef.current?.click()}
+              className="border-2 border-dashed border-[#cbd5e1] hover:border-[#0E9F8A] bg-[#FAFCFF] hover:bg-slate-50 rounded-xl p-8 text-center cursor-pointer transition-all space-y-2"
+            >
+              <div className="w-12 h-12 rounded-xl bg-[#12365A]/5 text-[#0E9F8A] mx-auto flex items-center justify-center">
+                <UploadCloud className="w-6 h-6" />
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-sm font-bold text-[#12365A]">
+                  Clique para selecionar o arquivo .xlsx de{' '}
+                  {batchType === 'movel' ? 'Móvel' : 'Residencial'} em lote
+                </p>
+                <p className="text-xs text-[#5B6B82]">
+                  Contendo todas as lojas em um único arquivo
+                </p>
+              </div>
+              <div className="pt-1">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 text-[10px] font-medium text-[#5B6B82]">
+                  Coluna <strong>LOJA</strong> e <strong>VENDEDOR</strong> identificadas
+                  automaticamente
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white p-4 rounded-xl border border-[#E3E9F2] space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-teal-50 text-[#0E9F8A]">
+                    <FileSpreadsheet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs text-[#12365A] block">{batchFile.name}</span>
+                    <span className="text-[10px] text-[#5B6B82]">
+                      {(batchFile.size / 1024).toFixed(1)} KB • Aba processada:{' '}
+                      <strong>{batchParsedData?.targetSheetName || 'Detectando...'}</strong>
+                    </span>
+                  </div>
+                </div>
+
+                {!isExecutingBatch && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setBatchFile(null)
+                      setBatchParsedData(null)
+                      setBatchImportDone(false)
+                    }}
+                    className="text-xs text-slate-500 hover:text-red-600 h-8"
+                  >
+                    <X className="w-3.5 h-3.5 mr-1" />
+                    Trocar arquivo
+                  </Button>
+                )}
+              </div>
+
+              {isParsingBatch && (
+                <div className="flex items-center justify-center py-6 gap-2 text-xs text-[#5B6B82]">
+                  <Loader2 className="w-4 h-4 animate-spin text-[#0E9F8A]" />
+                  <span>Lendo e agrupando dados de todas as lojas...</span>
+                </div>
+              )}
+
+              {/* Parsed Summary Table */}
+              {batchParsedData && (
+                <div className="space-y-3 pt-2 border-t border-[#E3E9F2]">
+                  {/* Totals Header Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div className="p-2.5 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2]">
+                      <span className="text-[10px] text-[#5B6B82] uppercase font-bold block">
+                        Lojas Encontradas
+                      </span>
+                      <span className="text-base font-bold text-[#12365A]">
+                        {batchParsedData.storeSummaries.length}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2]">
+                      <span className="text-[10px] text-[#5B6B82] uppercase font-bold block">
+                        Ocorrências Válidas
+                      </span>
+                      <span className="text-base font-bold text-[#0E9F8A]">
+                        {batchParsedData.totalValidRows.toLocaleString('pt-BR')}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2]">
+                      <span className="text-[10px] text-[#5B6B82] uppercase font-bold block">
+                        Vendedores
+                      </span>
+                      <span className="text-base font-bold text-[#12365A]">
+                        {batchParsedData.vendorLines.length.toLocaleString('pt-BR')}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-lg bg-amber-50/60 border border-amber-200">
+                      <span className="text-[10px] text-amber-700 uppercase font-bold block">
+                        Células Vazias (Expurgadas)
+                      </span>
+                      <span className="text-base font-bold text-amber-900">
+                        {batchParsedData.totalExpurgadasRows.toLocaleString('pt-BR')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Store by store breakdown table */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-[#12365A]">
+                        Resumo por Loja Encontrada ({batchParsedData.storeSummaries.length})
+                      </span>
+                      <span className="text-[10px] text-[#5B6B82]">
+                        Correspondência canônica com cadastro existente
+                      </span>
+                    </div>
+
+                    <div className="max-h-60 overflow-y-auto border border-[#E3E9F2] rounded-lg">
+                      <table className="w-full text-[11px] text-left">
+                        <thead className="bg-[#F8FAFC] border-b border-[#E3E9F2] sticky top-0 text-[#12365A] font-bold">
+                          <tr>
+                            <th className="p-2">Loja (Planilha ➔ Canônica)</th>
+                            <th className="p-2 text-right">Total</th>
+                            <th className="p-2 text-right text-[#0891B2]">Pagas</th>
+                            <th className="p-2 text-right text-[#16A34A]">Enviado</th>
+                            <th className="p-2 text-right text-[#9333EA]">Promessa</th>
+                            <th className="p-2 text-right text-[#64748B]">Sem Contato</th>
+                            <th className="p-2 text-right text-[#DC2626]">Pendente</th>
+                            <th className="p-2 text-right text-[#EA580C]">Não Tratados</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#E3E9F2]">
+                          {batchParsedData.storeSummaries.map((s, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50">
+                              <td className="p-2">
+                                <span className="font-bold text-[#12365A] block truncate max-w-[220px]">
+                                  {s.canonicalStoreName}
+                                </span>
+                                {s.rawStoreName !== s.canonicalStoreName && (
+                                  <span className="text-[9px] text-[#5B6B82] block truncate max-w-[220px]">
+                                    Original: {s.rawStoreName}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-2 text-right font-bold text-[#12365A]">
+                                {s.totalLinhas}
+                              </td>
+                              <td className="p-2 text-right font-semibold text-[#0891B2]">
+                                {s.fatura_paga}
+                              </td>
+                              <td className="p-2 text-right font-semibold text-[#16A34A]">
+                                {s.envio_fatura}
+                              </td>
+                              <td className="p-2 text-right font-semibold text-[#9333EA]">
+                                {s.promessa_pagto}
+                              </td>
+                              <td className="p-2 text-right font-semibold text-[#64748B]">
+                                {s.sem_contato}
+                              </td>
+                              <td className="p-2 text-right font-semibold text-[#DC2626]">
+                                {s.pendente}
+                              </td>
+                              <td className="p-2 text-right font-semibold text-[#EA580C]">
+                                {s.nao_tratados}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Progress Bar when Executing */}
+          {isExecutingBatch && (
+            <div className="bg-[#F8FAFC] p-4 rounded-xl border border-[#E3E9F2] space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-[#12365A] flex items-center gap-1.5">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#0E9F8A]" />
+                  {batchProgressMsg || 'Processando lote multi-loja...'}
+                </span>
+                <span className="font-mono font-bold text-[#0E9F8A]">{batchProgressPct}%</span>
+              </div>
+              <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-[#0E9F8A] transition-all duration-300 rounded-full"
+                  style={{ width: `${batchProgressPct}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Success summary after execution */}
+          {batchImportDone && batchExecutionResult && (
+            <div className="p-4 rounded-xl bg-green-50 border border-green-200 text-xs space-y-2 text-[#12365A]">
+              <div className="flex items-center gap-2 text-green-700 font-bold">
+                <CheckCircle2 className="w-5 h-5 text-green-600" />
+                <span>Importação em Lote Concluída com Sucesso!</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-1">
+                <div className="p-2 bg-white rounded border border-green-200">
+                  <span className="text-[#5B6B82] block">Lojas Processadas</span>
+                  <span className="font-bold text-[#12365A] text-sm">
+                    {batchExecutionResult.storesCount}
+                  </span>
+                </div>
+                <div className="p-2 bg-white rounded border border-green-200">
+                  <span className="text-[#5B6B82] block">Consolidados FPD</span>
+                  <span className="font-bold text-[#12365A] text-sm">
+                    {batchExecutionResult.totalFpdUpdated}
+                  </span>
+                </div>
+                <div className="p-2 bg-white rounded border border-green-200">
+                  <span className="text-[#5B6B82] block">Vendedores Atualizados</span>
+                  <span className="font-bold text-[#12365A] text-sm">
+                    {batchExecutionResult.totalVendorSaved}
+                  </span>
+                </div>
+                <div className="p-2 bg-white rounded border border-green-200">
+                  <span className="text-[#5B6B82] block">
+                    Linhas {batchType === 'movel' ? 'Móvel' : 'Residencial'}
+                  </span>
+                  <span className="font-bold text-[#0E9F8A] text-sm">
+                    {batchExecutionResult.totalAnalyticalInserted}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Dialog Action Buttons */}
+          <div className="flex items-center justify-between pt-2 border-t">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isExecutingBatch}
+              onClick={() => setBatchModalOpen(false)}
+              className="text-xs"
+            >
+              {batchImportDone ? 'Fechar' : 'Cancelar'}
+            </Button>
+
+            <div className="flex items-center gap-2">
+              {batchImportDone ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setBatchModalOpen(false)
+                      navigate('/vendedores')
+                    }}
+                    className="text-xs font-semibold text-[#12365A]"
+                  >
+                    Ver Vendedores
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setBatchModalOpen(false)
+                      navigate('/')
+                    }}
+                    className="bg-[#12365A] hover:bg-[#0E2A47] text-white text-xs font-semibold gap-1.5"
+                  >
+                    <span>Ver Tabela Consolidada</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  type="button"
+                  disabled={!batchParsedData || isExecutingBatch || isParsingBatch}
+                  onClick={handleExecuteBatch}
+                  className="bg-[#0E9F8A] hover:bg-[#0c8a77] text-white text-xs font-bold px-4 gap-2 shadow-sm"
+                >
+                  {isExecutingBatch ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Gravando Dados...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Confirmar e Gravar Lote</span>
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
