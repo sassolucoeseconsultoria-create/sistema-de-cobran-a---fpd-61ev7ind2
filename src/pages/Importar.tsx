@@ -50,6 +50,13 @@ import {
   type BatchImportType,
   type ParsedBatchData,
 } from '@/services/batchImportService'
+import { parseAnalyticalXlsxFile } from '@/lib/analyticalImportParser'
+import {
+  insertMovelBatch,
+  insertResidencialBatch,
+  type MovelInsertItem,
+  type ResidencialInsertItem,
+} from '@/services/relacionamentoService'
 import { FPD_STATUSES, type StoreRecord } from '@/types/fpd'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
 import { applyDateMask, isValidDateDDMMAAAA } from '@/lib/clientFormatters'
@@ -363,6 +370,68 @@ export const Importar: React.FC = () => {
         await saveVendorConsolidationsFromLines(linesToSave, refDate, stores)
       }
 
+      // 4. Save analytical customer lines in 'movel' and 'residencial' collections
+      // Re-read file with parseAnalyticalXlsxFile to extract full row objects with columns and occurrences
+      try {
+        const analyticalData = await parseAnalyticalXlsxFile(item.file)
+
+        // 4.1 Móvel rows
+        if (analyticalData.movelSheet && analyticalData.movelSheet.rows.length > 0) {
+          const movelBatchData: MovelInsertItem[] = analyticalData.movelSheet.rows.map((r) => {
+            let normalizedLoja = r.loja?.trim() || finalStoreName
+            if (normalizedLoja) {
+              const matched = matchStore(normalizedLoja, stores)
+              if (matched) {
+                normalizedLoja = matched.name
+              }
+            }
+            return {
+              arquivo: item.file.name,
+              linha: r.linha,
+              loja: normalizedLoja,
+              vendedor: r.vendedor,
+              cliente: r.cliente,
+              dados: r.dados,
+              data_referencia: refDate,
+              ocorrencias: r.ocorrencias,
+            }
+          })
+          await insertMovelBatch(movelBatchData)
+        }
+
+        // 4.2 Residencial rows
+        if (analyticalData.residencialSheet && analyticalData.residencialSheet.rows.length > 0) {
+          const resBatchData: ResidencialInsertItem[] = analyticalData.residencialSheet.rows.map(
+            (r) => {
+              let normalizedLoja = r.loja?.trim() || finalStoreName
+              if (normalizedLoja) {
+                const matched = matchStore(normalizedLoja, stores)
+                if (matched) {
+                  normalizedLoja = matched.name
+                }
+              }
+              return {
+                arquivo: item.file.name,
+                linha: r.linha,
+                loja: normalizedLoja,
+                vendedor: r.vendedor,
+                cliente: r.cliente,
+                dados: r.dados,
+                data_referencia: refDate,
+                typedFields: r.typedFields,
+                ocorrencias: r.ocorrencias,
+              }
+            },
+          )
+          await insertResidencialBatch(resBatchData)
+        }
+      } catch (analyticalErr: unknown) {
+        console.warn(
+          `[Importar] Aviso ao gravar linhas analíticas em Móvel/Residencial para "${item.file.name}":`,
+          analyticalErr,
+        )
+      }
+
       setFileQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: 'done' } : q)))
       return true
     } catch (err: unknown) {
@@ -600,74 +669,50 @@ export const Importar: React.FC = () => {
           </Button>
         </div>
       </div>
-      {/* "Como funciona" Help banner */}
-      <div className="bg-white rounded-xl p-5 border border-[#E3E9F2] shadow-xs space-y-3">
-        <div className="flex items-center gap-2 text-[#12365A]">
-          <HelpCircle className="w-5 h-5 text-[#0E9F8A]" />
-          <h2 className="text-sm font-bold tracking-tight uppercase">
-            Como funciona a consolidação de arquivos .xlsx
-          </h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-[#5B6B82] pt-1">
-          <div className="p-3 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] space-y-1">
-            <span className="font-bold text-[#12365A] block">1. Abas Móvel e Residencial</span>
-            <p>
-              Cada planilha de loja deve conter as abas <strong>Móvel</strong> e/ou{' '}
-              <strong>Residencial</strong>. O sistema lê as linhas de ambas as abas e soma as
-              ocorrências.
-            </p>
-          </div>
-          <div className="p-3 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] space-y-1">
-            <span className="font-bold text-[#12365A] block">2. Classificação Automática</span>
-            <p>
-              As ocorrências são agrupadas nos status do consolidado: Fatura(s) Paga(s), Enviado
-              Fatura(s), Promessa de Pagto., Sem Contato, Cancelados, Pendente, Contato Realizado e
-              Não Tratados. Célula vazia na coluna Ocorrências é ignorada nas quantidades (não entra
-              em nenhuma categoria).
-            </p>
-          </div>
-          <div className="p-3 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] space-y-1">
-            <span className="font-bold text-[#12365A] block">3. Consolidação em Tempo Real</span>
-            <p>
-              Apenas os totais somados são salvos. O consolidado geral é atualizado
-              instantaneamente, preservando Coordenação e Supervisão.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Reference Date Card & Upload Dropzone */}
+      {/* Section Header: Importação Loja a Loja (Protagonismo Restaurado) */}
       <div className="bg-white rounded-xl p-5 border border-[#E3E9F2] shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4">
-          <div className="flex items-center gap-2">
-            <Calendar className="w-5 h-5 text-[#0E9F8A]" />
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-[#12365A]/10 text-[#12365A]">
+              <Store className="w-6 h-6 text-[#12365A]" />
+            </div>
             <div>
-              <h3 className="text-sm font-bold text-[#12365A]">
-                Data de Referência da Importação <span className="text-red-500">*</span>
-              </h3>
+              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#12365A]/5 text-[#12365A] text-[10px] font-bold uppercase tracking-wide mb-1">
+                <span>Fluxo Tradicional</span>
+              </div>
+              <h2 className="text-base sm:text-lg font-bold text-[#12365A] tracking-tight">
+                Importação Loja a Loja (Arquivo Individual de Loja)
+              </h2>
               <p className="text-xs text-[#5B6B82]">
-                Data a que se referem os dados das planilhas importadas (obrigatório para
-                consolidação e filtros históricos).
+                Processe a planilha individual de cada loja contendo as abas <strong>Móvel</strong>{' '}
+                e/ou <strong>Residencial</strong>. O sistema soma as ocorrências de ambas as abas,
+                consolida a loja, atualiza o ranking de vendedores e grava a base analítica de
+                clientes para tratamento individual.
               </p>
             </div>
           </div>
-          <div className="w-full sm:w-64">
-            <div className="relative">
-              <Input
-                value={globalReferenceDate}
-                onChange={(e) => handleGlobalReferenceDateChange(e.target.value)}
-                placeholder="DD/MM/AAAA (ex: 20/08/2026)"
-                maxLength={10}
-                className={cn(
-                  'h-9 text-xs font-semibold tracking-wide bg-[#F8FAFC]',
-                  globalDateError
-                    ? 'border-red-500 focus-visible:ring-red-400'
-                    : 'border-[#E3E9F2] focus:border-[#0E9F8A]',
-                )}
-              />
+
+          {/* Reference Date Input */}
+          <div className="w-full sm:w-64 shrink-0 bg-[#F8FAFC] p-2.5 rounded-lg border border-[#E3E9F2]">
+            <div className="flex items-center gap-1.5 mb-1 text-[11px] font-bold text-[#12365A]">
+              <Calendar className="w-3.5 h-3.5 text-[#0E9F8A]" />
+              <span>Data de Referência</span>
+              <span className="text-red-500">*</span>
             </div>
+            <Input
+              value={globalReferenceDate}
+              onChange={(e) => handleGlobalReferenceDateChange(e.target.value)}
+              placeholder="DD/MM/AAAA (ex: 20/08/2026)"
+              maxLength={10}
+              className={cn(
+                'h-8 text-xs font-semibold tracking-wide bg-white',
+                globalDateError
+                  ? 'border-red-500 focus-visible:ring-red-400'
+                  : 'border-[#E3E9F2] focus:border-[#0E9F8A]',
+              )}
+            />
             {globalDateError && (
-              <p className="text-[11px] text-red-600 mt-1 font-medium">{globalDateError}</p>
+              <p className="text-[10px] text-red-600 mt-1 font-medium">{globalDateError}</p>
             )}
           </div>
         </div>
@@ -701,10 +746,10 @@ export const Importar: React.FC = () => {
             </div>
             <div className="space-y-1">
               <h3 className="text-sm sm:text-base font-bold text-[#12365A]">
-                Arraste suas planilhas .xlsx aqui ou clique para selecionar
+                Arraste os arquivos .xlsx individuais das lojas aqui ou clique para selecionar
               </h3>
               <p className="text-xs text-[#5B6B82]">
-                Selecione múltiplos arquivos das lojas simultaneamente.
+                Selecione um ou múltiplos arquivos de lojas simultaneamente para consolidar.
               </p>
             </div>
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 text-[11px] font-medium text-[#5B6B82]">
@@ -713,9 +758,55 @@ export const Importar: React.FC = () => {
               </span>
               <span>•</span>
               <span>
-                Abas esperadas: <strong>Móvel / Residencial</strong>
+                Abas lidas: <strong>Móvel e Residencial (somadas)</strong>
+              </span>
+              <span>•</span>
+              <span>
+                Gravação: <strong>Consolidado + Vendedores + Clientes (Móvel/Residencial)</strong>
               </span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* "Como funciona" Help banner */}
+      <div className="bg-white rounded-xl p-5 border border-[#E3E9F2] shadow-xs space-y-3">
+        <div className="flex items-center gap-2 text-[#12365A]">
+          <HelpCircle className="w-5 h-5 text-[#0E9F8A]" />
+          <h2 className="text-sm font-bold tracking-tight uppercase">
+            Como funciona a consolidação de arquivos .xlsx
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-[#5B6B82] pt-1">
+          <div className="p-3 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] space-y-1">
+            <span className="font-bold text-[#12365A] block">
+              1. Abas Móvel e Residencial Somadas
+            </span>
+            <p>
+              Cada planilha de loja contém as abas <strong>Móvel</strong> e/ou{' '}
+              <strong>Residencial</strong>. O fluxo loja a loja lê ambas as abas, soma as
+              ocorrências no consolidado geral e salva as linhas de clientes para tratamento
+              individual.
+            </p>
+          </div>
+          <div className="p-3 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] space-y-1">
+            <span className="font-bold text-[#12365A] block">
+              2. Classificação Automática e Expurgo
+            </span>
+            <p>
+              As ocorrências válidas são agrupadas nos status oficiais (Fatura Paga, Enviado Fatura,
+              Promessa, Sem Contato, Cancelados, Pendente, Contato e Não Tratados). Células vazias
+              na coluna Ocorrências são <strong>expurgadas</strong> e não entram em nenhuma
+              quantidade.
+            </p>
+          </div>
+          <div className="p-3 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] space-y-1">
+            <span className="font-bold text-[#12365A] block">3. Substituição e Sem Duplicação</span>
+            <p>
+              Ao reimportar o mesmo arquivo, os dados da loja e data de referência são
+              atualizados/substituídos, preservando anotações manuais já realizadas sem somar dados
+              duplicados.
+            </p>
           </div>
         </div>
       </div>
