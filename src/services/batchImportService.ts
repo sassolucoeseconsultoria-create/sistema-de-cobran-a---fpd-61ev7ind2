@@ -21,6 +21,7 @@ import {
   saveImportedFile,
   saveVendorConsolidationsFromLines,
   createStore,
+  fetchDistinctReferenceDates,
 } from '@/services/fpdService'
 import {
   insertMovelBatch,
@@ -415,7 +416,22 @@ export async function executeBatchImport(
   totalVendorSaved: number
   totalAnalyticalInserted: number
 }> {
-  const refDate = referenceDate.trim()
+  let refDate = (referenceDate || '').trim()
+  if (!refDate) {
+    try {
+      const distinctDates = await fetchDistinctReferenceDates()
+      if (distinctDates.length > 0 && distinctDates[0]) {
+        refDate = distinctDates[0].trim()
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  if (!refDate) {
+    throw new Error('Data de Referência obrigatória não fornecida para a importação em lote.')
+  }
+
   let currentStoresList = [...storesCache]
 
   onProgress?.('Verificando lojas e cadastrando faltantes...', 10)

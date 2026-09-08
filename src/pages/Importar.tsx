@@ -42,6 +42,7 @@ import {
   findStoreByName,
   saveVendorConsolidationsFromLines,
   matchStore,
+  fetchDistinctReferenceDates,
 } from '@/services/fpdService'
 import { parseXlsxFile, type ParsedFileData } from '@/lib/xlsxParser'
 import {
@@ -516,10 +517,9 @@ export const Importar: React.FC = () => {
   const allCompleted = fileQueue.length > 0 && fileQueue.every((q) => q.status === 'done')
 
   // Open batch import modal for selected type
-  const openBatchModal = (type: BatchImportType) => {
+  const openBatchModal = async (type: BatchImportType) => {
     setBatchType(type)
     setBatchFile(null)
-    setBatchRefDate(globalReferenceDate || '')
     setBatchRefDateError('')
     setBatchParsedData(null)
     setIsParsingBatch(false)
@@ -528,6 +528,19 @@ export const Importar: React.FC = () => {
     setBatchExecutionResult(null)
     setBatchProgressMsg('')
     setBatchProgressPct(0)
+
+    let initialDate = (globalReferenceDate || '').trim()
+    if (!initialDate) {
+      try {
+        const distinctDates = await fetchDistinctReferenceDates()
+        if (distinctDates.length > 0 && distinctDates[0]) {
+          initialDate = distinctDates[0].trim()
+        }
+      } catch {
+        // ignore fallback error
+      }
+    }
+    setBatchRefDate(initialDate)
     setBatchModalOpen(true)
   }
 
@@ -578,19 +591,19 @@ export const Importar: React.FC = () => {
   const handleExecuteBatch = async () => {
     if (!batchParsedData) return
 
-    const refDate = (batchRefDate || globalReferenceDate || '').trim()
+    const refDate = (batchRefDate || '').trim()
     if (!refDate) {
-      setBatchRefDateError('Data de Referência é obrigatória (ex: 20/08/2026).')
+      setBatchRefDateError('Data de Referência é obrigatória no modal (ex: 26/08/2026).')
       toast({
         title: 'Data de Referência obrigatória',
-        description: 'Informe a Data de Referência antes de iniciar a importação.',
+        description: 'Informe a Data de Referência no modal antes de iniciar a importação em lote.',
         variant: 'destructive',
       })
       return
     }
 
     if (!isValidDateDDMMAAAA(refDate)) {
-      setBatchRefDateError('Formato inválido. Use DD/MM/AAAA (ex: 20/08/2026).')
+      setBatchRefDateError('Formato inválido. Use DD/MM/AAAA (ex: 26/08/2026).')
       toast({
         title: 'Data de Referência inválida',
         description: `A data "${refDate}" não é uma data válida no formato DD/MM/AAAA.`,

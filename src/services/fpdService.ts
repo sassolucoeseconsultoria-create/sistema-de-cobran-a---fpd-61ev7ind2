@@ -190,10 +190,26 @@ export async function fetchImportedFiles(): Promise<ImportedFileRecord[]> {
 
 export async function fetchDistinctReferenceDates(): Promise<string[]> {
   try {
-    const [files, fpdRecords, vendorRecords] = await Promise.all([
-      fetchImportedFiles(),
-      fetchFpdRecords(),
+    const [files, fpdRecords, vendorRecords, movelRecords, resRecords] = await Promise.all([
+      fetchImportedFiles().catch(() => []),
+      fetchFpdRecords().catch(() => []),
       fetchVendorConsolidations().catch(() => []),
+      pb
+        .collection('movel')
+        .getFullList<{ data_referencia?: string }>({
+          fields: 'data_referencia',
+          filter: 'data_referencia != "" && data_referencia != null',
+          requestKey: null,
+        })
+        .catch(() => []),
+      pb
+        .collection('residencial')
+        .getFullList<{ data_referencia?: string }>({
+          fields: 'data_referencia',
+          filter: 'data_referencia != "" && data_referencia != null',
+          requestKey: null,
+        })
+        .catch(() => []),
     ])
 
     const set = new Set<string>()
@@ -215,6 +231,18 @@ export async function fetchDistinctReferenceDates(): Promise<string[]> {
     for (const v of vendorRecords) {
       if (v.data_referencia && v.data_referencia.trim() !== '') {
         set.add(v.data_referencia.trim())
+      }
+    }
+
+    for (const m of movelRecords) {
+      if (m.data_referencia && m.data_referencia.trim() !== '') {
+        set.add(m.data_referencia.trim())
+      }
+    }
+
+    for (const res of resRecords) {
+      if (res.data_referencia && res.data_referencia.trim() !== '') {
+        set.add(res.data_referencia.trim())
       }
     }
 

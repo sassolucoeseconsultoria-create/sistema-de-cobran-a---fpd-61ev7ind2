@@ -37,6 +37,7 @@ vi.mock('@/services/fpdService', () => ({
     created: '2026-01-01',
     updated: '2026-01-01',
   })),
+  fetchDistinctReferenceDates: vi.fn(async () => ['26/08/2026']),
 }))
 
 vi.mock('@/services/relacionamentoService', () => ({
@@ -327,6 +328,195 @@ describe('batchImportService', () => {
       expect(result.totalVendorSaved).toBe(5)
       expect(result.totalAnalyticalInserted).toBe(1)
       expect(onProgress).toHaveBeenCalled()
+    })
+
+    it('propagates the specified reference date (not today) to analytical items, imported_files, fpd_records and vendor consolidations', async () => {
+      const { saveImportedFile, saveFpdRecord, saveVendorConsolidationsFromLines } =
+        await import('@/services/fpdService')
+      const { insertMovelBatch, insertResidencialBatch } =
+        await import('@/services/relacionamentoService')
+
+      vi.clearAllMocks()
+
+      const summaryStore: BatchStoreSummary = {
+        rawStoreName: 'CELNET AGUAS CLARAS',
+        canonicalStoreName: 'CELNET AGUAS CLARAS',
+        storeId: 'store-ac',
+        totalLinhas: 1,
+        fatura_paga: 1,
+        envio_fatura: 0,
+        promessa_pagto: 0,
+        sem_contato: 0,
+        cancelados: 0,
+        pendente: 0,
+        contato_realizado: 0,
+        nao_tratados: 0,
+        outros: 0,
+        vendorLinesCount: 1,
+        analyticalRowsCount: 1,
+      }
+
+      const explicitDate = '26/08/2026'
+
+      // 1. Móvel test
+      const parsedMovel = {
+        fileName: 'LOTE_MOVEL.xlsx',
+        importType: 'movel' as const,
+        targetSheetName: 'Móvel',
+        totalValidRows: 1,
+        totalExpurgadasRows: 0,
+        storeSummaries: [summaryStore],
+        analyticalRows: [
+          {
+            linha: 2,
+            loja: 'CELNET AGUAS CLARAS',
+            vendedor: 'VENDEDOR TESTE',
+            cliente: 'CLIENTE TESTE',
+            ocorrencias: 'Fatura(s) Paga(s)',
+            dados: {},
+          },
+        ],
+        vendorLines: [
+          {
+            loja: 'CELNET AGUAS CLARAS',
+            vendedor: 'VENDEDOR TESTE',
+            status: 'fatura_paga' as const,
+            quantidade: 1,
+          },
+        ],
+      }
+
+      await executeBatchImport(parsedMovel, explicitDate, mockStores)
+
+      // Verify saveImportedFile got explicit referenceDate
+      expect(saveImportedFile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          referenceDate: explicitDate,
+        }),
+      )
+
+      // Verify saveFpdRecord got explicit referente
+      expect(saveFpdRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          referente: explicitDate,
+        }),
+      )
+
+      // Verify saveVendorConsolidationsFromLines got explicit reference date
+      expect(saveVendorConsolidationsFromLines).toHaveBeenCalledWith(
+        expect.any(Array),
+        explicitDate,
+        expect.any(Array),
+      )
+
+      // Verify insertMovelBatch received items with data_referencia === explicitDate
+      expect(insertMovelBatch).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            data_referencia: explicitDate,
+          }),
+        ]),
+        expect.any(Function),
+      )
+
+      // 2. Residencial test
+      vi.clearAllMocks()
+
+      const parsedResidencial = {
+        fileName: 'LOTE_RESIDENCIAL.xlsx',
+        importType: 'residencial' as const,
+        targetSheetName: 'Residencial',
+        totalValidRows: 1,
+        totalExpurgadasRows: 0,
+        storeSummaries: [summaryStore],
+        analyticalRows: [
+          {
+            linha: 2,
+            loja: 'CELNET AGUAS CLARAS',
+            vendedor: 'VENDEDOR TESTE RES',
+            cliente: 'CLIENTE TESTE RES',
+            ocorrencias: 'Fatura(s) Paga(s)',
+            dados: {},
+            typedFields: {},
+          },
+        ],
+        vendorLines: [],
+      }
+
+      await executeBatchImport(parsedResidencial, explicitDate, mockStores)
+
+      expect(insertResidencialBatch).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            data_referencia: explicitDate,
+          }),
+        ]),
+        expect.any(Function),
+      )
+    })
+
+    it('falls back to the most recent reference date from backend when empty date is passed, never new Date()', async () => {
+      const { fetchDistinctReferenceDates, saveImportedFile } =
+        await import('@/services/fpdService')
+      const { insertMovelBatch } = await import('@/services/relacionamentoService')
+
+      vi.clearAllMocks()
+
+      const summaryStore: BatchStoreSummary = {
+        rawStoreName: 'CELNET AGUAS CLARAS',
+        canonicalStoreName: 'CELNET AGUAS CLARAS',
+        storeId: 'store-ac',
+        totalLinhas: 1,
+        fatura_paga: 1,
+        envio_fatura: 0,
+        promessa_pagto: 0,
+        sem_contato: 0,
+        cancelados: 0,
+        pendente: 0,
+        contato_realizado: 0,
+        nao_tratados: 0,
+        outros: 0,
+        vendorLinesCount: 1,
+        analyticalRowsCount: 1,
+      }
+
+      const parsedMovel = {
+        fileName: 'LOTE_MOVEL.xlsx',
+        importType: 'movel' as const,
+        targetSheetName: 'Móvel',
+        totalValidRows: 1,
+        totalExpurgadasRows: 0,
+        storeSummaries: [summaryStore],
+        analyticalRows: [
+          {
+            linha: 2,
+            loja: 'CELNET AGUAS CLARAS',
+            vendedor: 'VENDEDOR 1',
+            cliente: 'CLIENTE 1',
+            ocorrencias: 'Fatura(s) Paga(s)',
+            dados: {},
+          },
+        ],
+        vendorLines: [],
+      }
+
+      // Empty string passed
+      await executeBatchImport(parsedMovel, '', mockStores)
+
+      expect(fetchDistinctReferenceDates).toHaveBeenCalled()
+      expect(saveImportedFile).toHaveBeenCalledWith(
+        expect.objectContaining({
+          referenceDate: '26/08/2026',
+        }),
+      )
+      expect(insertMovelBatch).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            data_referencia: '26/08/2026',
+          }),
+        ]),
+        expect.any(Function),
+      )
     })
   })
 })
