@@ -1,6 +1,6 @@
 routerAdd(
   'POST',
-  '/api/custom/analytical/clear',
+  '/backend/v1/custom/analytical/clear',
   (e) => {
     let rawBody
     try {

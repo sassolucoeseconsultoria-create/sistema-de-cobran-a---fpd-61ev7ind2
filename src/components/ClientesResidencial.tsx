@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
+import { isFaturaPagaOcorrencia, sortClientesByOcorrencia } from '@/lib/ocorrenciasSorting'
 import pb from '@/lib/pocketbase/client'
 import { OCORRENCIAS_OPTIONS, type ResidencialRecord, type OcorrenciaType } from '@/types/fpd'
 import {
@@ -220,12 +221,15 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
         })
       }
 
-      setRecords(filteredItems)
+      // Reordenar a lista: não-pagas primeiro, "Fatura(s) Paga(s)" sempre ao final da lista
+      const sortedItems = sortClientesByOcorrencia(filteredItems)
+
+      setRecords(sortedItems)
 
       // Total de itens: quando TODAS está selecionado, totalItems é a soma exata vinda do backend
       let accurateTotal = res.totalItems
       if (selectedLoja && selectedLoja !== 'TODAS') {
-        if (filteredItems.length === 0 && page === 1) {
+        if (sortedItems.length === 0 && page === 1) {
           accurateTotal = 0
         }
       }
@@ -238,7 +242,7 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
         string,
         { ocorrencias: string; data_promessa_de_pagto: string; comentarios: string }
       > = {}
-      filteredItems.forEach((item) => {
+      sortedItems.forEach((item) => {
         const itemOcorrencia = item.ocorrencias || 'Não Tratados'
         initialEdits[item.id] = {
           ocorrencias: itemOcorrencia,
@@ -318,8 +322,11 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
       })
 
       // Update local record to reflect changes
-      setRecords((prev) =>
-        prev.map((r) =>
+      const wasPaga = isFaturaPagaOcorrencia(origOcorrencias)
+      const nowPaga = isFaturaPagaOcorrencia(currentEdit.ocorrencias)
+
+      setRecords((prev) => {
+        const updated = prev.map((r) =>
           r.id === id
             ? {
                 ...r,
@@ -328,8 +335,23 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
                 comentarios: currentEdit.comentarios,
               }
             : r,
-        ),
-      )
+        )
+        // Se mudou o status de fatura paga ou se é fatura paga, reordenar para reposicionar imediatamente
+        return sortClientesByOcorrencia(updated)
+      })
+
+      // Toast discreto em PT-BR quando a ocorrência for alterada para Fatura(s) Paga(s) ou mudar de posição
+      if (nowPaga && !wasPaga) {
+        toast({
+          title: 'Ocorrência atualizada',
+          description: 'Cliente marcado como Fatura(s) Paga(s) e movido para o final da lista.',
+        })
+      } else if (!nowPaga && wasPaga) {
+        toast({
+          title: 'Ocorrência atualizada',
+          description: 'Ocorrência alterada e cliente reposicionado na lista.',
+        })
+      }
 
       setSaveStatus((prev) => ({ ...prev, [id]: 'saved' }))
       setTimeout(() => {

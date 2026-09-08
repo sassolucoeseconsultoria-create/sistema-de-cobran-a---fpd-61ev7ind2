@@ -803,7 +803,7 @@ export async function clearAllAnalyticalRows(
       movelCount: number
       residencialCount: number
       relacionamentoCount?: number
-    }>('/api/custom/analytical/clear', {
+    }>('/backend/v1/custom/analytical/clear', {
       method: 'POST',
       body: {
         targetAba: target,
@@ -819,7 +819,7 @@ export async function clearAllAnalyticalRows(
     }
   } catch (endpointErr) {
     console.warn(
-      '[relacionamentoService] Endpoint server-side /api/custom/analytical/clear não respondeu, usando fallback seguro:',
+      '[relacionamentoService] Endpoint server-side /backend/v1/custom/analytical/clear não respondeu, usando fallback seguro:',
       endpointErr,
     )
   }
