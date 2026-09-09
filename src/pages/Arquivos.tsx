@@ -41,8 +41,20 @@ import {
   clearAllStores,
   fetchDistinctReferenceDates,
 } from '@/services/fpdService'
-import { exportConsolidatedToXlsx } from '@/lib/xlsxExport'
-import { FPD_STATUSES, type StoreRecord, type FpdRecord, type ConsolidatedRow } from '@/types/fpd'
+import { exportConsolidatedToXlsx, exportConsolidatedComparisonToXlsx } from '@/lib/xlsxExport'
+import {
+  FPD_STATUSES,
+  type StoreRecord,
+  type FpdRecord,
+  type ConsolidatedRow,
+  type ConsolidatedComparisonRow,
+  type FpdStatusKey,
+} from '@/types/fpd'
+import {
+  buildConsolidatedRow,
+  buildComparisonRows,
+  computeComparisonSummary,
+} from '@/lib/consolidatedComparison'
 import { cn } from '@/lib/utils'
 import { StoreAnalyticsDrawer } from '@/components/StoreAnalyticsDrawer'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
@@ -59,6 +71,7 @@ export const Arquivos: React.FC = () => {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [availableReferenceDates, setAvailableReferenceDates] = useState<string[]>([])
   const [selectedReferenceDate, setSelectedReferenceDate] = useState<string>('all')
+  const [comparisonReferenceDate, setComparisonReferenceDate] = useState<string>('')
   const [selectedCoordenacoes, setSelectedCoordenacoes] = useState<string[]>([])
   const [selectedSupervisoes, setSelectedSupervisoes] = useState<string[]>([])
 
@@ -155,62 +168,34 @@ export const Arquivos: React.FC = () => {
     return userAccess.filterStores(stores)
   }, [stores, userAccess])
 
+  // Is comparison currently active?
+  const isComparisonActive = useMemo(() => {
+    return Boolean(comparisonReferenceDate) && comparisonReferenceDate !== selectedReferenceDate
+  }, [comparisonReferenceDate, selectedReferenceDate])
+
   // Map each store to its consolidated FPD row
   const consolidatedRows: ConsolidatedRow[] = useMemo(() => {
     return accessibleStores.map((store) => {
-      // Find all records for this store matching referenceDate filter if selected
-      const storeRecords = records.filter((r) => {
-        if (r.store !== store.id) return false
-        if (selectedReferenceDate === 'all') return true
-        if (selectedReferenceDate === 'none') {
-          return !r.referente || r.referente.trim() === ''
-        }
-        return r.referente === selectedReferenceDate
-      })
-      const latest = storeRecords[0]
-
-      if (!latest) {
-        return {
-          storeId: store.id,
-          storeName: store.name,
-          coordenacao: store.coordenacao || '',
-          supervisao: store.supervisao || '',
-          hasData: false,
-          totalLinhas: 0,
-          envioFatura: 0,
-          pendente: 0,
-          faturaPaga: 0,
-          semContato: 0,
-          promessaPagto: 0,
-          cancelados: 0,
-          naoTratados: 0,
-          contatoRealizado: 0,
-          outros: 0,
-        }
-      }
-
-      return {
-        storeId: store.id,
-        storeName: store.name,
-        coordenacao: store.coordenacao || '',
-        supervisao: store.supervisao || '',
-        hasData: true,
-        latestRecordId: latest.id,
-        referente: latest.referente,
-        importadoEm: latest.importado_em || latest.created,
-        totalLinhas: latest.total_linhas || 0,
-        envioFatura: latest.envio_fatura || 0,
-        pendente: latest.pendente || 0,
-        faturaPaga: latest.fatura_paga || 0,
-        semContato: latest.sem_contato || 0,
-        promessaPagto: latest.promessa_pagto || 0,
-        cancelados: latest.cancelados || 0,
-        naoTratados: latest.nao_tratados || 0,
-        contatoRealizado: latest.contato_realizado || 0,
-        outros: latest.outros || 0,
-      }
+      return buildConsolidatedRow(store, records, selectedReferenceDate)
     })
   }, [accessibleStores, records, selectedReferenceDate])
+
+  // Map each store to comparison rows when comparison is active
+  const comparisonRows: ConsolidatedComparisonRow[] = useMemo(() => {
+    if (!isComparisonActive) return []
+    return buildComparisonRows(
+      accessibleStores,
+      records,
+      selectedReferenceDate,
+      comparisonReferenceDate,
+    )
+  }, [
+    accessibleStores,
+    records,
+    selectedReferenceDate,
+    comparisonReferenceDate,
+    isComparisonActive,
+  ])
 
   // Distinct filter options
   const uniqueCoordenacoes = useMemo(() => {
@@ -227,10 +212,9 @@ export const Arquivos: React.FC = () => {
     return list.sort((a, b) => a.localeCompare(b))
   }, [accessibleStores])
 
-  // Filtered rows
+  // Filtered rows (single reference)
   const filteredRows = useMemo(() => {
     return consolidatedRows.filter((row) => {
-      // Search
       if (debouncedSearch) {
         const q = debouncedSearch.toLowerCase()
         const matchName = row.storeName.toLowerCase().includes(q)
@@ -239,12 +223,10 @@ export const Arquivos: React.FC = () => {
         if (!matchName && !matchCoord && !matchSuper) return false
       }
 
-      // Coordenacao filter
       if (selectedCoordenacoes.length > 0) {
         if (!selectedCoordenacoes.includes(row.coordenacao)) return false
       }
 
-      // Supervisao filter
       if (selectedSupervisoes.length > 0) {
         if (!selectedSupervisoes.includes(row.supervisao)) return false
       }
@@ -253,7 +235,37 @@ export const Arquivos: React.FC = () => {
     })
   }, [consolidatedRows, debouncedSearch, selectedCoordenacoes, selectedSupervisoes])
 
-  // Totals of filtered rows
+  // Filtered comparison rows
+  const filteredComparisonRows = useMemo(() => {
+    if (!isComparisonActive) return []
+    return comparisonRows.filter((row) => {
+      if (debouncedSearch) {
+        const q = debouncedSearch.toLowerCase()
+        const matchName = row.storeName.toLowerCase().includes(q)
+        const matchCoord = (row.coordenacao || '').toLowerCase().includes(q)
+        const matchSuper = (row.supervisao || '').toLowerCase().includes(q)
+        if (!matchName && !matchCoord && !matchSuper) return false
+      }
+
+      if (selectedCoordenacoes.length > 0) {
+        if (!selectedCoordenacoes.includes(row.coordenacao)) return false
+      }
+
+      if (selectedSupervisoes.length > 0) {
+        if (!selectedSupervisoes.includes(row.supervisao)) return false
+      }
+
+      return true
+    })
+  }, [
+    comparisonRows,
+    debouncedSearch,
+    selectedCoordenacoes,
+    selectedSupervisoes,
+    isComparisonActive,
+  ])
+
+  // Totals of filtered rows (Primary)
   const totals = useMemo(() => {
     return filteredRows.reduce(
       (acc, r) => {
@@ -283,6 +295,61 @@ export const Arquivos: React.FC = () => {
       },
     )
   }, [filteredRows])
+
+  // Totals for compared reference
+  const comparedTotals = useMemo(() => {
+    if (!isComparisonActive) {
+      return {
+        totalLinhas: 0,
+        envioFatura: 0,
+        pendente: 0,
+        faturaPaga: 0,
+        semContato: 0,
+        promessaPagto: 0,
+        cancelados: 0,
+        naoTratados: 0,
+        contatoRealizado: 0,
+        outros: 0,
+      }
+    }
+    return filteredComparisonRows.reduce(
+      (acc, r) => {
+        if (!r.hasDataCompared) return acc
+        acc.totalLinhas += r.compared.totalLinhas
+        acc.envioFatura += r.compared.envioFatura
+        acc.pendente += r.compared.pendente
+        acc.faturaPaga += r.compared.faturaPaga
+        acc.semContato += r.compared.semContato
+        acc.promessaPagto += r.compared.promessaPagto
+        acc.cancelados += r.compared.cancelados
+        acc.naoTratados += r.compared.naoTratados
+        acc.contatoRealizado += r.compared.contatoRealizado
+        return acc
+      },
+      {
+        totalLinhas: 0,
+        envioFatura: 0,
+        pendente: 0,
+        faturaPaga: 0,
+        semContato: 0,
+        promessaPagto: 0,
+        cancelados: 0,
+        naoTratados: 0,
+        contatoRealizado: 0,
+        outros: 0,
+      },
+    )
+  }, [filteredComparisonRows, isComparisonActive])
+
+  // Comparison summary card data
+  const comparisonSummary = useMemo(() => {
+    if (!isComparisonActive) return null
+    return computeComparisonSummary(
+      filteredComparisonRows,
+      selectedReferenceDate === 'all' ? 'Mais recente' : selectedReferenceDate,
+      comparisonReferenceDate,
+    )
+  }, [filteredComparisonRows, selectedReferenceDate, comparisonReferenceDate, isComparisonActive])
 
   // Animated totals
   const animatedTotalLinhas = useCountUp(totals.totalLinhas)
@@ -395,6 +462,28 @@ export const Arquivos: React.FC = () => {
   }
 
   const handleExportXlsx = () => {
+    if (isComparisonActive) {
+      if (filteredComparisonRows.length === 0) {
+        toast({
+          title: 'Nada a exportar',
+          description: 'Nenhuma linha visível no comparativo com os filtros atuais.',
+        })
+        return
+      }
+      exportConsolidatedComparisonToXlsx(
+        filteredComparisonRows,
+        totals,
+        comparedTotals,
+        effectiveReferente || selectedReferenceDate,
+        comparisonReferenceDate,
+      )
+      toast({
+        title: 'Comparativo exportado',
+        description: 'O arquivo .xlsx do comparativo entre referências foi gerado com sucesso.',
+      })
+      return
+    }
+
     if (filteredRows.length === 0) {
       toast({
         title: 'Nada a exportar',
@@ -413,12 +502,14 @@ export const Arquivos: React.FC = () => {
     debouncedSearch !== '' ||
     selectedCoordenacoes.length > 0 ||
     selectedSupervisoes.length > 0 ||
-    selectedReferenceDate !== 'all'
+    selectedReferenceDate !== 'all' ||
+    Boolean(comparisonReferenceDate)
 
   const clearFilters = () => {
     setSearch('')
     setDebouncedSearch('')
     setSelectedReferenceDate('all')
+    setComparisonReferenceDate('')
     setSelectedCoordenacoes([])
     setSelectedSupervisoes([])
   }
@@ -529,6 +620,129 @@ export const Arquivos: React.FC = () => {
         </div>
       )}
 
+      {/* Aviso de apenas 1 referência se disponível */}
+      {availableReferenceDates.length === 1 && !isComparisonActive && (
+        <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl px-4 py-2.5 text-xs text-amber-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>
+              Apenas 1 Data de Referência disponível ({availableReferenceDates[0]}).{' '}
+              <strong>Importe mais referências para habilitar o comparativo.</strong>
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Card / Resumo de comparativo ativo */}
+      {isComparisonActive && comparisonSummary && (
+        <div className="bg-gradient-to-r from-[#12365A]/5 via-[#2563EB]/5 to-transparent border border-[#2563EB]/20 rounded-xl p-4 sm:p-5 shadow-xs">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[#2563EB] text-white text-[11px] font-bold uppercase tracking-wider">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  Comparativo entre referências
+                </span>
+                <span className="text-xs text-[#5B6B82]">Evolução do FPD por Loja</span>
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-[#12365A]">
+                Referência atual{' '}
+                <span className="text-[#0E9F8A]">
+                  {effectiveReferente || selectedReferenceDate}
+                </span>{' '}
+                vs <span className="text-[#2563EB]">{comparisonReferenceDate}</span>
+              </h3>
+            </div>
+
+            {/* Métricas do comparativo */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 shrink-0">
+              <div className="bg-white px-3.5 py-2.5 rounded-lg border border-[#E3E9F2] shadow-xs">
+                <span className="text-[10px] font-semibold text-[#5B6B82] uppercase tracking-wider block">
+                  Linhas Atual ({effectiveReferente || selectedReferenceDate})
+                </span>
+                <span className="text-base sm:text-lg font-bold text-[#12365A] tabular-nums">
+                  {comparisonSummary.totalPrimaryLinhas.toLocaleString('pt-BR')}
+                </span>
+              </div>
+
+              <div className="bg-white px-3.5 py-2.5 rounded-lg border border-[#E3E9F2] shadow-xs">
+                <span className="text-[10px] font-semibold text-[#5B6B82] uppercase tracking-wider block">
+                  Linhas Comparada ({comparisonReferenceDate})
+                </span>
+                <span className="text-base sm:text-lg font-bold text-[#5B6B82] tabular-nums">
+                  {comparisonSummary.totalComparedLinhas.toLocaleString('pt-BR')}
+                </span>
+              </div>
+
+              <div className="bg-white px-3.5 py-2.5 rounded-lg border border-[#E3E9F2] shadow-xs col-span-2 sm:col-span-1">
+                <span className="text-[10px] font-semibold text-[#5B6B82] uppercase tracking-wider block">
+                  Variação Total
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className={cn(
+                      'text-base sm:text-lg font-bold tabular-nums',
+                      comparisonSummary.diffLinhas > 0 && 'text-red-600',
+                      comparisonSummary.diffLinhas < 0 && 'text-emerald-600',
+                      comparisonSummary.diffLinhas === 0 && 'text-slate-600',
+                    )}
+                  >
+                    {comparisonSummary.diffLinhas > 0 && '+'}
+                    {comparisonSummary.diffLinhas.toLocaleString('pt-BR')}
+                  </span>
+                  <span className="text-xs font-medium text-[#5B6B82]">
+                    (
+                    {comparisonSummary.diffLinhas > 0
+                      ? 'aumento'
+                      : comparisonSummary.diffLinhas < 0
+                        ? 'redução'
+                        : 'estável'}
+                    )
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Destaques de Lojas (Maior aumento e maior redução) */}
+          {(comparisonSummary.storeWithHighestIncrease ||
+            comparisonSummary.storeWithHighestDecrease) && (
+            <div className="mt-3 pt-3 border-t border-[#E3E9F2]/60 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              {comparisonSummary.storeWithHighestIncrease && (
+                <div className="flex items-center gap-2 text-[#5B6B82] bg-white/70 px-3 py-1.5 rounded-md border border-red-100">
+                  <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" />
+                  <span>
+                    Maior aumento de ocorrências:{' '}
+                    <strong className="text-[#12365A]">
+                      {comparisonSummary.storeWithHighestIncrease.storeName}
+                    </strong>{' '}
+                    <span className="text-red-600 font-bold">
+                      (+{comparisonSummary.storeWithHighestIncrease.diff.toLocaleString('pt-BR')}{' '}
+                      linhas)
+                    </span>
+                  </span>
+                </div>
+              )}
+              {comparisonSummary.storeWithHighestDecrease && (
+                <div className="flex items-center gap-2 text-[#5B6B82] bg-white/70 px-3 py-1.5 rounded-md border border-emerald-100">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  <span>
+                    Maior redução de ocorrências:{' '}
+                    <strong className="text-[#12365A]">
+                      {comparisonSummary.storeWithHighestDecrease.storeName}
+                    </strong>{' '}
+                    <span className="text-emerald-600 font-bold">
+                      ({comparisonSummary.storeWithHighestDecrease.diff.toLocaleString('pt-BR')}{' '}
+                      linhas)
+                    </span>
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Main Table Card */}
       <div className="bg-white rounded-xl border border-[#E3E9F2] shadow-xs overflow-hidden">
         {/* Toolbar */}
@@ -565,6 +779,7 @@ export const Arquivos: React.FC = () => {
                     ? 'border-[#0E9F8A] text-[#0E9F8A] bg-[#0E9F8A]/5 font-semibold'
                     : 'border-[#E3E9F2] text-[#12365A]',
                 )}
+                title="Selecione a referência principal"
               >
                 <option value="all">Todas as referências (Mais recente por loja)</option>
                 {availableReferenceDates.map((date) => (
@@ -574,6 +789,51 @@ export const Arquivos: React.FC = () => {
                 ))}
                 <option value="none">Sem referência</option>
               </select>
+            </div>
+
+            {/* Selector: Comparar com (Segunda referência opcional) */}
+            <div className="w-full sm:w-auto flex items-center gap-1.5">
+              <span className="text-[11px] font-semibold text-[#5B6B82] uppercase tracking-wider hidden md:inline">
+                vs:
+              </span>
+              <select
+                value={comparisonReferenceDate}
+                onChange={(e) => setComparisonReferenceDate(e.target.value)}
+                disabled={availableReferenceDates.length < 2}
+                className={cn(
+                  'h-9 px-3 text-xs font-medium rounded-md border bg-white focus:outline-none focus:border-[#0E9F8A]',
+                  isComparisonActive
+                    ? 'border-[#2563EB] text-[#2563EB] bg-[#2563EB]/5 font-semibold'
+                    : 'border-[#E3E9F2] text-[#5B6B82]',
+                  availableReferenceDates.length < 2 && 'opacity-60 cursor-not-allowed bg-slate-50',
+                )}
+                title={
+                  availableReferenceDates.length < 2
+                    ? 'Importe mais referências para habilitar o comparativo'
+                    : 'Selecione uma segunda referência para comparar'
+                }
+              >
+                <option value="">
+                  {availableReferenceDates.length < 2
+                    ? 'Comparar com... (apenas 1 ref. disponível)'
+                    : 'Comparar com... (Opcional)'}
+                </option>
+                {availableReferenceDates.map((date) => (
+                  <option key={date} value={date} disabled={date === selectedReferenceDate}>
+                    Comparar com: {date}
+                  </option>
+                ))}
+              </select>
+              {isComparisonActive && (
+                <button
+                  type="button"
+                  onClick={() => setComparisonReferenceDate('')}
+                  className="text-xs text-[#5B6B82] hover:text-red-600 px-1.5 py-1 rounded hover:bg-red-50 transition-colors"
+                  title="Desativar comparativo"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
 
             {/* Filter Coordenação */}
@@ -750,6 +1010,9 @@ export const Arquivos: React.FC = () => {
           </div>
         </div>
 
+        {/* Helper function / component for diff badge */}
+        {/* Renderizado na tabela quando o comparativo está ativo */}
+
         {/* 13-Column Consolidated Table */}
         <div className="relative overflow-x-auto max-h-[70vh] border-b border-[#E3E9F2]">
           <table className="w-full text-left border-collapse text-[13px]">
@@ -769,14 +1032,29 @@ export const Arquivos: React.FC = () => {
                   SUPERVISÃO
                 </th>
                 {/* D - TOTAL LINHAS */}
-                <th className="px-3 py-3.5 min-w-[110px] text-center border-r border-[#1e456f] bg-[#0E2A47]">
-                  TOTAL LINHAS
+                <th
+                  className={cn(
+                    'px-3 py-3.5 text-center border-r border-[#1e456f] bg-[#0E2A47]',
+                    isComparisonActive ? 'min-w-[155px]' : 'min-w-[110px]',
+                  )}
+                >
+                  <div className="flex flex-col items-center">
+                    <span>TOTAL LINHAS</span>
+                    {isComparisonActive && (
+                      <span className="text-[9px] text-[#38bdf8] font-normal normal-case tracking-normal">
+                        Atual vs {comparisonReferenceDate}
+                      </span>
+                    )}
+                  </div>
                 </th>
                 {/* E–M Status Columns with Colored Chips */}
                 {FPD_STATUSES.map((status) => (
                   <th
                     key={status.key}
-                    className="px-2 py-2.5 w-[130px] min-w-[130px] text-center border-r border-[#1e456f]"
+                    className={cn(
+                      'px-2 py-2.5 text-center border-r border-[#1e456f]',
+                      isComparisonActive ? 'w-[150px] min-w-[150px]' : 'w-[130px] min-w-[130px]',
+                    )}
                   >
                     <div
                       className="w-full flex items-center justify-center min-h-[34px] px-2 py-1 rounded text-[10px] font-bold text-white text-center leading-tight shadow-xs whitespace-normal"
@@ -800,10 +1078,204 @@ export const Arquivos: React.FC = () => {
                     </div>
                   </td>
                 </tr>
+              ) : isComparisonActive ? (
+                filteredComparisonRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={12} className="py-12 text-center text-[#5B6B82]">
+                      <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
+                        <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
+                        <p className="font-semibold text-[#12365A]">
+                          Nenhuma loja encontrada para o comparativo
+                        </p>
+                        <p className="text-xs text-[#5B6B82]">
+                          Tente ajustar os filtros de busca acima.
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredComparisonRows.map((compRow, idx) => {
+                    const row = compRow.primary
+                    const diff = compRow.diff
+                    const hasAnyData = compRow.hasDataPrimary || compRow.hasDataCompared
+
+                    return (
+                      <tr
+                        key={compRow.storeId}
+                        onClick={() => handleOpenRowDetail(row)}
+                        className={cn(
+                          'hover:bg-[#F0F5FC] cursor-pointer transition-colors group animate-fade-in-up',
+                          idx % 2 === 1 ? 'bg-[#FAFCFF]' : 'bg-white',
+                          !hasAnyData && 'opacity-60 text-slate-400',
+                        )}
+                        style={{ animationDelay: `${Math.min(idx * 25, 300)}ms` }}
+                      >
+                        {/* A: LOJAS */}
+                        <td
+                          className={cn(
+                            'sticky left-0 z-10 px-3.5 py-2.5 font-semibold text-[#12365A] border-r border-[#E3E9F2] max-w-[250px]',
+                            idx % 2 === 1 ? 'bg-[#FAFCFF]' : 'bg-white',
+                            'group-hover:bg-[#F0F5FC]',
+                          )}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="truncate group-hover:text-[#0E9F8A] transition-colors">
+                                {compRow.storeName}
+                              </span>
+                              {compRow.isNewInPrimary && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 shrink-0 uppercase tracking-wide">
+                                  Nova
+                                </span>
+                              )}
+                              {compRow.isMissingInPrimary && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 shrink-0 uppercase tracking-wide">
+                                  Sem dados atual
+                                </span>
+                              )}
+                              {!hasAnyData && (
+                                <span className="text-[10px] font-normal px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 shrink-0">
+                                  Sem dados
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleOpenRowDetail(row)
+                              }}
+                              className="p-1 rounded-md text-[#8A97AC] group-hover:text-[#0E9F8A] hover:bg-[#0E9F8A]/10 transition-colors shrink-0"
+                              title="Ver visão analítica da loja"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* B: COORDENAÇÃO */}
+                        <td className="px-3 py-2.5 text-[#5B6B82] border-r border-[#E3E9F2] truncate max-w-[140px]">
+                          {compRow.coordenacao || <span className="text-slate-300">—</span>}
+                        </td>
+
+                        {/* C: SUPERVISÃO */}
+                        <td className="px-3 py-2.5 text-[#5B6B82] border-r border-[#E3E9F2] truncate max-w-[140px]">
+                          {compRow.supervisao || <span className="text-slate-300">—</span>}
+                        </td>
+
+                        {/* D: TOTAL LINHAS (com variação e destaque proporcional) */}
+                        <td className="px-3 py-2.5 text-right font-bold text-[#12365A] tabular-nums border-r border-[#E3E9F2] bg-slate-50/70">
+                          {hasAnyData ? (
+                            <div className="flex items-center justify-end gap-2">
+                              <span className="text-sm">
+                                {compRow.hasDataPrimary
+                                  ? row.totalLinhas.toLocaleString('pt-BR')
+                                  : '0'}
+                              </span>
+                              {compRow.isNewInPrimary ? (
+                                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200">
+                                  novo
+                                </span>
+                              ) : (
+                                <span
+                                  className={cn(
+                                    'inline-flex items-center text-[11px] font-bold px-1.5 py-0.5 rounded',
+                                    diff.totalLinhas > 0 &&
+                                      'text-red-700 bg-red-50 border border-red-200',
+                                    diff.totalLinhas < 0 &&
+                                      'text-emerald-700 bg-emerald-50 border border-emerald-200',
+                                    diff.totalLinhas === 0 && 'text-slate-500 bg-slate-100',
+                                  )}
+                                  title={`Anterior: ${compRow.compared.totalLinhas.toLocaleString('pt-BR')}`}
+                                >
+                                  {diff.totalLinhas > 0 && '▲ +'}
+                                  {diff.totalLinhas < 0 && '▼ '}
+                                  {diff.totalLinhas === 0 && '='}
+                                  {diff.totalLinhas !== 0 &&
+                                    Math.abs(diff.totalLinhas).toLocaleString('pt-BR')}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+
+                        {/* E–M: Status columns with comparison diff */}
+                        {FPD_STATUSES.map((status) => {
+                          const camelKey = status.key.replace(/_([a-z])/g, (_, c) =>
+                            c.toUpperCase(),
+                          ) as keyof ConsolidatedRow
+
+                          const primaryVal = compRow.hasDataPrimary
+                            ? ((row[camelKey] as number) ?? 0)
+                            : 0
+                          const comparedVal = compRow.hasDataCompared
+                            ? ((compRow.compared[camelKey] as number) ?? 0)
+                            : 0
+                          const diffVal = primaryVal - comparedVal
+
+                          // Regra semântica CELNET:
+                          // Para 'fatura_paga': aumento é positivo (verde), diminuição é alerta (vermelho).
+                          // Para inadimplência/ocorrências negativas ('pendente', 'cancelados', 'sem_contato', 'nao_tratados'): aumento é alerta (vermelho), diminuição é positivo (verde).
+                          const isFaturaPaga = status.key === 'fatura_paga'
+                          const isPositiveChange = isFaturaPaga ? diffVal > 0 : diffVal < 0
+                          const isNegativeChange = isFaturaPaga ? diffVal < 0 : diffVal > 0
+
+                          return (
+                            <td
+                              key={status.key}
+                              className="px-2 py-2 text-right font-medium tabular-nums border-r border-[#E3E9F2]"
+                              style={{
+                                backgroundColor:
+                                  compRow.hasDataPrimary && primaryVal > 0
+                                    ? status.bgTint
+                                    : undefined,
+                                color:
+                                  compRow.hasDataPrimary && primaryVal > 0
+                                    ? status.textColor
+                                    : undefined,
+                              }}
+                            >
+                              {hasAnyData ? (
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <span>
+                                    {primaryVal > 0 ? primaryVal.toLocaleString('pt-BR') : '0'}
+                                  </span>
+                                  {compRow.isNewInPrimary ? (
+                                    <span className="text-[9px] text-emerald-600 font-semibold">
+                                      novo
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className={cn(
+                                        'inline-flex items-center text-[10px] font-bold px-1 py-0.2 rounded',
+                                        isNegativeChange && 'text-red-700 bg-red-100/70',
+                                        isPositiveChange && 'text-emerald-700 bg-emerald-100/70',
+                                        diffVal === 0 && 'text-slate-400 bg-slate-100/50',
+                                      )}
+                                      title={`Anterior: ${comparedVal.toLocaleString('pt-BR')}`}
+                                    >
+                                      {diffVal > 0 && '▲+'}
+                                      {diffVal < 0 && '▼'}
+                                      {diffVal === 0 && '='}
+                                      {diffVal !== 0 && Math.abs(diffVal).toLocaleString('pt-BR')}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-300">—</span>
+                              )}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    )
+                  })
+                )
               ) : filteredRows.length === 0 ? (
                 <tr>
                   <td colSpan={12} className="py-12 text-center text-[#5B6B82]">
-                    {' '}
                     <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
                       <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
                       <p className="font-semibold text-[#12365A]">
@@ -819,7 +1291,7 @@ export const Arquivos: React.FC = () => {
                             : 'Tente ajustar os filtros de busca acima.'}
                       </p>
                     </div>
-                  </td>{' '}
+                  </td>
                 </tr>
               ) : (
                 filteredRows.map((row, idx) => {
@@ -928,48 +1400,143 @@ export const Arquivos: React.FC = () => {
               <tr>
                 {/* A: Totais */}
                 <td className="sticky left-0 z-30 bg-[#12365A] px-3.5 py-3 border-r border-[#1e456f] text-white uppercase tracking-wider">
-                  Totais ({filteredRows.length})
+                  Totais ({isComparisonActive ? filteredComparisonRows.length : filteredRows.length}
+                  )
                 </td>
                 {/* B */}
                 <td className="px-3 py-3 border-r border-[#1e456f]"></td>
                 {/* C */}
                 <td className="px-3 py-3 border-r border-[#1e456f]"></td>
+
                 {/* D: TOTAL LINHAS */}
                 <td className="px-3 py-3 text-right text-white tabular-nums border-r border-[#1e456f] bg-[#0E2A47]">
-                  {animatedTotalLinhas.toLocaleString('pt-BR')}
+                  <div className="flex flex-col items-end">
+                    <span>{animatedTotalLinhas.toLocaleString('pt-BR')}</span>
+                    {isComparisonActive && (
+                      <span
+                        className={cn(
+                          'text-[10px] font-bold px-1 rounded mt-0.5',
+                          totals.totalLinhas - comparedTotals.totalLinhas > 0 &&
+                            'text-red-300 bg-red-950/60',
+                          totals.totalLinhas - comparedTotals.totalLinhas < 0 &&
+                            'text-emerald-300 bg-emerald-950/60',
+                          totals.totalLinhas - comparedTotals.totalLinhas === 0 && 'text-slate-400',
+                        )}
+                      >
+                        {totals.totalLinhas - comparedTotals.totalLinhas > 0 && '▲ +'}
+                        {totals.totalLinhas - comparedTotals.totalLinhas < 0 && '▼ '}
+                        {totals.totalLinhas - comparedTotals.totalLinhas === 0 && '= '}
+                        {Math.abs(totals.totalLinhas - comparedTotals.totalLinhas).toLocaleString(
+                          'pt-BR',
+                        )}
+                      </span>
+                    )}
+                  </div>
                 </td>
-                {/* E: 1. Fatura(s) Paga(s) */}
-                <td className="px-2.5 py-3 text-right text-[#67e8f9] tabular-nums border-r border-[#1e456f]">
-                  {animatedFaturaPaga.toLocaleString('pt-BR')}
-                </td>
-                {/* F: 2. Enviado Fatura(s) */}
-                <td className="px-2.5 py-3 text-right text-[#4ade80] tabular-nums border-r border-[#1e456f]">
-                  {animatedEnvioFatura.toLocaleString('pt-BR')}
-                </td>
-                {/* G: 3. Promessa de Pagto. */}
-                <td className="px-2.5 py-3 text-right text-[#d8b4fe] tabular-nums border-r border-[#1e456f]">
-                  {animatedPromessaPagto.toLocaleString('pt-BR')}
-                </td>
-                {/* H: 4. Sem Contato */}
-                <td className="px-2.5 py-3 text-right text-[#cbd5e1] tabular-nums border-r border-[#1e456f]">
-                  {animatedSemContato.toLocaleString('pt-BR')}
-                </td>
-                {/* I: 5. Cancelados */}
-                <td className="px-2.5 py-3 text-right text-slate-300 tabular-nums border-r border-[#1e456f]">
-                  {animatedCancelados.toLocaleString('pt-BR')}
-                </td>
-                {/* J: 6. Pendente */}
-                <td className="px-2.5 py-3 text-right text-[#fca5a5] tabular-nums border-r border-[#1e456f]">
-                  {animatedPendente.toLocaleString('pt-BR')}
-                </td>
-                {/* K: 7. Contato Realizado */}
-                <td className="px-2.5 py-3 text-right text-[#5eead4] tabular-nums border-r border-[#1e456f]">
-                  {animatedContatoRealizado.toLocaleString('pt-BR')}
-                </td>
-                {/* L: 8. Não Tratados */}
-                <td className="px-2.5 py-3 text-right text-[#fdba74] tabular-nums border-r border-[#1e456f]">
-                  {animatedNaoTratados.toLocaleString('pt-BR')}
-                </td>
+
+                {/* Helper footer status cell */}
+                {(() => {
+                  const renderStatusFooterCell = (
+                    val: number,
+                    compVal: number,
+                    colorClass: string,
+                    key: FpdStatusKey,
+                  ) => {
+                    const diff = val - compVal
+                    const isFaturaPaga = key === 'fatura_paga'
+                    const isPositive = isFaturaPaga ? diff > 0 : diff < 0
+                    const isNegative = isFaturaPaga ? diff < 0 : diff > 0
+
+                    return (
+                      <td
+                        className={cn(
+                          'px-2.5 py-3 text-right tabular-nums border-r border-[#1e456f]',
+                          colorClass,
+                        )}
+                      >
+                        <div className="flex flex-col items-end">
+                          <span>{val.toLocaleString('pt-BR')}</span>
+                          {isComparisonActive && (
+                            <span
+                              className={cn(
+                                'text-[10px] font-bold px-1 rounded mt-0.5',
+                                isNegative && 'text-red-300 bg-red-950/60',
+                                isPositive && 'text-emerald-300 bg-emerald-950/60',
+                                diff === 0 && 'text-slate-400',
+                              )}
+                            >
+                              {diff > 0 && '▲+'}
+                              {diff < 0 && '▼'}
+                              {diff === 0 && '='}
+                              {diff !== 0 && Math.abs(diff).toLocaleString('pt-BR')}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    )
+                  }
+
+                  return (
+                    <>
+                      {/* E: 1. Fatura(s) Paga(s) */}
+                      {renderStatusFooterCell(
+                        totals.faturaPaga,
+                        comparedTotals.faturaPaga,
+                        'text-[#67e8f9]',
+                        'fatura_paga',
+                      )}
+                      {/* F: 2. Enviado Fatura(s) */}
+                      {renderStatusFooterCell(
+                        totals.envioFatura,
+                        comparedTotals.envioFatura,
+                        'text-[#4ade80]',
+                        'envio_fatura',
+                      )}
+                      {/* G: 3. Promessa de Pagto. */}
+                      {renderStatusFooterCell(
+                        totals.promessaPagto,
+                        comparedTotals.promessaPagto,
+                        'text-[#d8b4fe]',
+                        'promessa_pagto',
+                      )}
+                      {/* H: 4. Sem Contato */}
+                      {renderStatusFooterCell(
+                        totals.semContato,
+                        comparedTotals.semContato,
+                        'text-[#cbd5e1]',
+                        'sem_contato',
+                      )}
+                      {/* I: 5. Cancelados */}
+                      {renderStatusFooterCell(
+                        totals.cancelados,
+                        comparedTotals.cancelados,
+                        'text-slate-300',
+                        'cancelados',
+                      )}
+                      {/* J: 6. Pendente */}
+                      {renderStatusFooterCell(
+                        totals.pendente,
+                        comparedTotals.pendente,
+                        'text-[#fca5a5]',
+                        'pendente',
+                      )}
+                      {/* K: 7. Contato Realizado */}
+                      {renderStatusFooterCell(
+                        totals.contatoRealizado,
+                        comparedTotals.contatoRealizado,
+                        'text-[#5eead4]',
+                        'contato_realizado',
+                      )}
+                      {/* L: 8. Não Tratados */}
+                      {renderStatusFooterCell(
+                        totals.naoTratados,
+                        comparedTotals.naoTratados,
+                        'text-[#fdba74]',
+                        'nao_tratados',
+                      )}
+                    </>
+                  )
+                })()}
               </tr>
             </tfoot>
           </table>

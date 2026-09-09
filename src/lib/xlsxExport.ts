@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import type { ConsolidatedRow, ImportedFileRecord } from '@/types/fpd'
+import type { ConsolidatedRow, ConsolidatedComparisonRow, ImportedFileRecord } from '@/types/fpd'
 
 export function exportVendorsToXlsx(
   rows: Array<{
@@ -202,6 +202,202 @@ export function exportConsolidatedToXlsx(
     .replace(/[/\\?%*:|"<>]/g, '-')
     .replace(/\s+/g, '_')
   const filename = `Consolidado_FPD_${dateSlug}.xlsx`
+
+  XLSX.writeFile(wb, filename)
+}
+
+export function exportConsolidatedComparisonToXlsx(
+  comparisonRows: ConsolidatedComparisonRow[],
+  totalsPrimary: {
+    totalLinhas: number
+    faturaPaga: number
+    envioFatura: number
+    promessaPagto: number
+    semContato: number
+    cancelados: number
+    pendente: number
+    contatoRealizado: number
+    naoTratados: number
+  },
+  totalsCompared: {
+    totalLinhas: number
+    faturaPaga: number
+    envioFatura: number
+    promessaPagto: number
+    semContato: number
+    cancelados: number
+    pendente: number
+    contatoRealizado: number
+    naoTratados: number
+  },
+  primaryDate: string,
+  comparedDate: string,
+) {
+  const pLabel = primaryDate || 'Atual'
+  const cLabel = comparedDate || 'Comparada'
+
+  const headers = [
+    'LOJAS',
+    'COORDENAÇÃO',
+    'SUPERVISÃO',
+    `TOTAL (${pLabel})`,
+    `TOTAL (${cLabel})`,
+    'VAR. TOTAL',
+    `Fatura Paga (${pLabel})`,
+    `Fatura Paga (${cLabel})`,
+    'VAR. Fatura Paga',
+    `Env. Fatura (${pLabel})`,
+    `Env. Fatura (${cLabel})`,
+    'VAR. Env. Fatura',
+    `Promessa Pagto (${pLabel})`,
+    `Promessa Pagto (${cLabel})`,
+    'VAR. Promessa Pagto',
+    `Sem Contato (${pLabel})`,
+    `Sem Contato (${cLabel})`,
+    'VAR. Sem Contato',
+    `Cancelados (${pLabel})`,
+    `Cancelados (${cLabel})`,
+    'VAR. Cancelados',
+    `Pendente (${pLabel})`,
+    `Pendente (${cLabel})`,
+    'VAR. Pendente',
+    `Contato Realizado (${pLabel})`,
+    `Contato Realizado (${cLabel})`,
+    'VAR. Contato Realizado',
+    `Não Tratados (${pLabel})`,
+    `Não Tratados (${cLabel})`,
+    'VAR. Não Tratados',
+  ]
+
+  const formatDiffStr = (diff: number) => {
+    if (diff > 0) return `+${diff}`
+    if (diff < 0) return `${diff}`
+    return '0'
+  }
+
+  const dataRows = comparisonRows.map((r) => {
+    const p = r.primary
+    const c = r.compared
+    const d = r.diff
+
+    return [
+      r.storeName,
+      r.coordenacao || '',
+      r.supervisao || '',
+      r.hasDataPrimary ? p.totalLinhas : 0,
+      r.hasDataCompared ? c.totalLinhas : 0,
+      formatDiffStr(d.totalLinhas),
+      r.hasDataPrimary ? p.faturaPaga : 0,
+      r.hasDataCompared ? c.faturaPaga : 0,
+      formatDiffStr(d.faturaPaga),
+      r.hasDataPrimary ? p.envioFatura : 0,
+      r.hasDataCompared ? c.envioFatura : 0,
+      formatDiffStr(d.envioFatura),
+      r.hasDataPrimary ? p.promessaPagto : 0,
+      r.hasDataCompared ? c.promessaPagto : 0,
+      formatDiffStr(d.promessaPagto),
+      r.hasDataPrimary ? p.semContato : 0,
+      r.hasDataCompared ? c.semContato : 0,
+      formatDiffStr(d.semContato),
+      r.hasDataPrimary ? p.cancelados : 0,
+      r.hasDataCompared ? c.cancelados : 0,
+      formatDiffStr(d.cancelados),
+      r.hasDataPrimary ? p.pendente : 0,
+      r.hasDataCompared ? c.pendente : 0,
+      formatDiffStr(d.pendente),
+      r.hasDataPrimary ? p.contatoRealizado : 0,
+      r.hasDataCompared ? c.contatoRealizado : 0,
+      formatDiffStr(d.contatoRealizado),
+      r.hasDataPrimary ? p.naoTratados : 0,
+      r.hasDataCompared ? c.naoTratados : 0,
+      formatDiffStr(d.naoTratados),
+    ]
+  })
+
+  const totalsRow = [
+    'Totais',
+    '',
+    '',
+    totalsPrimary.totalLinhas,
+    totalsCompared.totalLinhas,
+    formatDiffStr(totalsPrimary.totalLinhas - totalsCompared.totalLinhas),
+    totalsPrimary.faturaPaga,
+    totalsCompared.faturaPaga,
+    formatDiffStr(totalsPrimary.faturaPaga - totalsCompared.faturaPaga),
+    totalsPrimary.envioFatura,
+    totalsCompared.envioFatura,
+    formatDiffStr(totalsPrimary.envioFatura - totalsCompared.envioFatura),
+    totalsPrimary.promessaPagto,
+    totalsCompared.promessaPagto,
+    formatDiffStr(totalsPrimary.promessaPagto - totalsCompared.promessaPagto),
+    totalsPrimary.semContato,
+    totalsCompared.semContato,
+    formatDiffStr(totalsPrimary.semContato - totalsCompared.semContato),
+    totalsPrimary.cancelados,
+    totalsCompared.cancelados,
+    formatDiffStr(totalsPrimary.cancelados - totalsCompared.cancelados),
+    totalsPrimary.pendente,
+    totalsCompared.pendente,
+    formatDiffStr(totalsPrimary.pendente - totalsCompared.pendente),
+    totalsPrimary.contatoRealizado,
+    totalsCompared.contatoRealizado,
+    formatDiffStr(totalsPrimary.contatoRealizado - totalsCompared.contatoRealizado),
+    totalsPrimary.naoTratados,
+    totalsCompared.naoTratados,
+    formatDiffStr(totalsPrimary.naoTratados - totalsCompared.naoTratados),
+  ]
+
+  const wsData = [headers, ...dataRows, totalsRow]
+  const ws = XLSX.utils.aoa_to_sheet(wsData)
+
+  ws['!cols'] = [
+    { wch: 32 }, // LOJAS
+    { wch: 18 }, // COORDENACAO
+    { wch: 18 }, // SUPERVISAO
+    // TOTAL
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 14 },
+    // Fatura Paga
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 16 },
+    // Envio Fatura
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 16 },
+    // Promessa Pagto
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 16 },
+    // Sem Contato
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 16 },
+    // Cancelados
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 16 },
+    // Pendente
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 16 },
+    // Contato Realizado
+    { wch: 18 },
+    { wch: 18 },
+    { wch: 18 },
+    // Nao Tratados
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 16 },
+  ]
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Comparativo')
+
+  const slugP = pLabel.replace(/[/\\?%*:|"<>]/g, '-').replace(/\s+/g, '_')
+  const slugC = cLabel.replace(/[/\\?%*:|"<>]/g, '-').replace(/\s+/g, '_')
+  const filename = `Consolidado_Comparativo_${slugP}_vs_${slugC}.xlsx`
 
   XLSX.writeFile(wb, filename)
 }

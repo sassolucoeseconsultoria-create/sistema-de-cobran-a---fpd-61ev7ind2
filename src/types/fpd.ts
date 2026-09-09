@@ -203,6 +203,31 @@ export interface ConsolidatedRow {
   naoTratados: number
 }
 
+export interface ConsolidatedComparisonRow {
+  storeId: string
+  storeName: string
+  coordenacao: string
+  supervisao: string
+  hasDataPrimary: boolean
+  hasDataCompared: boolean
+  isNewInPrimary: boolean // exists in primary but not compared
+  isMissingInPrimary: boolean // exists in compared but not primary
+  primary: ConsolidatedRow
+  compared: ConsolidatedRow
+  diff: {
+    totalLinhas: number
+    faturaPaga: number
+    envioFatura: number
+    promessaPagto: number
+    semContato: number
+    cancelados: number
+    pendente: number
+    contatoRealizado: number
+    naoTratados: number
+    totalOcorrencias: number // soma das ocorrências ou totalLinhas
+  }
+}
+
 export const DEFAULT_CONSOLIDATED_ROW: Omit<ConsolidatedRow, 'storeId' | 'storeName'> = {
   coordenacao: '',
   supervisao: '',
