@@ -547,30 +547,24 @@ export async function saveVendorConsolidationsFromLines(
     }
 
     const vendedor = rawVendedor.toUpperCase() || 'NÃO INFORMADO'
-    const loja = rawLoja.toUpperCase()
-    const key = `${vendedor}__${loja}`
+    let resolvedLojaName = rawLoja.toUpperCase()
+    let supervisao = ''
+
+    if (rawLoja) {
+      const matchedStore = matchStore(rawLoja, storesList)
+      if (matchedStore) {
+        resolvedLojaName = matchedStore.name.toUpperCase()
+        supervisao = matchedStore.supervisao || ''
+      }
+    }
+
+    const key = `${vendedor}__${resolvedLojaName}`
 
     let existing = map.get(key)
     if (!existing) {
-      // Find supervision from store using fuzzy normalized matching
-      let supervisao = ''
-      if (rawLoja) {
-        const matchedStore = matchStore(rawLoja, storesList)
-        if (matchedStore) {
-          supervisao = matchedStore.supervisao || ''
-          console.log(
-            `[saveVendorConsolidationsFromLines] Matched Loja "${rawLoja}" -> Cadastrada: "${matchedStore.name}", Supervisão: "${supervisao || 'SEM SUPERVISÃO'}"`,
-          )
-        } else {
-          console.warn(
-            `[saveVendorConsolidationsFromLines] Loja não encontrada no cadastro para "${rawLoja}". Supervisão ficará vazia.`,
-          )
-        }
-      }
-
       existing = {
-        vendedor: rawVendedor.toUpperCase() || 'NÃO INFORMADO',
-        loja: rawLoja.toUpperCase(),
+        vendedor,
+        loja: resolvedLojaName,
         supervisao,
         data_referencia: referenceDate?.trim() || '',
         total_linhas: 0,

@@ -21,6 +21,7 @@ import {
   saveImportedFile,
   saveVendorConsolidationsFromLines,
   createStore,
+  fetchStores,
   fetchDistinctReferenceDates,
 } from '@/services/fpdService'
 import {
@@ -442,23 +443,26 @@ export async function executeBatchImport(
   const storeIdMap = new Map<string, string>() // canonicalName -> storeId
   for (const sSummary of parsed.storeSummaries) {
     let storeId = sSummary.storeId
-    if (!storeId) {
-      const match = matchStore(sSummary.canonicalStoreName, currentStoresList)
-      if (match) {
-        storeId = match.id
-      } else {
-        // Create new store
-        try {
-          const created = await createStore({
-            name: sSummary.canonicalStoreName.trim().toUpperCase(),
-          })
-          storeId = created.id
-          currentStoresList.push(created)
-        } catch {
-          // If creation fails due to unique constraint or collision, retry match
-          const recheck = matchStore(sSummary.canonicalStoreName, currentStoresList)
-          if (recheck) storeId = recheck.id
-        }
+    let match = storeId ? currentStoresList.find((s) => s.id === storeId) : null
+    if (!match) {
+      match = matchStore(sSummary.canonicalStoreName, currentStoresList)
+    }
+    if (match) {
+      storeId = match.id
+    } else {
+      // Create new store
+      try {
+        const created = await createStore({
+          name: sSummary.canonicalStoreName.trim().toUpperCase(),
+        })
+        storeId = created.id
+        currentStoresList.push(created)
+      } catch {
+        // If creation fails due to unique constraint or collision, retry match
+        const live = await fetchStores()
+        currentStoresList = live.length > 0 ? live : currentStoresList
+        const recheck = matchStore(sSummary.canonicalStoreName, currentStoresList)
+        if (recheck) storeId = recheck.id
       }
     }
     if (storeId) {
