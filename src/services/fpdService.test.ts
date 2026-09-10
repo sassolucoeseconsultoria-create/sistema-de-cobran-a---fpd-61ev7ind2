@@ -186,4 +186,30 @@ describe('matchStore - Real World Cases', () => {
     expect(match?.name).toBe('CELNET PLANALTINA DF')
     expect(match?.supervisao).toBe('Luana')
   })
+
+  it('Case 9: "CELNET CALL NOVA SUIÇA" NUNCA casa com loja física "CELNET NOVA SUIÇA" se CALL não estiver cadastrada', () => {
+    // Lista contendo apenas a loja física CELNET NOVA SUIÇA
+    const storesWithoutCall = registeredStores.filter((s) => s.name === 'CELNET NOVA SUIÇA')
+    const match = matchStore('CELNET CALL NOVA SUIÇA', storesWithoutCall)
+    expect(match).toBeNull()
+  })
+
+  it('Case 10: "CELNET CALL JK" NUNCA casa com loja física "CELNET JK SHOPPING"', () => {
+    const storesWithoutCall = registeredStores.filter((s) => s.name === 'CELNET JK SHOPPING')
+    const match = matchStore('CELNET CALL JK', storesWithoutCall)
+    expect(match).toBeNull()
+  })
+
+  it('Case 11: "CELNET PLANALTINA DF" NUNCA casa com "CELNET PLANALTINA GO"', () => {
+    const storesGo = [
+      {
+        id: 'st-p-go',
+        name: 'CELNET PLANALTINA GO',
+        supervisao: 'Jessica',
+        coordenacao: 'Coord 1',
+      } as StoreRecord,
+    ]
+    const match = matchStore('CELNET PLANALTINA DF', storesGo)
+    expect(match).toBeNull()
+  })
 })

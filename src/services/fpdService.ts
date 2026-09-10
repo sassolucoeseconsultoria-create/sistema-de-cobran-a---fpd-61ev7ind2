@@ -373,8 +373,23 @@ export function matchStore(inputStoreName: string, storesList: StoreRecord[]): S
   }
 
   // Pass 2: Normalized contains (one contains the other)
+  // ATENÇÃO: NUNCA casar se um contém CALL/ILHA e o outro não, nem colidir DF vs GO
+  const isCallOrIlhaInput = /\b(call|ilha)\b/.test(inputNorm)
+  const hasDfInput = /\bdf\b/.test(inputNorm)
+  const hasGoInput = /\bgo\b/.test(inputNorm)
+
   for (const s of storesList) {
     const sNorm = normalizeStoreString(s.name)
+    const isCallOrIlhaStore = /\b(call|ilha)\b/.test(sNorm)
+    if (isCallOrIlhaInput !== isCallOrIlhaStore) {
+      continue
+    }
+    const hasDfStore = /\bdf\b/.test(sNorm)
+    const hasGoStore = /\bgo\b/.test(sNorm)
+    if ((hasDfInput && hasGoStore) || (hasGoInput && hasDfStore)) {
+      continue
+    }
+
     if (inputNorm.includes(sNorm) || sNorm.includes(inputNorm)) {
       return s
     }
@@ -391,8 +406,6 @@ export function matchStore(inputStoreName: string, storesList: StoreRecord[]): S
       .replace(/\s+/g, ' ')
       .trim(),
   )
-
-  const isCallOrIlhaInput = /\b(call|ilha)\b/.test(inputNorm)
 
   if (inputSimplified.length >= 2) {
     for (const s of storesList) {

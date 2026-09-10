@@ -138,4 +138,440 @@ describe('useUserStoreAccess', () => {
     expect(result.current.isStoreNameAllowed('Águas Claras', mockStores)).toBe(false)
     expect(result.current.getAllowedStoreNames(mockStores)).toEqual([])
   })
+
+  it('Caso Concreto: Supervisora Jéssica NÃO deve ver "CELNET CALL NOVA SUIÇA" nem lojas de Luana', () => {
+    const realStores: StoreRecord[] = [
+      // Lojas de Jéssica
+      {
+        id: 'st_planaltina_go',
+        name: 'CELNET PLANALTINA GO',
+        coordenacao: 'Coord 1',
+        supervisao: 'Jessica',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_jk',
+        name: 'CELNET JK SHOPPING',
+        coordenacao: 'Coord 1',
+        supervisao: 'Jessica',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_manhattan',
+        name: 'CELNET MANHATTAN SHOPPING',
+        coordenacao: 'Coord 1',
+        supervisao: 'Jessica',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_df_plaza',
+        name: 'CELNET DF PLAZA',
+        coordenacao: 'Coord 1',
+        supervisao: 'Jessica',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_santa_maria',
+        name: 'CELNET SANTA MARIA',
+        coordenacao: 'Coord 1',
+        supervisao: 'Jessica',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_terraco',
+        name: 'CELNET TERRAÇO SHOPPING',
+        coordenacao: 'Coord 1',
+        supervisao: 'Jessica',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_park',
+        name: 'CELNET PARK SHOPPING',
+        coordenacao: 'Coord 1',
+        supervisao: 'Jessica',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      // Lojas de Luana
+      {
+        id: 'st_aguas',
+        name: 'CELNET AGUAS CLARA',
+        coordenacao: 'Coord 2',
+        supervisao: 'Luana Patricia',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_boulevard',
+        name: 'CELNET BOULEVARD SHOPPING',
+        coordenacao: 'Coord 2',
+        supervisao: 'Luana Patricia',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_brasilia',
+        name: 'CELNET BRASILIA SHOPPING',
+        coordenacao: 'Coord 2',
+        supervisao: 'Luana Patricia',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_gama',
+        name: 'CELNET GAMA SHOPPING',
+        coordenacao: 'Coord 2',
+        supervisao: 'Luana Patricia',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_luziania',
+        name: 'CELNET LUZIANIA',
+        coordenacao: 'Coord 2',
+        supervisao: 'Luana Patricia',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_matriz_df',
+        name: 'CELNET MATRIZ PLANALTINA DF',
+        coordenacao: 'Coord 2',
+        supervisao: 'Luana Patricia',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      // Lojas CALL / ILHA sem supervisão
+      {
+        id: 'st_call_arniqueiras',
+        name: 'CELNET CALL ARNIQUEIRAS',
+        coordenacao: '',
+        supervisao: '',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_call_jk',
+        name: 'CELNET CALL JK',
+        coordenacao: '',
+        supervisao: '',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_call_ns',
+        name: 'CELNET CALL NOVA SUIÇA',
+        coordenacao: '',
+        supervisao: '',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_call_up',
+        name: 'CELNET CALL UP',
+        coordenacao: '',
+        supervisao: '',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_ilha_res',
+        name: 'CELNET ILHA RESIDENCIAL',
+        coordenacao: '',
+        supervisao: '',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_ilha_gama',
+        name: 'CELNET ILHA RESIDENCIAL GAMA DF',
+        coordenacao: '',
+        supervisao: '',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      // Loja física Nova Suíça
+      {
+        id: 'st_nova_suica',
+        name: 'CELNET NOVA SUIÇA',
+        coordenacao: 'Karen',
+        supervisao: 'Karen',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+    ] as StoreRecord[]
+
+    // Usuária Jéssica
+    vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+      user: {
+        id: '9c4wgk0dup9yoko',
+        collectionId: 'users',
+        collectionName: 'users',
+        email: 'jessica@celnet.com.br',
+        name: 'Jessica',
+        role: 'Supervisor',
+        lojas: [
+          'st_planaltina_go',
+          'st_jk',
+          'st_manhattan',
+          'st_df_plaza',
+          'st_santa_maria',
+          'st_terraco',
+          'st_park',
+        ],
+        created: '2025-01-01',
+        updated: '2025-01-01',
+      },
+      token: 'mock-token',
+      loading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshAuth: vi.fn(),
+    })
+
+    const { result } = renderHook(() => useUserStoreAccess())
+
+    // Jéssica DEVE ver suas 7 lojas
+    expect(result.current.isStoreNameAllowed('CELNET PLANALTINA GO', realStores)).toBe(true)
+    expect(result.current.isStoreNameAllowed('CELNET JK SHOPPING', realStores)).toBe(true)
+    expect(result.current.isStoreNameAllowed('CELNET SHOPPING JK', realStores)).toBe(true)
+    expect(result.current.isStoreNameAllowed('CELNET PARK SHOPPING', realStores)).toBe(true)
+
+    // Jéssica NÃO DEVE ver "CELNET CALL NOVA SUIÇA" (sem supervisão)
+    expect(result.current.isStoreNameAllowed('CELNET CALL NOVA SUIÇA', realStores)).toBe(false)
+    expect(result.current.isStoreNameAllowed('CELNET CALL JK', realStores)).toBe(false)
+    expect(result.current.isStoreNameAllowed('CELNET CALL ARNIQUEIRAS', realStores)).toBe(false)
+    expect(result.current.isStoreNameAllowed('CELNET ILHA RESIDENCIAL', realStores)).toBe(false)
+
+    // Jéssica NÃO DEVE ver lojas de Luana (ex: Águas Claras, Planaltina DF)
+    expect(result.current.isStoreNameAllowed('CELNET AGUAS CLARA', realStores)).toBe(false)
+    expect(result.current.isStoreNameAllowed('CELNET AGUAS CLARAS', realStores)).toBe(false)
+    expect(result.current.isStoreNameAllowed('CELNET MATRIZ PLANALTINA DF', realStores)).toBe(false)
+    expect(result.current.isStoreNameAllowed('CELNET PLANALTINA DF', realStores)).toBe(false)
+    expect(result.current.isStoreNameAllowed('CELNET BOULEVARD SHOPPING', realStores)).toBe(false)
+  })
+
+  it('Caso Concreto: Supervisora Luana NÃO deve ver "CELNET PLANALTINA GO" nem lojas CALL', () => {
+    const realStores: StoreRecord[] = [
+      {
+        id: 'st_planaltina_go',
+        name: 'CELNET PLANALTINA GO',
+        coordenacao: 'Coord 1',
+        supervisao: 'Jessica',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_jk',
+        name: 'CELNET JK SHOPPING',
+        coordenacao: 'Coord 1',
+        supervisao: 'Jessica',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_aguas',
+        name: 'CELNET AGUAS CLARA',
+        coordenacao: 'Coord 2',
+        supervisao: 'Luana Patricia',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_boulevard',
+        name: 'CELNET BOULEVARD SHOPPING',
+        coordenacao: 'Coord 2',
+        supervisao: 'Luana Patricia',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_brasilia',
+        name: 'CELNET BRASILIA SHOPPING',
+        coordenacao: 'Coord 2',
+        supervisao: 'Luana Patricia',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_gama',
+        name: 'CELNET GAMA SHOPPING',
+        coordenacao: 'Coord 2',
+        supervisao: 'Luana Patricia',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_luziania',
+        name: 'CELNET LUZIANIA',
+        coordenacao: 'Coord 2',
+        supervisao: 'Luana Patricia',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_matriz_df',
+        name: 'CELNET MATRIZ PLANALTINA DF',
+        coordenacao: 'Coord 2',
+        supervisao: 'Luana Patricia',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_call_ns',
+        name: 'CELNET CALL NOVA SUIÇA',
+        coordenacao: '',
+        supervisao: '',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
+        id: 'st_call_jk',
+        name: 'CELNET CALL JK',
+        coordenacao: '',
+        supervisao: '',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+    ] as StoreRecord[]
+
+    // Usuária Luana Patricia
+    vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+      user: {
+        id: 'qfsv7rq9ddvi8i5',
+        collectionId: 'users',
+        collectionName: 'users',
+        email: 'luana@celnet.com.br',
+        name: 'Luana Patricia',
+        role: 'Supervisor',
+        lojas: [
+          'st_aguas',
+          'st_boulevard',
+          'st_brasilia',
+          'st_gama',
+          'st_luziania',
+          'st_matriz_df',
+        ],
+        created: '2025-01-01',
+        updated: '2025-01-01',
+      },
+      token: 'mock-token',
+      loading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshAuth: vi.fn(),
+    })
+
+    const { result } = renderHook(() => useUserStoreAccess())
+
+    // Luana DEVE ver suas lojas
+    expect(result.current.isStoreNameAllowed('CELNET AGUAS CLARA', realStores)).toBe(true)
+    expect(result.current.isStoreNameAllowed('CELNET AGUAS CLARAS', realStores)).toBe(true)
+    expect(result.current.isStoreNameAllowed('CELNET MATRIZ PLANALTINA DF', realStores)).toBe(true)
+    expect(result.current.isStoreNameAllowed('CELNET PLANALTINA DF', realStores)).toBe(true)
+
+    // Luana NÃO DEVE ver Planaltina GO (loja de Jessica)
+    expect(result.current.isStoreNameAllowed('CELNET PLANALTINA GO', realStores)).toBe(false)
+    expect(result.current.isStoreNameAllowed('CELNET JK SHOPPING', realStores)).toBe(false)
+
+    // Luana NÃO DEVE ver lojas CALL / ILHA sem supervisão
+    expect(result.current.isStoreNameAllowed('CELNET CALL NOVA SUIÇA', realStores)).toBe(false)
+    expect(result.current.isStoreNameAllowed('CELNET CALL JK', realStores)).toBe(false)
+  })
+
+  it('Caso Concreto: ADM vê todas as lojas incluindo CALL/ILHA e lojas de todas as supervisões', () => {
+    vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+      user: {
+        id: 'usr_adm',
+        collectionId: 'users',
+        collectionName: 'users',
+        email: 'adm@celnet.com.br',
+        name: 'Administrador',
+        role: 'ADM',
+        lojas: [],
+        created: '2025-01-01',
+        updated: '2025-01-01',
+      },
+      token: 'mock-token',
+      loading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshAuth: vi.fn(),
+    })
+
+    const { result } = renderHook(() => useUserStoreAccess())
+
+    expect(result.current.isAdm).toBe(true)
+    expect(result.current.isStoreNameAllowed('CELNET CALL NOVA SUIÇA')).toBe(true)
+    expect(result.current.isStoreNameAllowed('CELNET CALL JK')).toBe(true)
+    expect(result.current.isStoreNameAllowed('CELNET PLANALTINA GO')).toBe(true)
+    expect(result.current.isStoreNameAllowed('CELNET MATRIZ PLANALTINA DF')).toBe(true)
+    expect(result.current.isStoreNameAllowed('CELNET AGUAS CLARA')).toBe(true)
+  })
 })

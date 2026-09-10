@@ -50,6 +50,14 @@ describe('storeMatchingUtils', () => {
     expect(isSameStore('CELNET PLANALTINA DF', 'CELNET PLANALTINA GO')).toBe(false)
   })
 
+  it('Lojas CALL / ILHA nunca casam com lojas físicas correspondentes', () => {
+    expect(isSameStore('CELNET CALL NOVA SUIÇA', 'CELNET NOVA SUIÇA')).toBe(false)
+    expect(isSameStore('CELNET NOVA SUIÇA', 'CELNET CALL NOVA SUIÇA')).toBe(false)
+    expect(isSameStore('CELNET CALL JK', 'CELNET JK SHOPPING')).toBe(false)
+    expect(isSameStore('CELNET CALL JK', 'CELNET SHOPPING JK')).toBe(false)
+    expect(isSameStore('CELNET ILHA RESIDENCIAL GAMA DF', 'CELNET GAMA SHOPPING')).toBe(false)
+  })
+
   it('buildStoreFilterClause for CELNET AGUAS CLARA does NOT match CELNET MATRIZ PLANALTINA DF and vice-versa', () => {
     const clauseAguas = buildStoreFilterClause('CELNET AGUAS CLARA')
     expect(clauseAguas).toContain('"CELNET AGUAS CLARA"')

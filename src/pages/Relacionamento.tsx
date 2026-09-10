@@ -121,8 +121,13 @@ export const Relacionamento: React.FC = () => {
         // 1. Variantes das lojas detectadas no banco pertencentes ao perfil
         for (const l of allowedLojas) {
           if (!l || !l.trim()) continue
+          if (!userAccess.isStoreNameAllowed(l, stores)) continue
           const variants = getStoreVariants(l)
-          variants.forEach((v) => expandedStoreNames.add(v))
+          variants.forEach((v) => {
+            if (userAccess.isStoreNameAllowed(v, stores)) {
+              expandedStoreNames.add(v)
+            }
+          })
         }
 
         // 2. Variantes das lojas oficiais vinculadas ao perfil
@@ -130,7 +135,11 @@ export const Relacionamento: React.FC = () => {
         for (const s of allowedOfficialStores) {
           if (!s.name || !s.name.trim()) continue
           const variants = getStoreVariants(s.name)
-          variants.forEach((v) => expandedStoreNames.add(v))
+          variants.forEach((v) => {
+            if (userAccess.isStoreNameAllowed(v, stores)) {
+              expandedStoreNames.add(v)
+            }
+          })
         }
 
         if (expandedStoreNames.size > 0) {
@@ -240,6 +249,10 @@ export const Relacionamento: React.FC = () => {
     // Unify duplicates that represent the same store (e.g. prioritize registered store name over alias)
     const unified: string[] = []
     for (const cand of candidateNames) {
+      // Garantir novamente que não-ADM nunca receba lojas não autorizadas (ex.: CALL / ILHA)
+      if (!userAccess.isAdm && !userAccess.isStoreNameAllowed(cand, stores)) {
+        continue
+      }
       const alreadyHas = unified.some((u) => isSameStore(u, cand))
       if (!alreadyHas) {
         unified.push(cand)

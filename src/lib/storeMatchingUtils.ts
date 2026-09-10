@@ -114,14 +114,20 @@ export function getStoreVariants(lojaName: string): string[] {
     }
   }
 
-  // 5. Se o nome for especificamente Planaltina DF (ATENÇÃO: nunca acionar se tiver 'go')
-  if (normKey.includes('planaltina') && normKey.includes('df') && !normKey.includes('go')) {
+  // 5. Se o nome for especificamente Planaltina DF (ATENÇÃO: nunca acionar se tiver 'go' ou 'call' ou 'ilha')
+  const isCallOrIlha = /\b(call|ilha)\b/.test(normKey)
+  if (
+    !isCallOrIlha &&
+    normKey.includes('planaltina') &&
+    normKey.includes('df') &&
+    !normKey.includes('go')
+  ) {
     variants.add('CELNET MATRIZ PLANALTINA DF')
     variants.add('CELNET PLANALTINA DF')
   }
 
-  // 6. Se o nome for "CELNET AGUAS CLARAS" ou "CELNET AGUAS CLARA"
-  if (normKey.includes('aguas') && normKey.includes('clara')) {
+  // 6. Se o nome for "CELNET AGUAS CLARAS" ou "CELNET AGUAS CLARA" (sem call/ilha)
+  if (!isCallOrIlha && normKey.includes('aguas') && normKey.includes('clara')) {
     variants.add('CELNET AGUAS CLARA')
     variants.add('CELNET AGUAS CLARAS')
     variants.add('CELNET ÁGUAS CLARA')

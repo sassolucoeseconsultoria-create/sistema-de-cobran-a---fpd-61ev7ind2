@@ -120,7 +120,7 @@ export function useUserStoreAccess(): UserStoreAccess {
 
       const raw = String(storeName).trim()
 
-      // Direct ID check
+      // Direct ID check (se storeName for o próprio ID de uma loja permitida)
       if (effectiveAllowedIds.includes(raw)) return true
 
       const normInput = normalizeStoreString(raw)
@@ -131,46 +131,33 @@ export function useUserStoreAccess(): UserStoreAccess {
       const hasDfInput = /\bdf\b/.test(normInput)
       const hasGoInput = /\bgo\b/.test(normInput)
 
-      // ATENÇÃO: NÃO remover 'call' ou 'ilha' dos tokens para não colidir CALL JK com SHOPPING JK
-      const cleanTokens = (str: string) =>
-        normalizeStoreString(str)
-          .replace(/\b(celnet|loja|lj|shopping|shp|shop|mall|galeria|posto)\b/gi, ' ')
-          .replace(/[^a-z0-9]/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim()
-
-      const inputTokens = cleanTokens(normInput)
-
-      // Se temos a lista de todas as lojas para conferir IDs -> nomes
+      // Se temos a lista de lojas cadastradas (stores)
       if (allStores && allStores.length > 0) {
-        const allowedStores = allStores.filter((s) => effectiveAllowedIds.includes(s.id))
-        if (allowedStores.length === 0) return false
-
-        // 1. Check if direct matchStore against allowedStores matches
-        // ATENÇÃO: só aceitar se matchStore coincidir sem violar CALL/ILHA e DF/GO
-        const matchedAllowed = matchStore(raw, allowedStores)
-        if (matchedAllowed && effectiveAllowedIds.includes(matchedAllowed.id)) {
-          const normMatched = normalizeStoreString(matchedAllowed.name)
+        // Se a loja de entrada resolver para qualquer loja do cadastro geral via matchStore:
+        const matchedAll = matchStore(raw, allStores)
+        if (matchedAll) {
+          // Lojas sem supervisão ou sem coordenação (ex.: CALL/ILHA) NUNCA podem ser vistas por Supervisor/Coordenador
+          // a menos que estejam explicitamente na lista de lojas vinculadas do usuário
+          const isAllowed = effectiveAllowedIds.includes(matchedAll.id)
+          if (!isAllowed) {
+            return false
+          }
+          // Se está entre os IDs permitidos, verificar que não haja colisão de CALL/ILHA ou DF/GO
+          const normMatched = normalizeStoreString(matchedAll.name)
           const isCallOrIlhaMatched = /\b(call|ilha)\b/.test(normMatched)
           const hasDfMatched = /\bdf\b/.test(normMatched)
           const hasGoMatched = /\bgo\b/.test(normMatched)
-          if (
-            isCallOrIlhaInput === isCallOrIlhaMatched &&
-            !(hasDfInput && hasGoMatched) &&
-            !(hasGoInput && hasDfMatched)
-          ) {
-            return true
-          }
+          if (isCallOrIlhaInput !== isCallOrIlhaMatched) return false
+          if ((hasDfInput && hasGoMatched) || (hasGoInput && hasDfMatched)) return false
+          return true
         }
 
-        // 2. Check if matchStore against allStores matches an allowed store
-        const matchedAll = matchStore(raw, allStores)
-        if (matchedAll) {
-          // Se matchStore unificou com uma loja que NÃO está nas permitidas, rejeitar imediatamente
-          return effectiveAllowedIds.includes(matchedAll.id)
-        }
+        // Se matchStore contra allStores não encontrou uma loja cadastrada:
+        // A regra é: linhas de lojas não vinculadas ou não cadastradas são INVISÍVEIS por padrão para não-ADM
+        const allowedStores = allStores.filter((s) => effectiveAllowedIds.includes(s.id))
+        if (allowedStores.length === 0) return false
 
-        // 3. Robust normalized token and string comparisons against allowedStores
+        // Comparação estrita apenas contra as lojas permitidas
         return allowedStores.some((store) => {
           const normStore = normalizeStoreString(store.name)
           const isCallOrIlhaStore = /\b(call|ilha)\b/.test(normStore)
@@ -181,19 +168,15 @@ export function useUserStoreAccess(): UserStoreAccess {
           if (hasDfInput && hasGoStore) return false
           if (hasGoInput && hasDfStore) return false
 
-          if (isSameStore(store.name, raw)) return true
+          // Match exato normalizado ou variante canônica estrita (isSameStore)
           if (normStore === normInput) return true
-
-          const storeTokens = cleanTokens(store.name)
-          if (inputTokens && storeTokens && inputTokens.length >= 3) {
-            if (inputTokens === storeTokens) return true
-          }
+          if (isSameStore(store.name, raw)) return true
 
           return false
         })
       }
 
-      // Fallback if allStores was not supplied but effectiveAllowedIds might match normalized store strings
+      // Fallback estrito se allStores não foi fornecido (apenas contra effectiveAllowedIds se contiverem nomes)
       return effectiveAllowedIds.some((allowedId) => {
         const normAllowed = normalizeStoreString(allowedId)
         if (normAllowed === normInput) return true
@@ -206,10 +189,8 @@ export function useUserStoreAccess(): UserStoreAccess {
         if (hasDfInput && hasGoAllowed) return false
         if (hasGoInput && hasDfAllowed) return false
 
-        const allowedTokens = cleanTokens(allowedId)
-        if (inputTokens && allowedTokens && inputTokens.length >= 3 && allowedTokens.length >= 3) {
-          if (inputTokens === allowedTokens) return true
-        }
+        if (isSameStore(allowedId, raw)) return true
+
         return false
       })
     }

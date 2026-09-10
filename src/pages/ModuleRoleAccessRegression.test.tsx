@@ -479,6 +479,43 @@ describe('Regras de Acesso por Perfil nos 4 Módulos (Supervisor, Coordenador, A
       })
     })
 
+    it('Supervisor Jéssica NÃO vê lojas CALL/ILHA nem lojas de Luana na Inadimplência', async () => {
+      const user = userEvent.setup()
+      vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+        user: {
+          id: '9c4wgk0dup9yoko',
+          collectionId: 'users',
+          collectionName: 'users',
+          email: 'jessica@celnet.com.br',
+          name: 'Jessica',
+          role: 'Supervisor',
+          lojas: ['store-taguatinga'], // simula loja vinculada a ela
+          created: '2025-01-01',
+          updated: '2025-01-01',
+        },
+        token: 'token',
+        loading: false,
+        login: vi.fn(),
+        logout: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      render(<Relacionamento />)
+
+      await waitFor(() => {
+        expect(screen.getByText('Clientes Móvel')).toBeDefined()
+      })
+
+      const storeSelect = screen.getByRole('combobox', { name: /loja:/i })
+      await user.click(storeSelect)
+
+      await waitFor(() => {
+        expect(screen.getByRole('option', { name: /CELNET TAGUATINGA/i })).toBeDefined()
+        expect(screen.queryByRole('option', { name: /CELNET CALL NOVA SUIÇA/i })).toBeNull()
+        expect(screen.queryByRole('option', { name: /CELNET AGUAS CLARAS/i })).toBeNull()
+      })
+    })
+
     it('Supervisor sem loja vinculada vê aviso amigável e contadores zerados', async () => {
       vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
         user: supervisorSemLoja,

@@ -283,8 +283,13 @@ export const Vendedores: React.FC = () => {
         // 1. Variantes das lojas detectadas no escopo
         for (const l of allowedLojas) {
           if (!l || !l.trim()) continue
+          if (!userAccess.isStoreNameAllowed(l, stores)) continue
           const variants = getStoreVariants(l)
-          variants.forEach((v) => expandedStoreNames.add(v))
+          variants.forEach((v) => {
+            if (userAccess.isStoreNameAllowed(v, stores)) {
+              expandedStoreNames.add(v)
+            }
+          })
         }
 
         // 2. Variantes das lojas oficiais vinculadas ao perfil
@@ -292,7 +297,11 @@ export const Vendedores: React.FC = () => {
         for (const s of allowedOfficialStores) {
           if (!s.name || !s.name.trim()) continue
           const variants = getStoreVariants(s.name)
-          variants.forEach((v) => expandedStoreNames.add(v))
+          variants.forEach((v) => {
+            if (userAccess.isStoreNameAllowed(v, stores)) {
+              expandedStoreNames.add(v)
+            }
+          })
         }
 
         if (expandedStoreNames.size > 0) {

@@ -35,6 +35,7 @@ import {
 } from '@/types/fpd'
 import { cn } from '@/lib/utils'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
+import { isSameStore } from '@/lib/storeMatchingUtils'
 
 export const TopOfensores: React.FC = () => {
   const { toast } = useToast()
@@ -249,7 +250,7 @@ export const TopOfensores: React.FC = () => {
 
     // Apply store filter first if selected and not 'all'
     if (selectedLoja !== 'all' && selectedLoja !== '') {
-      rows = rows.filter((r) => r.loja === selectedLoja)
+      rows = rows.filter((r) => r.loja === selectedLoja || isSameStore(r.loja, selectedLoja))
     }
 
     // Apply search filter
