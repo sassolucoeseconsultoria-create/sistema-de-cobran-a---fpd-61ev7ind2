@@ -103,7 +103,10 @@ export function getStoreVariants(lojaName: string): string[] {
   // 4. Mapeamento de equivalências conhecidas
   const normKey = removeAccentsAndLower(trimmed)
   for (const [key, equivList] of Object.entries(KNOWN_EQUIVALENCES)) {
-    if (normKey === key || normKey.replace(/s$/, '') === key.replace(/s$/, '')) {
+    if (
+      normKey === key ||
+      (normKey.length > 3 && normKey.replace(/s$/, '') === key.replace(/s$/, ''))
+    ) {
       for (const eq of equivList) {
         variants.add(eq.toUpperCase())
         variants.add(eq)
@@ -111,14 +114,14 @@ export function getStoreVariants(lojaName: string): string[] {
     }
   }
 
-  // 5. Se o nome contiver "MATRIZ PLANALTINA DF", adiciona também "CELNET PLANALTINA DF", etc.
-  if (normKey.includes('planaltina') && (normKey.includes('df') || !normKey.includes('go'))) {
+  // 5. Se o nome for especificamente Planaltina DF (ATENÇÃO: nunca acionar se tiver 'go')
+  if (normKey.includes('planaltina') && normKey.includes('df') && !normKey.includes('go')) {
     variants.add('CELNET MATRIZ PLANALTINA DF')
     variants.add('CELNET PLANALTINA DF')
   }
 
   // 6. Se o nome for "CELNET AGUAS CLARAS" ou "CELNET AGUAS CLARA"
-  if (normKey.includes('aguas')) {
+  if (normKey.includes('aguas') && normKey.includes('clara')) {
     variants.add('CELNET AGUAS CLARA')
     variants.add('CELNET AGUAS CLARAS')
     variants.add('CELNET ÁGUAS CLARA')
@@ -154,6 +157,21 @@ export function isSameStore(storeA?: string | null, storeB?: string | null): boo
   if (!normA || !normB) return false
   if (normA === normB) return true
 
+  // Lojas CALL ou ILHA nunca são a mesma de lojas físicas comuns
+  const isCallOrIlhaA = /\b(call|ilha)\b/.test(normA)
+  const isCallOrIlhaB = /\b(call|ilha)\b/.test(normB)
+  if (isCallOrIlhaA !== isCallOrIlhaB) {
+    return false
+  }
+
+  // Diferenciação geográfica estrita: DF vs GO
+  const hasDfA = /\bdf\b/.test(normA)
+  const hasGoA = /\bgo\b/.test(normA)
+  const hasDfB = /\bdf\b/.test(normB)
+  const hasGoB = /\bgo\b/.test(normB)
+  if (hasDfA && hasGoB) return false
+  if (hasGoA && hasDfB) return false
+
   // Comparação com variantes
   const variantsA = getStoreVariants(storeA).map((v) => normalizeStoreString(v))
   const variantsB = getStoreVariants(storeB).map((v) => normalizeStoreString(v))
@@ -162,9 +180,9 @@ export function isSameStore(storeA?: string | null, storeB?: string | null): boo
     return true
   }
 
-  // Checagem sem 's' final em cada token ou na string
+  // Checagem sem 's' final em cada token ou na string (apenas se nenhum token chave se perder)
   const stripS = (s: string) => s.replace(/\bs\b/g, '').replace(/s(?=\s|$)/g, '')
-  if (stripS(normA) === stripS(normB)) {
+  if (stripS(normA) === stripS(normB) && stripS(normA).length >= 4) {
     return true
   }
 

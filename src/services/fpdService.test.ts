@@ -153,11 +153,24 @@ describe('matchStore - Real World Cases', () => {
     expect(match?.supervisao).toBe('Daniella')
   })
 
-  it('Case 6: Planilha: "CELNET CALL NOVA SUIÇA" -> Cadastro: "CELNET NOVA SUIÇA" (supervisor: Karen)', () => {
-    const match = matchStore('CELNET CALL NOVA SUIÇA', registeredStores)
+  it('Case 6: Planilha: "CELNET CALL NOVA SUIÇA" -> quando lojas CALL são cadastradas separadamente, não unifica com loja física', () => {
+    const storesWithCall: StoreRecord[] = [
+      ...registeredStores,
+      {
+        id: 'store-call-ns',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+        name: 'CELNET CALL NOVA SUIÇA',
+        coordenacao: '',
+        supervisao: '',
+      },
+    ]
+    const match = matchStore('CELNET CALL NOVA SUIÇA', storesWithCall)
     expect(match).not.toBeNull()
-    expect(match?.name).toBe('CELNET NOVA SUIÇA')
-    expect(match?.supervisao).toBe('Karen')
+    expect(match?.name).toBe('CELNET CALL NOVA SUIÇA')
+    expect(match?.id).toBe('store-call-ns')
   })
 
   it('Case 7: Planilha: "CELNET AGUAS CLARA" -> Cadastro: "CELNET AGUAS CLARAS" (supervisor: Luana)', () => {

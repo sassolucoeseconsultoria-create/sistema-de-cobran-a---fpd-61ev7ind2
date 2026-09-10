@@ -381,6 +381,7 @@ export function matchStore(inputStoreName: string, storesList: StoreRecord[]): S
   }
 
   // Pass 3: Match with noise stripped ("shopping", "goiania", "celnet", "boullevard" -> "boulevard")
+  // ATENÇÃO: Nunca remover palavras distintivas como "call", "ilha", "gama", "go", "df"
   const inputSimplified = normalizeStoreString(
     inputNorm
       .replace(/\bboullevard\b/g, 'boulevard')
@@ -391,10 +392,19 @@ export function matchStore(inputStoreName: string, storesList: StoreRecord[]): S
       .trim(),
   )
 
+  const isCallOrIlhaInput = /\b(call|ilha)\b/.test(inputNorm)
+
   if (inputSimplified.length >= 2) {
     for (const s of storesList) {
+      const sNorm = normalizeStoreString(s.name)
+      const isCallOrIlhaStore = /\b(call|ilha)\b/.test(sNorm)
+      // Se um tem call/ilha e o outro não, não unificar neste passo
+      if (isCallOrIlhaInput !== isCallOrIlhaStore) {
+        continue
+      }
+
       const sSimplified = normalizeStoreString(
-        normalizeStoreString(s.name)
+        sNorm
           .replace(/\bboullevard\b/g, 'boulevard')
           .replace(/\bshopping\b/g, '')
           .replace(/\bgoiania\b/g, '')
@@ -410,6 +420,14 @@ export function matchStore(inputStoreName: string, storesList: StoreRecord[]): S
         sSimplified.length >= 3 &&
         (inputSimplified.includes(sSimplified) || sSimplified.includes(inputSimplified))
       ) {
+        // Garantir que sufixos geográficos como DF vs GO não vazem
+        const hasDfInput = /\bdf\b/.test(inputNorm)
+        const hasGoInput = /\bgo\b/.test(inputNorm)
+        const hasDfStore = /\bdf\b/.test(sNorm)
+        const hasGoStore = /\bgo\b/.test(sNorm)
+        if (hasDfInput !== hasDfStore || hasGoInput !== hasGoStore) {
+          continue
+        }
         return s
       }
     }
@@ -422,6 +440,21 @@ export function matchStore(inputStoreName: string, storesList: StoreRecord[]): S
     let bestScore = 0
 
     for (const s of storesList) {
+      const sNorm = normalizeStoreString(s.name)
+      const isCallOrIlhaStore = /\b(call|ilha)\b/.test(sNorm)
+      if (isCallOrIlhaInput !== isCallOrIlhaStore) {
+        continue
+      }
+
+      // Evitar colisão entre DF e GO
+      const hasDfInput = /\bdf\b/.test(inputNorm)
+      const hasGoInput = /\bgo\b/.test(inputNorm)
+      const hasDfStore = /\bdf\b/.test(sNorm)
+      const hasGoStore = /\bgo\b/.test(sNorm)
+      if (hasDfInput !== hasDfStore || hasGoInput !== hasGoStore) {
+        continue
+      }
+
       const sTokens = simplifyStoreTokens(s.name)
       if (sTokens.length === 0) continue
 

@@ -126,9 +126,15 @@ export function useUserStoreAccess(): UserStoreAccess {
       const normInput = normalizeStoreString(raw)
       if (!normInput) return false
 
+      // Diferenciação estrita de CALL / ILHA e de DF vs GO
+      const isCallOrIlhaInput = /\b(call|ilha)\b/.test(normInput)
+      const hasDfInput = /\bdf\b/.test(normInput)
+      const hasGoInput = /\bgo\b/.test(normInput)
+
+      // ATENÇÃO: NÃO remover 'call' ou 'ilha' dos tokens para não colidir CALL JK com SHOPPING JK
       const cleanTokens = (str: string) =>
         normalizeStoreString(str)
-          .replace(/\b(celnet|loja|lj|shopping|shp|shop|mall|galeria|posto|call)\b/gi, ' ')
+          .replace(/\b(celnet|loja|lj|shopping|shp|shop|mall|galeria|posto)\b/gi, ' ')
           .replace(/[^a-z0-9]/g, ' ')
           .replace(/\s+/g, ' ')
           .trim()
@@ -141,25 +147,45 @@ export function useUserStoreAccess(): UserStoreAccess {
         if (allowedStores.length === 0) return false
 
         // 1. Check if direct matchStore against allowedStores matches
+        // ATENÇÃO: só aceitar se matchStore coincidir sem violar CALL/ILHA e DF/GO
         const matchedAllowed = matchStore(raw, allowedStores)
         if (matchedAllowed && effectiveAllowedIds.includes(matchedAllowed.id)) {
-          return true
+          const normMatched = normalizeStoreString(matchedAllowed.name)
+          const isCallOrIlhaMatched = /\b(call|ilha)\b/.test(normMatched)
+          const hasDfMatched = /\bdf\b/.test(normMatched)
+          const hasGoMatched = /\bgo\b/.test(normMatched)
+          if (
+            isCallOrIlhaInput === isCallOrIlhaMatched &&
+            !(hasDfInput && hasGoMatched) &&
+            !(hasGoInput && hasDfMatched)
+          ) {
+            return true
+          }
         }
 
         // 2. Check if matchStore against allStores matches an allowed store
         const matchedAll = matchStore(raw, allStores)
-        if (matchedAll && effectiveAllowedIds.includes(matchedAll.id)) {
-          return true
+        if (matchedAll) {
+          // Se matchStore unificou com uma loja que NÃO está nas permitidas, rejeitar imediatamente
+          return effectiveAllowedIds.includes(matchedAll.id)
         }
 
         // 3. Robust normalized token and string comparisons against allowedStores
         return allowedStores.some((store) => {
-          if (isSameStore(store.name, raw)) return true
           const normStore = normalizeStoreString(store.name)
+          const isCallOrIlhaStore = /\b(call|ilha)\b/.test(normStore)
+          if (isCallOrIlhaInput !== isCallOrIlhaStore) return false
+
+          const hasDfStore = /\bdf\b/.test(normStore)
+          const hasGoStore = /\bgo\b/.test(normStore)
+          if (hasDfInput && hasGoStore) return false
+          if (hasGoInput && hasDfStore) return false
+
+          if (isSameStore(store.name, raw)) return true
           if (normStore === normInput) return true
 
           const storeTokens = cleanTokens(store.name)
-          if (inputTokens && storeTokens) {
+          if (inputTokens && storeTokens && inputTokens.length >= 3) {
             if (inputTokens === storeTokens) return true
           }
 
@@ -171,13 +197,18 @@ export function useUserStoreAccess(): UserStoreAccess {
       return effectiveAllowedIds.some((allowedId) => {
         const normAllowed = normalizeStoreString(allowedId)
         if (normAllowed === normInput) return true
-        if (normInput.includes(normAllowed) || normAllowed.includes(normInput)) return true
+
+        const isCallOrIlhaAllowed = /\b(call|ilha)\b/.test(normAllowed)
+        if (isCallOrIlhaInput !== isCallOrIlhaAllowed) return false
+
+        const hasDfAllowed = /\bdf\b/.test(normAllowed)
+        const hasGoAllowed = /\bgo\b/.test(normAllowed)
+        if (hasDfInput && hasGoAllowed) return false
+        if (hasGoInput && hasDfAllowed) return false
 
         const allowedTokens = cleanTokens(allowedId)
-        if (inputTokens && allowedTokens) {
+        if (inputTokens && allowedTokens && inputTokens.length >= 3 && allowedTokens.length >= 3) {
           if (inputTokens === allowedTokens) return true
-          if (inputTokens.includes(allowedTokens) || allowedTokens.includes(inputTokens))
-            return true
         }
         return false
       })
