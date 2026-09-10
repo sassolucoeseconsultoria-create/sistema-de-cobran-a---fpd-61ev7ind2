@@ -78,6 +78,8 @@ interface FileQueueItem {
 export const Importar: React.FC = () => {
   const { toast } = useToast()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const { isAdm } = useUserStoreAccess()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [stores, setStores] = useState<StoreRecord[]>([])
@@ -151,6 +153,18 @@ export const Importar: React.FC = () => {
 
   // Handle files selected
   const handleFiles = async (files: FileList | File[]) => {
+    if (!isAdm) {
+      toast({
+        title: 'Acesso Restrito',
+        description: 'A importação de arquivos é permitida apenas para o perfil ADM.',
+        variant: 'destructive',
+      })
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+      return
+    }
+
     const newItems: FileQueueItem[] = []
 
     for (let i = 0; i < files.length; i++) {
@@ -250,6 +264,15 @@ export const Importar: React.FC = () => {
 
   // Save single item to PocketBase
   const saveItemToBackend = async (item: FileQueueItem): Promise<boolean> => {
+    if (!isAdm) {
+      toast({
+        title: 'Acesso Restrito',
+        description: 'Apenas usuários com perfil ADM podem salvar dados consolidados no sistema.',
+        variant: 'destructive',
+      })
+      return false
+    }
+
     if (!item.parsedData) return false
 
     const refDate = (item.referenteDate || globalReferenceDate || '').trim()
@@ -449,6 +472,15 @@ export const Importar: React.FC = () => {
 
   // Save all ready items
   const handleSaveAll = async () => {
+    if (!isAdm) {
+      toast({
+        title: 'Acesso Restrito',
+        description: 'Apenas usuários com perfil ADM podem executar a consolidação de arquivos.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     const readyItems = fileQueue.filter(
       (item) => item.status === 'ready' || item.status === 'error',
     )
@@ -518,6 +550,15 @@ export const Importar: React.FC = () => {
 
   // Open batch import modal for selected type
   const openBatchModal = async (type: BatchImportType) => {
+    if (!isAdm) {
+      toast({
+        title: 'Acesso Restrito',
+        description: 'A importação em lote é restrita ao perfil ADM.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     setBatchType(type)
     setBatchFile(null)
     setBatchRefDateError('')
@@ -589,6 +630,15 @@ export const Importar: React.FC = () => {
 
   // Execute batch import
   const handleExecuteBatch = async () => {
+    if (!isAdm) {
+      toast({
+        title: 'Acesso Restrito',
+        description: 'A importação em lote é exclusiva do perfil ADM.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     if (!batchParsedData) return
 
     const refDate = (batchRefDate || '').trim()
@@ -645,6 +695,41 @@ export const Importar: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Banner de restrição de perfil caso acessado por não-ADM */}
+      {!isAdm && (
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-xl p-4 sm:p-5 flex items-start gap-3.5 text-amber-950 shadow-xs">
+          <AlertCircle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1.5 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-bold text-sm sm:text-base text-amber-950">
+                Acesso Restrito ao Administrador (ADM)
+              </h3>
+              <Badge className="bg-amber-200 text-amber-900 border-amber-300 text-[10px]">
+                Perfil atual: {user?.role || 'Usuário'}
+              </Badge>
+            </div>
+            <p className="text-xs text-amber-900 leading-relaxed">
+              A importação de arquivos e consolidação de planilhas está restrita exclusivamente ao
+              perfil <strong>ADM</strong>. Perfis como Gerentes, Coordenadores e Supervisores
+              possuem acesso para consulta e tratamento nas demais telas do sistema, mas não podem
+              subir arquivos ou alterar as consolidações.
+            </p>
+            <div className="pt-1">
+              <Link to="/">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="bg-white border-amber-300 text-amber-900 hover:bg-amber-100 text-xs h-8 gap-1.5"
+                >
+                  <ArrowRight className="w-3.5 h-3.5" />
+                  <span>Ir para o Painel Consolidado</span>
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Batch Import Action Banner */}
       <div className="bg-gradient-to-r from-[#12365A] via-[#1a4975] to-[#0E9F8A] rounded-xl p-5 text-white shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
@@ -665,17 +750,31 @@ export const Importar: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           <Button
             type="button"
+            disabled={!isAdm}
             onClick={() => openBatchModal('movel')}
-            className="bg-white hover:bg-slate-100 text-[#12365A] font-bold text-xs h-10 px-4 shadow-sm gap-2 transition-all hover:scale-[1.02]"
+            title={!isAdm ? 'Importação exclusiva do perfil ADM' : undefined}
+            className={cn(
+              'font-bold text-xs h-10 px-4 shadow-sm gap-2 transition-all',
+              isAdm
+                ? 'bg-white hover:bg-slate-100 text-[#12365A] hover:scale-[1.02]'
+                : 'bg-white/40 text-slate-300 cursor-not-allowed opacity-60',
+            )}
           >
-            <Smartphone className="w-4 h-4 text-[#12365A]" />
+            <Smartphone className="w-4 h-4" />
             <span>Importar em Lote — Móvel</span>
           </Button>
 
           <Button
             type="button"
+            disabled={!isAdm}
             onClick={() => openBatchModal('residencial')}
-            className="bg-[#0E9F8A] hover:bg-[#0c8a77] text-white font-bold text-xs h-10 px-4 shadow-sm gap-2 border border-white/20 transition-all hover:scale-[1.02]"
+            title={!isAdm ? 'Importação exclusiva do perfil ADM' : undefined}
+            className={cn(
+              'font-bold text-xs h-10 px-4 shadow-sm gap-2 border border-white/20 transition-all',
+              isAdm
+                ? 'bg-[#0E9F8A] hover:bg-[#0c8a77] text-white hover:scale-[1.02]'
+                : 'bg-[#0E9F8A]/40 text-slate-200 cursor-not-allowed opacity-60',
+            )}
           >
             <Home className="w-4 h-4 text-white" />
             <span>Importar em Lote — Residencial</span>
@@ -732,15 +831,27 @@ export const Importar: React.FC = () => {
 
         {/* Upload Dropzone */}
         <div
-          onDragOver={onDragOver}
-          onDragLeave={onDragLeave}
-          onDrop={onDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onDragOver={isAdm ? onDragOver : (e) => e.preventDefault()}
+          onDragLeave={isAdm ? onDragLeave : undefined}
+          onDrop={isAdm ? onDrop : (e) => e.preventDefault()}
+          onClick={() => {
+            if (isAdm) {
+              fileInputRef.current?.click()
+            } else {
+              toast({
+                title: 'Acesso Restrito',
+                description: 'Apenas o perfil ADM possui permissão para importar arquivos.',
+                variant: 'destructive',
+              })
+            }
+          }}
           className={cn(
-            'border-2 border-dashed rounded-xl p-8 sm:p-10 text-center cursor-pointer transition-all',
-            isDragging
-              ? 'border-[#0E9F8A] bg-[#0E9F8A]/5 scale-[0.99]'
-              : 'border-[#cbd5e1] hover:border-[#0E9F8A] bg-[#FAFCFF] hover:bg-slate-50 shadow-xs',
+            'border-2 border-dashed rounded-xl p-8 sm:p-10 text-center transition-all',
+            !isAdm
+              ? 'border-slate-200 bg-slate-50/60 cursor-not-allowed opacity-70'
+              : isDragging
+                ? 'border-[#0E9F8A] bg-[#0E9F8A]/5 scale-[0.99] cursor-pointer'
+                : 'border-[#cbd5e1] hover:border-[#0E9F8A] bg-[#FAFCFF] hover:bg-slate-50 shadow-xs cursor-pointer',
           )}
         >
           <input
@@ -748,21 +859,31 @@ export const Importar: React.FC = () => {
             type="file"
             accept=".xlsx, .xls"
             multiple
+            disabled={!isAdm}
             className="hidden"
             onChange={(e) => {
               if (e.target.files) handleFiles(e.target.files)
             }}
           />
           <div className="flex flex-col items-center justify-center space-y-3">
-            <div className="w-14 h-14 rounded-2xl bg-[#12365A]/5 flex items-center justify-center text-[#12365A]">
-              <UploadCloud className="w-7 h-7 text-[#0E9F8A]" />
+            <div
+              className={cn(
+                'w-14 h-14 rounded-2xl flex items-center justify-center',
+                isAdm ? 'bg-[#12365A]/5 text-[#12365A]' : 'bg-slate-200/60 text-slate-400',
+              )}
+            >
+              <UploadCloud className={cn('w-7 h-7', isAdm ? 'text-[#0E9F8A]' : 'text-slate-400')} />
             </div>
             <div className="space-y-1">
               <h3 className="text-sm sm:text-base font-bold text-[#12365A]">
-                Arraste os arquivos .xlsx individuais das lojas aqui ou clique para selecionar
+                {isAdm
+                  ? 'Arraste os arquivos .xlsx individuais das lojas aqui ou clique para selecionar'
+                  : 'Importação bloqueada: exclusivo do perfil Administrador (ADM)'}
               </h3>
               <p className="text-xs text-[#5B6B82]">
-                Selecione um ou múltiplos arquivos de lojas simultaneamente para consolidar.
+                {isAdm
+                  ? 'Selecione um ou múltiplos arquivos de lojas simultaneamente para consolidar.'
+                  : 'Usuários Gerentes, Coordenadores e Supervisores não possuem permissão para upload.'}
               </p>
             </div>
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100 text-[11px] font-medium text-[#5B6B82]">

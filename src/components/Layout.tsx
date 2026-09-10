@@ -37,6 +37,8 @@ export const Layout: React.FC = () => {
     navigate('/login')
   }
 
+  const isImportDisabled = !isAdm
+
   const navItems = [
     {
       to: '/vendedores',
@@ -57,7 +59,7 @@ export const Layout: React.FC = () => {
       label: 'Importar Arquivos',
       icon: FileSpreadsheet,
       description: 'Upload e processamento .xlsx',
-      disabled: !isAdm,
+      disabled: isImportDisabled,
       disabledReason: 'Exclusivo do perfil ADM',
     },
     {
@@ -366,16 +368,16 @@ export const Layout: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-3">
-            {isAdm &&
-              ![
-                '/importar',
-                '/top-ofensores',
-                '/vendedores',
-                '/arquivos',
-                '/relacionamento',
-                '/lojas',
-                '/admin',
-              ].includes(location.pathname) && (
+            {![
+              '/importar',
+              '/top-ofensores',
+              '/vendedores',
+              '/arquivos',
+              '/relacionamento',
+              '/lojas',
+              '/admin',
+            ].includes(location.pathname) &&
+              (isAdm ? (
                 <Button
                   onClick={() => navigate('/importar')}
                   className="bg-[#0E9F8A] hover:bg-[#0c8a77] text-white shadow-sm font-medium text-xs sm:text-sm h-9 px-3 sm:px-4 gap-2"
@@ -383,7 +385,32 @@ export const Layout: React.FC = () => {
                   <UploadCloud className="w-4 h-4" />
                   <span>Importar Planilhas</span>
                 </Button>
-              )}
+              ) : (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div>
+                      <Button
+                        disabled
+                        className="bg-slate-200 text-slate-500 cursor-not-allowed shadow-none font-medium text-xs sm:text-sm h-9 px-3 sm:px-4 gap-2 opacity-60"
+                        title="Importação exclusiva do perfil ADM"
+                      >
+                        <Lock className="w-3.5 h-3.5" />
+                        <UploadCloud className="w-4 h-4" />
+                        <span>Importar Planilhas</span>
+                      </Button>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="bottom"
+                    className="bg-[#0E2A47] text-white border border-[#1e456f] text-xs font-medium max-w-[240px]"
+                  >
+                    <p className="font-semibold text-amber-300">Acesso Restrito</p>
+                    <p className="text-[11px] text-slate-300 mt-0.5">
+                      A importação de arquivos é exclusiva do perfil Administrador (ADM).
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              ))}
           </div>
         </header>
 

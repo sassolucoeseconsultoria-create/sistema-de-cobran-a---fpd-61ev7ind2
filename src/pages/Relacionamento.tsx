@@ -9,6 +9,7 @@ import {
   FileSpreadsheet,
   Calendar,
   Info,
+  Lock,
 } from 'lucide-react'
 import {
   Select,
@@ -47,6 +48,7 @@ import type { MovelRecord, ResidencialRecord, StoreRecord } from '@/types/fpd'
 import { cn } from '@/lib/utils'
 import { ClientesMovel } from '@/components/ClientesMovel'
 import { ClientesResidencial } from '@/components/ClientesResidencial'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 export const Relacionamento: React.FC = () => {
   const { toast } = useToast()
@@ -450,6 +452,18 @@ export const Relacionamento: React.FC = () => {
 
   // Handle files selection for import
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!userAccess.isAdm) {
+      toast({
+        title: 'Acesso Restrito',
+        description: 'A importação de planilhas é permitida apenas para o perfil ADM.',
+        variant: 'destructive',
+      })
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+      return
+    }
+
     const files = e.target.files
     if (!files || files.length === 0) return
 
@@ -502,6 +516,15 @@ export const Relacionamento: React.FC = () => {
 
   // Execute import to Móvel and Residencial collections
   const handleConfirmImport = async () => {
+    if (!userAccess.isAdm) {
+      toast({
+        title: 'Acesso Restrito',
+        description: 'Apenas usuários com perfil ADM podem importar planilhas.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     if (parsedFilesData.length === 0) return
 
     setIsImporting(true)
@@ -737,13 +760,40 @@ export const Relacionamento: React.FC = () => {
             </span>
           </div>
 
-          <Button
-            onClick={() => fileInputRef.current?.click()}
-            className="h-9 px-3.5 text-xs font-semibold bg-[#0E9F8A] hover:bg-[#0c8a77] text-white shadow-xs gap-1.5 transition-all"
-          >
-            <UploadCloud className="w-4 h-4" />
-            <span>Importar Planilha</span>
-          </Button>
+          {userAccess.isAdm ? (
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              className="h-9 px-3.5 text-xs font-semibold bg-[#0E9F8A] hover:bg-[#0c8a77] text-white shadow-xs gap-1.5 transition-all"
+            >
+              <UploadCloud className="w-4 h-4" />
+              <span>Importar Planilha</span>
+            </Button>
+          ) : (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <Button
+                    disabled
+                    className="h-9 px-3.5 text-xs font-semibold bg-slate-200 text-slate-500 cursor-not-allowed opacity-60 shadow-none gap-1.5"
+                    title="Importação exclusiva do perfil ADM"
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                    <UploadCloud className="w-4 h-4" />
+                    <span>Importar Planilha</span>
+                  </Button>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent
+                side="bottom"
+                className="bg-[#0E2A47] text-white border border-[#1e456f] text-xs font-medium max-w-[240px]"
+              >
+                <p className="font-semibold text-amber-300">Acesso Restrito</p>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  A importação de planilhas é exclusiva do perfil Administrador (ADM).
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          )}
 
           {userAccess.isAdm && (
             <Button
