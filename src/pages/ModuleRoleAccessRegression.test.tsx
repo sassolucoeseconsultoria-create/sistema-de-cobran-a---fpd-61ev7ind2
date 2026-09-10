@@ -564,4 +564,163 @@ describe('Regras de Acesso por Perfil nos 4 Módulos (Supervisor, Coordenador, A
       })
     })
   })
+
+  // 6. Visibilidade de Botões de Ação por Perfil (ADM vs Gerente, Supervisor, Coordenador)
+  describe('6. Visibilidade de Botões de Ação por Perfil (Ranking Vendedores, Principais Ofensores, Painel de Lojas)', () => {
+    const gerenteUser = {
+      id: 'usr_gerente_1',
+      collectionId: 'users',
+      collectionName: 'users',
+      email: 'gerente@celnet.com.br',
+      name: 'Gerente Loja 1',
+      role: 'Gerente' as const,
+      lojas: ['store_1'],
+      created: '2025-01-01',
+      updated: '2025-01-01',
+    }
+
+    it('Ranking por Vendedor: ADM vê "Limpar Vendedores" e "Exportar .xlsx"', async () => {
+      vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+        user: admUser,
+        token: 'token',
+        loading: false,
+        login: vi.fn(),
+        logout: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      render(
+        <MemoryRouter>
+          <Vendedores />
+        </MemoryRouter>,
+      )
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Limpar Vendedores/i })).toBeDefined()
+        expect(screen.getByRole('button', { name: /Exportar \.xlsx/i })).toBeDefined()
+      })
+    })
+
+    it('Ranking por Vendedor: Gerente, Supervisor e Coordenador NÃO veem os botões', async () => {
+      for (const nonAdmUser of [gerenteUser, supervisorUser, coordenadorUser]) {
+        vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+          user: nonAdmUser,
+          token: 'token',
+          loading: false,
+          login: vi.fn(),
+          logout: vi.fn(),
+          refreshAuth: vi.fn(),
+        })
+
+        const { unmount } = render(
+          <MemoryRouter>
+            <Vendedores />
+          </MemoryRouter>,
+        )
+
+        await waitFor(() => {
+          expect(screen.queryByRole('button', { name: /Limpar Vendedores/i })).toBeNull()
+          expect(screen.queryByRole('button', { name: /Exportar \.xlsx/i })).toBeNull()
+        })
+
+        unmount()
+      }
+    })
+
+    it('Principais Ofensores: ADM vê "Exportar Principais Ofensores (.xlsx)"', async () => {
+      vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+        user: admUser,
+        token: 'token',
+        loading: false,
+        login: vi.fn(),
+        logout: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      render(
+        <MemoryRouter>
+          <TopOfensores />
+        </MemoryRouter>,
+      )
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Exportar Principais Ofensores/i })).toBeDefined()
+      })
+    })
+
+    it('Principais Ofensores: Gerente, Supervisor e Coordenador NÃO veem o botão de exportar', async () => {
+      for (const nonAdmUser of [gerenteUser, supervisorUser, coordenadorUser]) {
+        vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+          user: nonAdmUser,
+          token: 'token',
+          loading: false,
+          login: vi.fn(),
+          logout: vi.fn(),
+          refreshAuth: vi.fn(),
+        })
+
+        const { unmount } = render(
+          <MemoryRouter>
+            <TopOfensores />
+          </MemoryRouter>,
+        )
+
+        await waitFor(() => {
+          expect(
+            screen.queryByRole('button', { name: /Exportar Principais Ofensores/i }),
+          ).toBeNull()
+        })
+
+        unmount()
+      }
+    })
+
+    it('Painel de Lojas: ADM vê "Limpar Dados" e "Exportar .xlsx"', async () => {
+      vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+        user: admUser,
+        token: 'token',
+        loading: false,
+        login: vi.fn(),
+        logout: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      render(
+        <MemoryRouter>
+          <Arquivos />
+        </MemoryRouter>,
+      )
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /Limpar Dados/i })).toBeDefined()
+        expect(screen.getByRole('button', { name: /Exportar \.xlsx/i })).toBeDefined()
+      })
+    })
+
+    it('Painel de Lojas: Gerente, Supervisor e Coordenador NÃO veem os botões de ação', async () => {
+      for (const nonAdmUser of [gerenteUser, supervisorUser, coordenadorUser]) {
+        vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+          user: nonAdmUser,
+          token: 'token',
+          loading: false,
+          login: vi.fn(),
+          logout: vi.fn(),
+          refreshAuth: vi.fn(),
+        })
+
+        const { unmount } = render(
+          <MemoryRouter>
+            <Arquivos />
+          </MemoryRouter>,
+        )
+
+        await waitFor(() => {
+          expect(screen.queryByRole('button', { name: /Limpar Dados/i })).toBeNull()
+          expect(screen.queryByRole('button', { name: /Exportar \.xlsx/i })).toBeNull()
+        })
+
+        unmount()
+      }
+    })
+  })
 })

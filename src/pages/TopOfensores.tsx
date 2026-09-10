@@ -652,18 +652,20 @@ export const TopOfensores: React.FC = () => {
             )}
           </div>
 
-          {/* Right Action Buttons */}
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              onClick={handleExportXlsx}
-              variant="outline"
-              className="h-9 border-[#E3E9F2] text-[#12365A] hover:bg-[#F3F6FA] font-medium text-xs sm:text-sm gap-2"
-            >
-              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-              <Download className="w-4 h-4 text-[#0E9F8A]" />
-              <span>Exportar Principais Ofensores (.xlsx)</span>
-            </Button>
-          </div>
+          {/* Right Action Buttons - Visível apenas para o perfil ADM (oculto para Gerente, Supervisor e Coordenador) */}
+          {userAccess.isAdm && (
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                onClick={handleExportXlsx}
+                variant="outline"
+                className="h-9 border-[#E3E9F2] text-[#12365A] hover:bg-[#F3F6FA] font-medium text-xs sm:text-sm gap-2"
+              >
+                <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+                <Download className="w-4 h-4 text-[#0E9F8A]" />
+                <span>Exportar Principais Ofensores (.xlsx)</span>
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Tabela dos Principais Ofensores */}

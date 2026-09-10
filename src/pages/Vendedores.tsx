@@ -898,28 +898,30 @@ export const Vendedores: React.FC = () => {
             )}
           </div>
 
-          {/* Right Action Buttons */}
-          <div className="flex items-center gap-2 shrink-0">
-            {records.length > 0 && (
-              <Button
-                onClick={() => setClearDialogOpen(true)}
-                variant="outline"
-                className="h-9 border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50 font-medium text-xs sm:text-sm gap-1.5 transition-colors"
-              >
-                <Trash2 className="w-4 h-4 text-red-500" />
-                <span>Limpar Vendedores</span>
-              </Button>
-            )}
+          {/* Right Action Buttons - Visíveis apenas para o perfil ADM (ocultos para Gerente, Supervisor e Coordenador) */}
+          {userAccess.isAdm && (
+            <div className="flex items-center gap-2 shrink-0">
+              {records.length > 0 && (
+                <Button
+                  onClick={() => setClearDialogOpen(true)}
+                  variant="outline"
+                  className="h-9 border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50 font-medium text-xs sm:text-sm gap-1.5 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                  <span>Limpar Vendedores</span>
+                </Button>
+              )}
 
-            <Button
-              onClick={handleExportXlsx}
-              variant="outline"
-              className="h-9 border-[#E3E9F2] text-[#12365A] hover:bg-[#F3F6FA] font-medium text-xs sm:text-sm gap-2"
-            >
-              <Download className="w-4 h-4 text-[#0E9F8A]" />
-              <span>Exportar .xlsx</span>
-            </Button>
-          </div>
+              <Button
+                onClick={handleExportXlsx}
+                variant="outline"
+                className="h-9 border-[#E3E9F2] text-[#12365A] hover:bg-[#F3F6FA] font-medium text-xs sm:text-sm gap-2"
+              >
+                <Download className="w-4 h-4 text-[#0E9F8A]" />
+                <span>Exportar .xlsx</span>
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* 13-Column Vendor Ranking Table */}

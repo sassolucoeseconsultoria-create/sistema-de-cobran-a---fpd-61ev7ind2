@@ -212,33 +212,8 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
     expect(screen.getByText('TOTAL')).toBeDefined()
     expect(screen.getByText(/TOTAL \(3\)/i)).toBeDefined()
 
-    // Exportação para Excel: deve exportar apenas os 3 registros com totals calculados dos 3 itens
-    const exportBtn = screen.getByRole('button', { name: /Exportar Principais Ofensores/i })
-    expect(exportBtn).toBeDefined()
-    await user.click(exportBtn)
-
-    expect(exportVendorsSpy).toHaveBeenCalledTimes(1)
-    const exportedRows = exportVendorsSpy.mock.calls[0][0]
-    expect(exportedRows).toHaveLength(3)
-    expect(exportedRows.map((r: any) => r.vendedor)).toEqual([
-      'Vendedor Aguas 1',
-      'Vendedor Aguas 2',
-      'Vendedor Aguas 3',
-    ])
-    // Verifica que os totais passados para o exportador somam exatamente os 3 itens visíveis:
-    // 95 + 90 + 85 = 270 totalLinhas
-    // 10 + 10 + 10 = 30 faturaPaga
-    // 5 + 5 + 5 = 15 envioFatura, etc.
-    const exportedTotals = exportVendorsSpy.mock.calls[0][1]
-    expect(exportedTotals.totalLinhas).toBe(270)
-    expect(exportedTotals.faturaPaga).toBe(30)
-    expect(exportedTotals.envioFatura).toBe(15)
-
-    const exportOptions = exportVendorsSpy.mock.calls[0][3]
-    expect(exportOptions).toEqual({
-      sheetName: 'Principais_3_Ofensores',
-      filePrefix: 'Ranking_3_Principais_Ofensores_FPD',
-    })
+    // Botão de exportação é exclusivo do perfil ADM — para Gerente NÃO deve aparecer
+    expect(screen.queryByRole('button', { name: /Exportar Principais Ofensores/i })).toBeNull()
   })
 
   it('Cenário 2: Perfil Supervisor traz os 10 principais das lojas vinculadas a ele', async () => {
@@ -293,24 +268,8 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
     expect(screen.getByText('TOTAL')).toBeDefined()
     expect(screen.getByText(/TOTAL \(10\)/i)).toBeDefined()
 
-    // Exportação deve exportar apenas os 10 itens com totals correspondentes aos 10 itens
-    const exportBtn = screen.getByRole('button', { name: /Exportar Principais Ofensores/i })
-    await user.click(exportBtn)
-
-    expect(exportVendorsSpy).toHaveBeenCalledTimes(1)
-    const exportedRows = exportVendorsSpy.mock.calls[0][0]
-    expect(exportedRows).toHaveLength(10)
-    const exportedTotals = exportVendorsSpy.mock.calls[0][1]
-    // Top 10 são os maiores entre Águas (95, 90, 85, 80, 75, 70, 65, 60, 55, 50) e Taguatinga (76, 72, 68...)
-    const expectedSum = exportedRows.reduce((acc: number, r: any) => acc + r.totalLinhas, 0)
-    expect(exportedTotals.totalLinhas).toBe(expectedSum)
-    expect(exportedTotals.totalLinhas).toBeGreaterThan(0)
-
-    const exportOptions = exportVendorsSpy.mock.calls[0][3]
-    expect(exportOptions).toEqual({
-      sheetName: 'Principais_10_Ofensores',
-      filePrefix: 'Ranking_10_Principais_Ofensores_FPD',
-    })
+    // Botão de exportação é exclusivo do perfil ADM — para Supervisor NÃO deve aparecer
+    expect(screen.queryByRole('button', { name: /Exportar Principais Ofensores/i })).toBeNull()
   })
 
   it('Cenário 3: Perfil Coordenador traz os 20 principais das lojas vinculadas a ele', async () => {
@@ -358,23 +317,8 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
     expect(screen.getByText('TOTAL')).toBeDefined()
     expect(screen.getByText(/TOTAL \(20\)/i)).toBeDefined()
 
-    // Exportação deve exportar 20 itens
-    const exportBtn = screen.getByRole('button', { name: /Exportar Principais Ofensores/i })
-    await user.click(exportBtn)
-
-    expect(exportVendorsSpy).toHaveBeenCalledTimes(1)
-    const exportedRows = exportVendorsSpy.mock.calls[0][0]
-    expect(exportedRows).toHaveLength(20)
-    const exportedTotals = exportVendorsSpy.mock.calls[0][1]
-    const expectedSum = exportedRows.reduce((acc: number, r: any) => acc + r.totalLinhas, 0)
-    expect(exportedTotals.totalLinhas).toBe(expectedSum)
-    expect(exportedTotals.totalLinhas).toBeGreaterThan(0)
-
-    const exportOptions = exportVendorsSpy.mock.calls[0][3]
-    expect(exportOptions).toEqual({
-      sheetName: 'Principais_20_Ofensores',
-      filePrefix: 'Ranking_20_Principais_Ofensores_FPD',
-    })
+    // Botão de exportação é exclusivo do perfil ADM — para Coordenador NÃO deve aparecer
+    expect(screen.queryByRole('button', { name: /Exportar Principais Ofensores/i })).toBeNull()
   })
 
   it('Cenário 4: Perfil ADM traz os 20 principais e calcula o total correto', async () => {
@@ -413,7 +357,9 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
     expect(screen.getByText('TOTAL')).toBeDefined()
     expect(screen.getByText(/TOTAL \(20\)/i)).toBeDefined()
 
+    // Para o perfil ADM, o botão de exportação DEVE estar visível e funcional
     const exportBtn = screen.getByRole('button', { name: /Exportar Principais Ofensores/i })
+    expect(exportBtn).toBeDefined()
     await user.click(exportBtn)
 
     expect(exportVendorsSpy).toHaveBeenCalledTimes(1)
@@ -422,6 +368,12 @@ describe('TopOfensores - Regras de Limite de Ranking por Perfil', () => {
     const exportedTotals = exportVendorsSpy.mock.calls[0][1]
     const expectedSum = exportedRows.reduce((acc: number, r: any) => acc + r.totalLinhas, 0)
     expect(exportedTotals.totalLinhas).toBe(expectedSum)
+
+    const exportOptions = exportVendorsSpy.mock.calls[0][3]
+    expect(exportOptions).toEqual({
+      sheetName: 'Principais_20_Ofensores',
+      filePrefix: 'Ranking_20_Principais_Ofensores_FPD',
+    })
   })
 
   it('Cenário 5: Não deve exibir linha de TOTAL quando não houver ofensores', async () => {
