@@ -15,6 +15,7 @@ import {
   Calendar,
   Trash2,
   Eye,
+  Info,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -516,8 +517,35 @@ export const Arquivos: React.FC = () => {
 
   const storesWithDataCount = consolidatedRows.filter((r) => r.hasData).length
 
+  const profileLabel = userAccess.isGerente
+    ? 'Gerente'
+    : userAccess.isSupervisor
+      ? 'Supervisor'
+      : userAccess.isCoordenador
+        ? 'Coordenador'
+        : userAccess.userRole || 'acesso'
+
   return (
     <div className="space-y-6">
+      {/* Usuário sem loja vinculada (Gerente, Supervisor ou Coordenador) - aviso amigável */}
+      {!userAccess.isAdm && userAccess.hasNoStoreAssigned && (
+        <div
+          data-testid="no-store-banner"
+          className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 text-xs text-amber-900"
+        >
+          <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-bold text-sm text-amber-900">
+              Nenhuma loja vinculada ao seu perfil de {profileLabel}
+            </p>
+            <p className="text-amber-800">
+              Seu perfil ainda não possui lojas vinculadas pelo Administrador. Para visualizar o
+              painel de consolidação das suas lojas, solicite a vinculação à equipe administradora.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Top summary cards banner */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">

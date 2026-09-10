@@ -274,9 +274,9 @@ export const Relacionamento: React.FC = () => {
     return null
   }, [userAccess, stores, availableLojas])
 
-  // Efeito para sincronizar a loja selecionada com a loja do Gerente
+  // Efeito para sincronizar a loja selecionada com a loja do perfil
   useEffect(() => {
-    if (!userAccess.isGerente) return
+    if (userAccess.isAdm) return
 
     if (userAccess.hasNoStoreAssigned) {
       if (selectedLoja !== '') {
@@ -285,10 +285,31 @@ export const Relacionamento: React.FC = () => {
       return
     }
 
-    if (managerAssignedStoreName && selectedLoja !== managerAssignedStoreName) {
-      setSelectedLoja(managerAssignedStoreName)
+    if (userAccess.isGerente) {
+      if (managerAssignedStoreName && selectedLoja !== managerAssignedStoreName) {
+        setSelectedLoja(managerAssignedStoreName)
+      }
+      return
     }
-  }, [userAccess.isGerente, userAccess.hasNoStoreAssigned, managerAssignedStoreName, selectedLoja])
+
+    // Supervisor ou Coordenador: garantir que selectedLoja seja válida entre as permitidas ou 'TODAS'
+    if (selectedLoja === '' && availableLojas.length > 0) {
+      setSelectedLoja('TODAS')
+    } else if (
+      selectedLoja !== 'TODAS' &&
+      selectedLoja !== '' &&
+      !availableLojas.includes(selectedLoja)
+    ) {
+      setSelectedLoja(availableLojas.length > 0 ? 'TODAS' : '')
+    }
+  }, [
+    userAccess.isAdm,
+    userAccess.isGerente,
+    userAccess.hasNoStoreAssigned,
+    managerAssignedStoreName,
+    selectedLoja,
+    availableLojas,
+  ])
 
   // Recalculate Móvel count whenever selectedLoja, availableLojas or selectedDataReferencia change
   const refreshMovelCount = useCallback(
@@ -809,18 +830,21 @@ export const Relacionamento: React.FC = () => {
         </div>
       </div>
 
-      {/* Gerente sem loja vinculada - aviso / estado vazio amigável */}
-      {userAccess.isGerente && userAccess.hasNoStoreAssigned && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 text-xs text-amber-900">
+      {/* Usuário sem loja vinculada (Gerente, Supervisor ou Coordenador) - aviso / estado vazio amigável */}
+      {!userAccess.isAdm && userAccess.hasNoStoreAssigned && (
+        <div
+          data-testid="no-store-banner"
+          className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 text-xs text-amber-900"
+        >
           <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
           <div className="space-y-1">
             <p className="font-bold text-sm text-amber-900">
-              Nenhuma loja vinculada ao seu usuário Gerente
+              Nenhuma loja vinculada ao seu perfil de {userAccess.userRole || 'acesso'}
             </p>
             <p className="text-amber-800">
-              Seu perfil de Gerente ainda não possui uma loja vinculada pelo Administrador. Para
-              visualizar e gerenciar os clientes de inadimplência (Móvel e Residencial), solicite a
-              vinculação da sua loja à equipe administradora.
+              Seu perfil ainda não possui lojas vinculadas pelo Administrador. Para visualizar e
+              gerenciar os clientes de inadimplência (Móvel e Residencial), solicite a vinculação à
+              equipe administradora.
             </p>
           </div>
         </div>

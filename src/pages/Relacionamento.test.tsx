@@ -419,7 +419,7 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
 
     // Deve exibir aviso em português para o Gerente sem loja
     await waitFor(() => {
-      expect(screen.getByText(/Nenhuma loja vinculada ao seu usuário Gerente/i)).toBeDefined()
+      expect(screen.getByText(/Nenhuma loja vinculada ao seu perfil de Gerente/i)).toBeDefined()
     })
 
     // Contadores devem ser 0

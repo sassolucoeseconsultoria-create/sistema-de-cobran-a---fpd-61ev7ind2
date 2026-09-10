@@ -204,11 +204,21 @@ export const Vendedores: React.FC = () => {
   const uniqueLojas = useMemo(() => {
     const set = new Set<string>()
 
-    // Nomes permitidos cadastrados
-    if (!userAccess.isAdm && !userAccess.hasNoStoreAssigned) {
+    // Se o usuário não é ADM, limitar estritamente às lojas vinculadas ao perfil
+    if (!userAccess.isAdm) {
+      if (userAccess.hasNoStoreAssigned) return []
+
       userAccess.getAllowedStoreNames(stores).forEach((name) => {
         if (name && name.trim()) set.add(name.trim())
       })
+
+      // Adiciona lojas presentes nas linhas permitidas apenas se forem autorizadas
+      for (const r of vendorRows) {
+        if (r.loja && r.loja.trim() !== '' && userAccess.isStoreNameAllowed(r.loja, stores)) {
+          set.add(r.loja.trim())
+        }
+      }
+      return Array.from(set).sort((a, b) => a.localeCompare(b))
     }
 
     for (const r of vendorRows) {
@@ -737,8 +747,8 @@ export const Vendedores: React.FC = () => {
         </div>
       </div>
 
-      {/* Gerente sem loja vinculada - aviso amigável */}
-      {userAccess.isGerente && userAccess.hasNoStoreAssigned && (
+      {/* Usuário sem loja vinculada (Gerente, Supervisor ou Coordenador) - aviso amigável */}
+      {!userAccess.isAdm && userAccess.hasNoStoreAssigned && (
         <div
           data-testid="gerente-sem-loja-banner"
           className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 text-xs text-amber-900"
@@ -746,12 +756,12 @@ export const Vendedores: React.FC = () => {
           <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
           <div className="space-y-1">
             <p className="font-bold text-sm text-amber-900">
-              Nenhuma loja vinculada ao seu usuário Gerente
+              Nenhuma loja vinculada ao seu perfil de {userAccess.userRole || 'acesso'}
             </p>
             <p className="text-amber-800">
-              Seu perfil de Gerente ainda não possui uma loja vinculada pelo Administrador. Para
-              visualizar o ranking de vendedores e os dados de clientes (Móvel e Residencial) da sua
-              loja, solicite a vinculação da sua loja à equipe administradora.
+              Seu perfil ainda não possui lojas vinculadas pelo Administrador. Para visualizar o
+              ranking de vendedores e os dados de clientes (Móvel e Residencial) das suas lojas,
+              solicite a vinculação à equipe administradora.
             </p>
           </div>
         </div>
