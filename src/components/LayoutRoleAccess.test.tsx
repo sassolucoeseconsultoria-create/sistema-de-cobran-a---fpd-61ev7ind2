@@ -1,9 +1,13 @@
-import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { Layout } from './Layout'
 import ProtectedRoute from './ProtectedRoute'
+import Importar from '@/pages/Importar'
+import Relacionamento from '@/pages/Relacionamento'
 import * as AuthContext from '@/contexts/AuthContext'
+import * as FpdService from '@/services/fpdService'
+import * as RelacionamentoService from '@/services/relacionamentoService'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
 describe('Layout e Controle de Acesso por Perfil', () => {
@@ -73,8 +77,9 @@ describe('Layout e Controle de Acesso por Perfil', () => {
       const lojasElements = screen.getAllByText(/^lojas$/i)
       expect(lojasElements.length).toBeGreaterThan(0)
 
-      // Botão "Importar Planilhas" do header oculto para perfis não-ADM
-      expect(screen.queryByRole('button', { name: /importar planilhas/i })).toBeNull()
+      // Botão "Importar Planilhas" do header desabilitado para perfis não-ADM
+      const disabledBtn = screen.getByRole('button', { name: /importar planilhas/i })
+      expect(disabledBtn.hasAttribute('disabled')).toBe(true)
     },
   )
 })
@@ -157,5 +162,140 @@ describe('ProtectedRoute com Restrição de Perfil', () => {
     )
 
     expect(screen.getByText('Conteúdo Liberado de Importação')).not.toBeNull()
+  })
+})
+
+describe('Regressão: Botões e Fluxos de Importação por Perfil', () => {
+  const createMockAuth = (role: 'ADM' | 'Coordenador' | 'Supervisor' | 'Gerente') => ({
+    user: {
+      id: `usr_${role.toLowerCase()}`,
+      collectionId: 'users',
+      collectionName: 'users',
+      email: `${role.toLowerCase()}@celnet.com.br`,
+      name: `Usuário ${role}`,
+      role,
+      lojas: ['store_1'],
+      created: '2025-01-01',
+      updated: '2025-01-01',
+    },
+    token: 'mock-token',
+    loading: false,
+    login: vi.fn(),
+    logout: vi.fn(),
+    refreshAuth: vi.fn(),
+  })
+
+  beforeEach(() => {
+    vi.spyOn(FpdService, 'fetchStores').mockResolvedValue([
+      {
+        id: 'store_1',
+        name: 'CELNET AGUAS CLARAS',
+        collectionId: 'stores',
+        collectionName: 'stores',
+      },
+    ])
+    vi.spyOn(FpdService, 'fetchDistinctReferenceDates').mockResolvedValue([])
+    vi.spyOn(RelacionamentoService, 'fetchDistinctAnalyticalLojas').mockResolvedValue([])
+    vi.spyOn(RelacionamentoService, 'fetchAnalyticalRows').mockResolvedValue({
+      items: [],
+      totalItems: 0,
+      totalPages: 1,
+      totalMovel: 0,
+      totalResidencial: 0,
+      page: 1,
+      perPage: 25,
+    })
+  })
+
+  describe('Tela /importar', () => {
+    it('ADM vê botões de importação em lote e dropzone habilitados sem banner de restrição', async () => {
+      vi.spyOn(AuthContext, 'useAuth').mockReturnValue(createMockAuth('ADM'))
+
+      render(
+        <MemoryRouter initialEntries={['/importar']}>
+          <TooltipProvider>
+            <Importar />
+          </TooltipProvider>
+        </MemoryRouter>,
+      )
+
+      // Não deve ter o banner de restrição ao administrador
+      expect(screen.queryByText(/acesso restrito ao administrador/i)).toBeNull()
+
+      // Botões de lote habilitados
+      const btnMovel = screen.getByRole('button', { name: /importar em lote — móvel/i })
+      const btnRes = screen.getByRole('button', { name: /importar em lote — residencial/i })
+      expect(btnMovel.hasAttribute('disabled')).toBe(false)
+      expect(btnRes.hasAttribute('disabled')).toBe(false)
+
+      // Texto da dropzone de loja a loja habilitada
+      expect(
+        screen.getByText(/arraste os arquivos \.xlsx individuais das lojas aqui/i),
+      ).not.toBeNull()
+    })
+
+    it.each(['Gerente', 'Coordenador', 'Supervisor'] as const)(
+      'perfil %s vê banner de restrição e botões de importação em lote e dropzone bloqueados',
+      async (role) => {
+        vi.spyOn(AuthContext, 'useAuth').mockReturnValue(createMockAuth(role))
+
+        render(
+          <MemoryRouter initialEntries={['/importar']}>
+            <TooltipProvider>
+              <Importar />
+            </TooltipProvider>
+          </MemoryRouter>,
+        )
+
+        // Banner informativo de acesso restrito presente
+        expect(screen.getByText(/acesso restrito ao administrador/i)).not.toBeNull()
+
+        // Botões de lote desabilitados
+        const btnMovel = screen.getByRole('button', { name: /importar em lote — móvel/i })
+        const btnRes = screen.getByRole('button', { name: /importar em lote — residencial/i })
+        expect(btnMovel.hasAttribute('disabled')).toBe(true)
+        expect(btnRes.hasAttribute('disabled')).toBe(true)
+
+        // Dropzone indica bloqueio para não-ADM
+        expect(
+          screen.getByText(/importação bloqueada: exclusivo do perfil administrador \(adm\)/i),
+        ).not.toBeNull()
+      },
+    )
+  })
+
+  describe('Tela /relacionamento (Inadimplência)', () => {
+    it('ADM vê botão Importar Planilha ativo e habilitado', async () => {
+      vi.spyOn(AuthContext, 'useAuth').mockReturnValue(createMockAuth('ADM'))
+
+      render(
+        <MemoryRouter initialEntries={['/relacionamento']}>
+          <TooltipProvider>
+            <Relacionamento />
+          </TooltipProvider>
+        </MemoryRouter>,
+      )
+
+      const btnImportar = screen.getByRole('button', { name: /importar planilha/i })
+      expect(btnImportar.hasAttribute('disabled')).toBe(false)
+    })
+
+    it.each(['Gerente', 'Coordenador', 'Supervisor'] as const)(
+      'perfil %s vê botão Importar Planilha desabilitado com bloqueio de acesso',
+      async (role) => {
+        vi.spyOn(AuthContext, 'useAuth').mockReturnValue(createMockAuth(role))
+
+        render(
+          <MemoryRouter initialEntries={['/relacionamento']}>
+            <TooltipProvider>
+              <Relacionamento />
+            </TooltipProvider>
+          </MemoryRouter>,
+        )
+
+        const btnImportar = screen.getByRole('button', { name: /importar planilha/i })
+        expect(btnImportar.hasAttribute('disabled')).toBe(true)
+      },
+    )
   })
 })

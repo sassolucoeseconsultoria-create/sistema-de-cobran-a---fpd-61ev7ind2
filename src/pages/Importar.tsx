@@ -59,6 +59,8 @@ import {
   type ResidencialInsertItem,
 } from '@/services/relacionamentoService'
 import { FPD_STATUSES, type StoreRecord } from '@/types/fpd'
+import { useAuth } from '@/contexts/AuthContext'
+import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
 import { applyDateMask, isValidDateDDMMAAAA } from '@/lib/clientFormatters'
 import { cn } from '@/lib/utils'
