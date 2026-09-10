@@ -598,11 +598,15 @@ export const ACCEPTED_STATUS_HEADERS = [
   'ocorrencia',
   'ocorrencia 1',
   'ocorrencias 1',
-  'status',
-  'substatus',
-  'situacao',
+  'indicador',
+  'preventiva fpd',
+  'dsc_status_contrato',
+  'status contrato',
   'status cobranca',
   'status da cobranca',
+  'substatus',
+  'situacao',
+  'status',
   'motivo',
 ]
 
@@ -729,6 +733,10 @@ export function getCandidateStatusColumnIndices(detectedColumns: DetectedColumn[
   const fallbackCandidates: { col: DetectedColumn; score: number }[] = []
 
   const fallbackTerms = [
+    'indicador',
+    'preventiva fpd',
+    'dsc_status_contrato',
+    'status contrato',
     'status cobranca',
     'status da cobranca',
     'substatus',
@@ -1101,8 +1109,12 @@ export function findStatusColumnIndex(detectedColumns: DetectedColumn[]): number
     return bestOcorrenCol.columnIndex
   }
 
-  // 2. Fallbacks: 'status cobranca', 'substatus', 'situacao', 'status', 'motivo'
+  // 2. Fallbacks: 'indicador', 'preventiva fpd', 'dsc_status_contrato', 'status contrato', 'status cobranca', etc.
   const fallbackTerms = [
+    'indicador',
+    'preventiva fpd',
+    'dsc_status_contrato',
+    'status contrato',
     'status cobranca',
     'status da cobranca',
     'substatus',

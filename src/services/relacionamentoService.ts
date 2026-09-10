@@ -524,8 +524,8 @@ export async function insertMovelBatch(
     const existingRecord = item.linha !== undefined ? existingMap?.get(item.linha) : undefined
 
     // Preserve manual fields from existing record if not explicitly provided in new item
-    // Default ocorrencias to 'Não Tratados'
-    const preservedOcorrencias = item.ocorrencias || existingRecord?.ocorrencias || 'Não Tratados'
+    // Faithful occurrence: use item's ocorrencias or existingRecord manual override without artificial default
+    const preservedOcorrencias = (existingRecord?.ocorrencias || item.ocorrencias || '').trim()
     const preservedPromessa =
       item.data_promessa_de_pagto || existingRecord?.data_promessa_de_pagto || ''
     const preservedComentarios = item.comentarios || existingRecord?.comentarios || ''
@@ -650,9 +650,9 @@ export async function insertResidencialBatch(
     const existingMap = existingMapByFile.get(fileKey)
     const existingRecord = item.linha !== undefined ? existingMap?.get(item.linha) : undefined
 
-    // Preserve manual fields if existing, else default ocorrencias to 'Não Tratados'
+    // Preserve manual fields if existing. Faithful occurrence: never default to 'Não Tratados'
     const typedOcorrencias = item.typedFields?.ocorrencias || item.ocorrencias
-    const preservedOcorrencias = existingRecord?.ocorrencias || typedOcorrencias || 'Não Tratados'
+    const preservedOcorrencias = (existingRecord?.ocorrencias || typedOcorrencias || '').trim()
 
     const typedPromessa = item.typedFields?.data_promessa_de_pagto || item.data_promessa_de_pagto
     const preservedPromessa = typedPromessa || existingRecord?.data_promessa_de_pagto || ''

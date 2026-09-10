@@ -98,4 +98,22 @@ describe('analyticalImportParser', () => {
     expect(parsed.rows[0].ocorrencias).toBe('Texto livre preenchido na loja')
     expect(parsed.rows[1].ocorrencias).toBe('Fatura(s) Paga(s)')
   })
+
+  it('recognizes INDICADOR or PREVENTIVA FPD or DSC_STATUS_CONTRATO column when OCORRENCIAS is absent', async () => {
+    const { parseAnalyticalWorksheet } = await import('./analyticalImportParser')
+    const XLSX = await import('xlsx')
+
+    const rows = [
+      ['LOJA', 'CLIENTE', 'INDICADOR', 'VENDEDOR'],
+      ['CELNET CENTRO', 'CLIENTE TESTE 1', 'Fatura Paga', 'JOAO'],
+      ['CELNET CENTRO', 'CLIENTE TESTE 2', '', 'MARIA'], // empty -> expurgada
+      ['CELNET CENTRO', 'CLIENTE TESTE 3', 'Promessa de Pagto', 'JOSE'],
+    ]
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+    const parsed = parseAnalyticalWorksheet(ws, 'Residencial', 'residencial')
+
+    expect(parsed.rows).toHaveLength(2)
+    expect(parsed.rows[0].ocorrencias).toBe('Fatura(s) Paga(s)')
+    expect(parsed.rows[1].ocorrencias).toBe('Promessa de Pagto.')
+  })
 })

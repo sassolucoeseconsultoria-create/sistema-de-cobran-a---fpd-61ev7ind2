@@ -263,21 +263,23 @@ export async function parseBatchXlsxFile(
       continue
     }
 
-    // Determine occurrences category
+    // Determine occurrences category:
+    // Exclusively by the status/occurrences column cell value.
+    // Empty/blank cell -> EXPURGADA (does not increment totalLinhas, nao_tratados, or store summary)
     let category: FpdStatusKey | null = null
     if (statusColIndex >= 0 && statusColIndex < row.length) {
       const rawCell = row[statusColIndex]
-      const normCell = normalizeText(rawCell)
-      if (!normCell) {
+      if (rawCell === null || rawCell === undefined || String(rawCell).trim() === '') {
         category = null
       } else {
-        category = classifyStatusCell(normCell)
+        const normCell = normalizeText(rawCell)
+        category = normCell ? classifyStatusCell(normCell) : null
       }
     } else {
       category = null
     }
 
-    // Célula vazia ou sem ocorrência válida -> EXPURGADA (não contabiliza em quantidade/ocorrência)
+    // Célula vazia ou sem ocorrência válida -> EXPURGADA (não contabiliza em totalLinhas nem em nenhuma categoria)
     if (!category) {
       totalExpurgadasRows++
       continue

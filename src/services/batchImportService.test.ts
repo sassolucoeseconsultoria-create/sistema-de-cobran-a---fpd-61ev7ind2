@@ -253,6 +253,39 @@ describe('batchImportService', () => {
       expect(aguasClaras?.contato_realizado).toBe(1)
       expect(aguasClaras?.totalLinhas).toBe(1)
     })
+
+    it('correctly parses Residencial sheet when status is in INDICADOR or PREVENTIVA FPD instead of OCORRENCIAS', async () => {
+      const header = ['LOJA', 'CLIENTE', 'INDICADOR', 'VENDEDOR']
+      const rows = [
+        ['CELNET PLANALTINA DF', 'CLIENTE 1', 'Fatura Paga', 'VENDEDOR 1'],
+        ['CELNET AGUAS CLARA', 'CLIENTE 2', 'Enviado Fatura', 'VENDEDOR 2'],
+        ['CELNET AGUAS CLARA', 'CLIENTE 3', '', 'VENDEDOR 3'], // empty -> expurgada
+      ]
+
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
+      XLSX.utils.book_append_sheet(wb, ws, 'Residencial')
+
+      const u8 = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+      const file = new File([u8], 'BASE_PREVENTIVA_INDICADOR.xlsx')
+
+      const parsed = await parseBatchXlsxFile(file, 'residencial', mockStores)
+
+      expect(parsed.totalValidRows).toBe(2)
+      expect(parsed.totalExpurgadasRows).toBe(1)
+
+      const planaltina = parsed.storeSummaries.find(
+        (s) => s.canonicalStoreName === 'CELNET PLANALTINA DF',
+      )
+      expect(planaltina?.fatura_paga).toBe(1)
+      expect(planaltina?.totalLinhas).toBe(1)
+
+      const aguasClaras = parsed.storeSummaries.find(
+        (s) => s.canonicalStoreName === 'CELNET AGUAS CLARAS',
+      )
+      expect(aguasClaras?.envio_fatura).toBe(1)
+      expect(aguasClaras?.totalLinhas).toBe(1)
+    })
   })
 
   describe('executeBatchImport', () => {
