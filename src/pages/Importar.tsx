@@ -380,7 +380,7 @@ export const Importar: React.FC = () => {
         )
       }
 
-      // 1. Save raw individual imported file to imported_files collection BEFORE aggregating/updating consolidated
+      // 1. Gravar histórico individual do arquivo importado em imported_files
       await saveImportedFile({
         storeId,
         storeName: finalStoreName,
@@ -399,77 +399,110 @@ export const Importar: React.FC = () => {
         outros: 0,
       })
 
-      // 2. Save/update consolidated FPD Record (upsert by store + referente)
-      await saveFpdRecord({
-        storeId,
-        referente: refDate,
-        total_linhas: item.parsedData.aggregated.total_linhas,
-        envio_fatura: item.parsedData.aggregated.envio_fatura,
-        pendente: item.parsedData.aggregated.pendente,
-        fatura_paga: item.parsedData.aggregated.fatura_paga,
-        sem_contato: item.parsedData.aggregated.sem_contato,
-        promessa_pagto: item.parsedData.aggregated.promessa_pagto,
-        cancelados: item.parsedData.aggregated.cancelados,
-        nao_tratados: item.parsedData.aggregated.nao_tratados,
-        contato_realizado: item.parsedData.aggregated.contato_realizado,
-        outros: 0,
-      })
-
-      // 3. Save/update Vendor Consolidations from vendor lines
-      // Se vendorLines não veio populado no parsedData (ex.: planilhas sem aba analítica direta ou sem colunas vendedor),
-      // extraímos as linhas de clientes lendo as abas analíticas Móvel/Residencial do próprio arquivo.
-      let vendorLinesToSave: ParsedVendorLine[] = item.parsedData.vendorLines || []
-
-      // 4. Save analytical customer lines in 'movel' and 'residencial' collections
-      // Re-read file with parseAnalyticalXlsxFile to extract full row objects with columns and occurrences
+      // 2. Extrair dados analíticos completos para agrupar estritamente por LOJA DA LINHA
+      let analyticalData = null
       try {
-        const analyticalData = await parseAnalyticalXlsxFile(item.file)
+        analyticalData = await parseAnalyticalXlsxFile(item.file)
+      } catch (analyticalErr: unknown) {
+        console.warn(
+          `[Importar] Aviso ao ler dados analíticos de "${item.file.name}":`,
+          analyticalErr,
+        )
+      }
 
-        // Se vendorLines da etapa 3 estiver vazio, extraímos das abas analíticas lidas
-        if (vendorLinesToSave.length === 0) {
-          const synthesizedLines: ParsedVendorLine[] = []
-          if (analyticalData.movelSheet && analyticalData.movelSheet.rows.length > 0) {
-            for (const r of analyticalData.movelSheet.rows) {
-              const cat = classifyRow([r.ocorrencias || ''])
-              if (cat) {
-                synthesizedLines.push({
-                  vendedor: r.vendedor || 'NÃO INFORMADO',
-                  loja: r.loja || finalStoreName,
-                  status: cat,
-                  quantidade: 1,
-                })
-              }
-            }
-          }
-          if (analyticalData.residencialSheet && analyticalData.residencialSheet.rows.length > 0) {
-            for (const r of analyticalData.residencialSheet.rows) {
-              const cat = classifyRow([r.ocorrencias || ''])
-              if (cat) {
-                synthesizedLines.push({
-                  vendedor: r.vendedor || 'NÃO INFORMADO',
-                  loja: r.loja || finalStoreName,
-                  status: cat,
-                  quantidade: 1,
-                })
-              }
-            }
-          }
-          if (synthesizedLines.length > 0) {
-            vendorLinesToSave = synthesizedLines
-          }
+      // Função auxiliar para resolver ou criar uma loja de forma idempotente e isolando CALL de física
+      const resolveOrCreateStoreRecord = async (rawName: string): Promise<StoreRecord | null> => {
+        const clean = (rawName || '').trim()
+        if (!clean) return null
+        let matched = matchStore(clean, currentStores)
+        if (matched) return matched
+        try {
+          const created = await createStore({ name: clean.toUpperCase() })
+          currentStores = [...currentStores, created]
+          setStores(currentStores)
+          return created
+        } catch {
+          const fresh = await fetchStores()
+          currentStores = fresh.length > 0 ? fresh : currentStores
+          setStores(currentStores)
+          matched = matchStore(clean, currentStores)
+          return matched
         }
+      }
 
-        // 4.1 Móvel rows
+      // Estrutura de agregação de ocorrências por loja
+      type StoreAgg = {
+        storeRecord: StoreRecord | null
+        storeName: string
+        total_linhas: number
+        fatura_paga: number
+        envio_fatura: number
+        promessa_pagto: number
+        sem_contato: number
+        cancelados: number
+        pendente: number
+        contato_realizado: number
+        nao_tratados: number
+        outros: number
+      }
+      const storeAggMap = new Map<string, StoreAgg>()
+
+      const getOrInitStoreAgg = async (rawLojaName: string): Promise<StoreAgg> => {
+        const targetRaw = (rawLojaName || '').trim() || finalStoreName
+        const resolvedStore = await resolveOrCreateStoreRecord(targetRaw)
+        const canonicalName = resolvedStore
+          ? resolvedStore.name.toUpperCase()
+          : targetRaw.toUpperCase()
+        const key = canonicalName
+
+        let existing = storeAggMap.get(key)
+        if (!existing) {
+          existing = {
+            storeRecord: resolvedStore,
+            storeName: canonicalName,
+            total_linhas: 0,
+            fatura_paga: 0,
+            envio_fatura: 0,
+            promessa_pagto: 0,
+            sem_contato: 0,
+            cancelados: 0,
+            pendente: 0,
+            contato_realizado: 0,
+            nao_tratados: 0,
+            outros: 0,
+          }
+          storeAggMap.set(key, existing)
+        }
+        return existing
+      }
+
+      const allVendorLinesToSave: ParsedVendorLine[] = []
+
+      // 3. Processar linhas analíticas de Móvel e Residencial
+      if (analyticalData) {
+        // 3.1 Móvel
         if (analyticalData.movelSheet && analyticalData.movelSheet.rows.length > 0) {
-          const movelBatchData: MovelInsertItem[] = analyticalData.movelSheet.rows.map((r) => {
-            let normalizedLoja = r.loja?.trim() || finalStoreName
-            if (normalizedLoja) {
-              const matched = matchStore(normalizedLoja, currentStores)
-              if (matched) {
-                normalizedLoja = matched.name
-              }
+          const movelBatchData: MovelInsertItem[] = []
+          for (const r of analyticalData.movelSheet.rows) {
+            const rawRowLoja = (r.loja || '').trim() || finalStoreName
+            const resolvedStore = await resolveOrCreateStoreRecord(rawRowLoja)
+            const normalizedLoja = resolvedStore ? resolvedStore.name : rawRowLoja.toUpperCase()
+
+            const cat = classifyRow([r.ocorrencias || ''])
+            if (cat) {
+              const agg = await getOrInitStoreAgg(normalizedLoja)
+              agg.total_linhas++
+              agg[cat]++
+
+              allVendorLinesToSave.push({
+                vendedor: r.vendedor || 'NÃO INFORMADO',
+                loja: normalizedLoja,
+                status: cat,
+                quantidade: 1,
+              })
             }
-            return {
+
+            movelBatchData.push({
               arquivo: item.file.name,
               linha: r.linha,
               loja: normalizedLoja,
@@ -478,69 +511,34 @@ export const Importar: React.FC = () => {
               dados: r.dados,
               data_referencia: refDate,
               ocorrencias: r.ocorrencias,
-            }
-          })
+            })
+          }
           await insertMovelBatch(movelBatchData)
         }
 
-        // 4.2 Residencial rows
+        // 3.2 Residencial
         if (analyticalData.residencialSheet && analyticalData.residencialSheet.rows.length > 0) {
-          const resBatchData: ResidencialInsertItem[] = analyticalData.residencialSheet.rows.map(
-            (r) => {
-              let normalizedLoja = r.loja?.trim() || finalStoreName
-              if (normalizedLoja) {
-                const matched = matchStore(normalizedLoja, currentStores)
-                if (matched) {
-                  normalizedLoja = matched.name
-                }
-              }
-              return {
-                arquivo: item.file.name,
-                linha: r.linha,
+          const resBatchData: ResidencialInsertItem[] = []
+          for (const r of analyticalData.residencialSheet.rows) {
+            const rawRowLoja = (r.loja || '').trim() || finalStoreName
+            const resolvedStore = await resolveOrCreateStoreRecord(rawRowLoja)
+            const normalizedLoja = resolvedStore ? resolvedStore.name : rawRowLoja.toUpperCase()
+
+            const cat = classifyRow([r.ocorrencias || ''])
+            if (cat) {
+              const agg = await getOrInitStoreAgg(normalizedLoja)
+              agg.total_linhas++
+              agg[cat]++
+
+              allVendorLinesToSave.push({
+                vendedor: r.vendedor || 'NÃO INFORMADO',
                 loja: normalizedLoja,
-                vendedor: r.vendedor,
-                cliente: r.cliente,
-                dados: r.dados,
-                data_referencia: refDate,
-                typedFields: r.typedFields,
-                ocorrencias: r.ocorrencias,
-              }
-            },
-          )
-          await insertResidencialBatch(resBatchData)
-        }
-      } catch (analyticalErr: unknown) {
-        console.warn(
-          `[Importar] Aviso ao gravar linhas analíticas em Móvel/Residencial para "${item.file.name}":`,
-          analyticalErr,
-        )
-      }
-
-      // Gravar vendor_consolidations com supervisão resolvida
-      if (vendorLinesToSave.length > 0) {
-        const linesToSave = vendorLinesToSave.map((vl) => ({
-          ...vl,
-          loja: vl.loja || finalStoreName,
-        }))
-        await saveVendorConsolidationsFromLines(linesToSave, refDate, currentStores)
-      }
-
-      // 4. Save analytical customer lines in 'movel' and 'residencial' collections
-      // Re-read file with parseAnalyticalXlsxFile to extract full row objects with columns and occurrences
-      try {
-        const analyticalData = await parseAnalyticalXlsxFile(item.file)
-
-        // 4.1 Móvel rows
-        if (analyticalData.movelSheet && analyticalData.movelSheet.rows.length > 0) {
-          const movelBatchData: MovelInsertItem[] = analyticalData.movelSheet.rows.map((r) => {
-            let normalizedLoja = r.loja?.trim() || finalStoreName
-            if (normalizedLoja) {
-              const matched = matchStore(normalizedLoja, stores)
-              if (matched) {
-                normalizedLoja = matched.name
-              }
+                status: cat,
+                quantidade: 1,
+              })
             }
-            return {
+
+            resBatchData.push({
               arquivo: item.file.name,
               linha: r.linha,
               loja: normalizedLoja,
@@ -548,43 +546,62 @@ export const Importar: React.FC = () => {
               cliente: r.cliente,
               dados: r.dados,
               data_referencia: refDate,
+              typedFields: r.typedFields,
               ocorrencias: r.ocorrencias,
-            }
-          })
-          await insertMovelBatch(movelBatchData)
-        }
-
-        // 4.2 Residencial rows
-        if (analyticalData.residencialSheet && analyticalData.residencialSheet.rows.length > 0) {
-          const resBatchData: ResidencialInsertItem[] = analyticalData.residencialSheet.rows.map(
-            (r) => {
-              let normalizedLoja = r.loja?.trim() || finalStoreName
-              if (normalizedLoja) {
-                const matched = matchStore(normalizedLoja, stores)
-                if (matched) {
-                  normalizedLoja = matched.name
-                }
-              }
-              return {
-                arquivo: item.file.name,
-                linha: r.linha,
-                loja: normalizedLoja,
-                vendedor: r.vendedor,
-                cliente: r.cliente,
-                dados: r.dados,
-                data_referencia: refDate,
-                typedFields: r.typedFields,
-                ocorrencias: r.ocorrencias,
-              }
-            },
-          )
+            })
+          }
           await insertResidencialBatch(resBatchData)
         }
-      } catch (analyticalErr: unknown) {
-        console.warn(
-          `[Importar] Aviso ao gravar linhas analíticas em Móvel/Residencial para "${item.file.name}":`,
-          analyticalErr,
-        )
+      }
+
+      // Se não havia abas analíticas processáveis, fallback para o aggregated padrão da planilha na loja principal
+      if (storeAggMap.size === 0) {
+        const agg = await getOrInitStoreAgg(finalStoreName)
+        agg.total_linhas = item.parsedData.aggregated.total_linhas
+        agg.envio_fatura = item.parsedData.aggregated.envio_fatura
+        agg.pendente = item.parsedData.aggregated.pendente
+        agg.fatura_paga = item.parsedData.aggregated.fatura_paga
+        agg.sem_contato = item.parsedData.aggregated.sem_contato
+        agg.promessa_pagto = item.parsedData.aggregated.promessa_pagto
+        agg.cancelados = item.parsedData.aggregated.cancelados
+        agg.nao_tratados = item.parsedData.aggregated.nao_tratados
+        agg.contato_realizado = item.parsedData.aggregated.contato_realizado
+        agg.outros = 0
+
+        if (item.parsedData.vendorLines && item.parsedData.vendorLines.length > 0) {
+          for (const vl of item.parsedData.vendorLines) {
+            allVendorLinesToSave.push({
+              ...vl,
+              loja: vl.loja || finalStoreName,
+            })
+          }
+        }
+      }
+
+      // 4. Salvar fpd_records para CADA LOJA distinta encontrada nas linhas
+      for (const [, agg] of storeAggMap.entries()) {
+        const sId = agg.storeRecord ? agg.storeRecord.id : storeId
+        if (!sId) continue
+
+        await saveFpdRecord({
+          storeId: sId,
+          referente: refDate,
+          total_linhas: agg.total_linhas,
+          envio_fatura: agg.envio_fatura,
+          pendente: agg.pendente,
+          fatura_paga: agg.fatura_paga,
+          sem_contato: agg.sem_contato,
+          promessa_pagto: agg.promessa_pagto,
+          cancelados: agg.cancelados,
+          nao_tratados: agg.nao_tratados,
+          contato_realizado: agg.contato_realizado,
+          outros: agg.outros,
+        })
+      }
+
+      // 5. Salvar vendor_consolidations para cada vendedor/loja
+      if (allVendorLinesToSave.length > 0) {
+        await saveVendorConsolidationsFromLines(allVendorLinesToSave, refDate, currentStores)
       }
 
       setFileQueue((prev) => prev.map((q) => (q.id === item.id ? { ...q, status: 'done' } : q)))
