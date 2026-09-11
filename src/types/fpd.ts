@@ -37,7 +37,6 @@ export const OCORRENCIAS_OPTIONS = [
   'Cancelados',
   'Contato Realizado',
 ] as const
-
 export type OcorrenciaType = (typeof OCORRENCIAS_OPTIONS)[number]
 
 export interface MovelRecord extends RecordModel {

@@ -98,7 +98,6 @@ export function exportVendorsToXlsx(
     { wch: 15 }, // Pendente
     { wch: 18 }, // Contato Realizado
   ]
-
   const wb = XLSX.utils.book_new()
   const sheetName = options?.sheetName || 'Ranking_Vendedores'
   XLSX.utils.book_append_sheet(wb, ws, sheetName)
@@ -194,7 +193,6 @@ export function exportConsolidatedToXlsx(
     { wch: 15 }, // Pendente
     { wch: 18 }, // Contato Realizado
   ]
-
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Planilha1')
 
@@ -424,13 +422,13 @@ export function exportImportedFilesToXlsx(
     'DATA REF.',
     'TOTAL LINHAS',
     'Fatura(s) Paga(s)',
+    'Não Tratados',
     'Enviado Fatura(s)',
     'Promessa de Pagto.',
     'Sem Contato',
     'Cancelados',
     'Pendente',
     'Contato Realizado',
-    'Não Tratados',
   ]
 
   const dataRows = files.map((f) => {
@@ -446,13 +444,13 @@ export function exportImportedFilesToXlsx(
       f.reference_date || '',
       f.total_linhas || 0,
       f.fatura_paga || 0,
+      f.nao_tratados || 0,
       enviado,
       f.promessa_pagto || 0,
       f.sem_contato || 0,
       f.cancelados || 0,
       f.pendente || 0,
       f.contato_realizado || 0,
-      f.nao_tratados || 0,
     ]
   })
 
@@ -466,13 +464,13 @@ export function exportImportedFilesToXlsx(
       '',
       totals.totalLinhas,
       totals.faturaPaga,
+      totals.naoTratados,
       totals.envioFatura,
       totals.promessaPagto,
       totals.semContato,
       totals.cancelados,
       totals.pendente,
       totals.contatoRealizado,
-      totals.naoTratados,
     ]
     wsData = [...wsData, totalsRow]
   }
@@ -486,13 +484,13 @@ export function exportImportedFilesToXlsx(
     { wch: 15 }, // DATA REF
     { wch: 15 }, // TOTAL LINHAS
     { wch: 18 }, // Fatura(s) Paga(s)
+    { wch: 16 }, // Não Tratados
     { wch: 20 }, // Enviado Fatura(s)
     { wch: 20 }, // Promessa de Pagto.
     { wch: 16 }, // Sem Contato
     { wch: 15 }, // Cancelados
     { wch: 15 }, // Pendente
     { wch: 18 }, // Contato Realizado
-    { wch: 16 }, // Não Tratados
   ]
 
   const wb = XLSX.utils.book_new()
