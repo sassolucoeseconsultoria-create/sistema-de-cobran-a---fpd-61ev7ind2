@@ -39,13 +39,13 @@ export function exportVendorsToXlsx(
     'SUPERVISÃO',
     'TOTAL LINHAS',
     'Fatura(s) Paga(s)',
+    'Não Tratados',
     'Enviado Fatura(s)',
     'Promessa de Pagto.',
     'Sem Contato',
     'Cancelados',
     'Pendente',
     'Contato Realizado',
-    'Não Tratados',
   ]
 
   const dataRows = rows.map((r, idx) => [
@@ -55,13 +55,13 @@ export function exportVendorsToXlsx(
     r.supervisao || '',
     r.totalLinhas,
     r.faturaPaga,
+    r.naoTratados,
     r.envioFatura,
     r.promessaPagto,
     r.semContato,
     r.cancelados,
     r.pendente,
     r.contatoRealizado,
-    r.naoTratados,
   ])
 
   const totalsRow = [
@@ -71,13 +71,13 @@ export function exportVendorsToXlsx(
     '',
     totals.totalLinhas,
     totals.faturaPaga,
+    totals.naoTratados,
     totals.envioFatura,
     totals.promessaPagto,
     totals.semContato,
     totals.cancelados,
     totals.pendente,
     totals.contatoRealizado,
-    totals.naoTratados,
   ]
 
   const wsData = rows.length > 0 ? [headers, ...dataRows, totalsRow] : [headers, ...dataRows]
@@ -90,13 +90,13 @@ export function exportVendorsToXlsx(
     { wch: 20 }, // SUPERVISAO
     { wch: 15 }, // TOTAL LINHAS
     { wch: 18 }, // Fatura(s) Paga(s)
+    { wch: 16 }, // Não Tratados
     { wch: 20 }, // Enviado Fatura(s)
     { wch: 20 }, // Promessa de Pagto.
     { wch: 16 }, // Sem Contato
     { wch: 15 }, // Cancelados
     { wch: 15 }, // Pendente
     { wch: 18 }, // Contato Realizado
-    { wch: 16 }, // Não Tratados
   ]
 
   const wb = XLSX.utils.book_new()
@@ -135,13 +135,13 @@ export function exportConsolidatedToXlsx(
     'SUPERVISÃO',
     'TOTAL LINHAS',
     'Fatura(s) Paga(s)',
+    'Não Tratados',
     'Enviado Fatura(s)',
     'Promessa de Pagto.',
     'Sem Contato',
     'Cancelados',
     'Pendente',
     'Contato Realizado',
-    'Não Tratados',
   ]
 
   const dataRows = rows.map((r) => [
@@ -150,13 +150,13 @@ export function exportConsolidatedToXlsx(
     r.supervisao || '',
     r.hasData ? r.totalLinhas : '',
     r.hasData ? r.faturaPaga : '',
+    r.hasData ? r.naoTratados : '',
     r.hasData ? r.envioFatura : '',
     r.hasData ? r.promessaPagto : '',
     r.hasData ? r.semContato : '',
     r.hasData ? r.cancelados : '',
     r.hasData ? r.pendente : '',
     r.hasData ? r.contatoRealizado : '',
-    r.hasData ? r.naoTratados : '',
   ])
 
   // Summary totals row
@@ -166,13 +166,13 @@ export function exportConsolidatedToXlsx(
     '',
     totals.totalLinhas,
     totals.faturaPaga,
+    totals.naoTratados,
     totals.envioFatura,
     totals.promessaPagto,
     totals.semContato,
     totals.cancelados,
     totals.pendente,
     totals.contatoRealizado,
-    totals.naoTratados,
   ]
 
   const wsData = [headers, ...dataRows, totalsRow]
@@ -186,13 +186,13 @@ export function exportConsolidatedToXlsx(
     { wch: 18 }, // SUPERVISAO
     { wch: 15 }, // TOTAL LINHAS
     { wch: 18 }, // Fatura(s) Paga(s)
+    { wch: 16 }, // Não Tratados
     { wch: 20 }, // Enviado Fatura(s)
     { wch: 20 }, // Promessa de Pagto.
     { wch: 16 }, // Sem Contato
     { wch: 15 }, // Cancelados
     { wch: 15 }, // Pendente
     { wch: 18 }, // Contato Realizado
-    { wch: 16 }, // Não Tratados
   ]
 
   const wb = XLSX.utils.book_new()
@@ -246,6 +246,9 @@ export function exportConsolidatedComparisonToXlsx(
     `Fatura Paga (${pLabel})`,
     `Fatura Paga (${cLabel})`,
     'VAR. Fatura Paga',
+    `Não Tratados (${pLabel})`,
+    `Não Tratados (${cLabel})`,
+    'VAR. Não Tratados',
     `Env. Fatura (${pLabel})`,
     `Env. Fatura (${cLabel})`,
     'VAR. Env. Fatura',
@@ -264,9 +267,6 @@ export function exportConsolidatedComparisonToXlsx(
     `Contato Realizado (${pLabel})`,
     `Contato Realizado (${cLabel})`,
     'VAR. Contato Realizado',
-    `Não Tratados (${pLabel})`,
-    `Não Tratados (${cLabel})`,
-    'VAR. Não Tratados',
   ]
 
   const formatDiffStr = (diff: number) => {
@@ -290,6 +290,9 @@ export function exportConsolidatedComparisonToXlsx(
       r.hasDataPrimary ? p.faturaPaga : 0,
       r.hasDataCompared ? c.faturaPaga : 0,
       formatDiffStr(d.faturaPaga),
+      r.hasDataPrimary ? p.naoTratados : 0,
+      r.hasDataCompared ? c.naoTratados : 0,
+      formatDiffStr(d.naoTratados),
       r.hasDataPrimary ? p.envioFatura : 0,
       r.hasDataCompared ? c.envioFatura : 0,
       formatDiffStr(d.envioFatura),
@@ -308,9 +311,6 @@ export function exportConsolidatedComparisonToXlsx(
       r.hasDataPrimary ? p.contatoRealizado : 0,
       r.hasDataCompared ? c.contatoRealizado : 0,
       formatDiffStr(d.contatoRealizado),
-      r.hasDataPrimary ? p.naoTratados : 0,
-      r.hasDataCompared ? c.naoTratados : 0,
-      formatDiffStr(d.naoTratados),
     ]
   })
 
@@ -324,6 +324,9 @@ export function exportConsolidatedComparisonToXlsx(
     totalsPrimary.faturaPaga,
     totalsCompared.faturaPaga,
     formatDiffStr(totalsPrimary.faturaPaga - totalsCompared.faturaPaga),
+    totalsPrimary.naoTratados,
+    totalsCompared.naoTratados,
+    formatDiffStr(totalsPrimary.naoTratados - totalsCompared.naoTratados),
     totalsPrimary.envioFatura,
     totalsCompared.envioFatura,
     formatDiffStr(totalsPrimary.envioFatura - totalsCompared.envioFatura),
@@ -342,9 +345,6 @@ export function exportConsolidatedComparisonToXlsx(
     totalsPrimary.contatoRealizado,
     totalsCompared.contatoRealizado,
     formatDiffStr(totalsPrimary.contatoRealizado - totalsCompared.contatoRealizado),
-    totalsPrimary.naoTratados,
-    totalsCompared.naoTratados,
-    formatDiffStr(totalsPrimary.naoTratados - totalsCompared.naoTratados),
   ]
 
   const wsData = [headers, ...dataRows, totalsRow]
@@ -361,6 +361,10 @@ export function exportConsolidatedComparisonToXlsx(
     // Fatura Paga
     { wch: 18 },
     { wch: 18 },
+    { wch: 16 },
+    // Nao Tratados
+    { wch: 16 },
+    { wch: 16 },
     { wch: 16 },
     // Envio Fatura
     { wch: 18 },
@@ -386,10 +390,6 @@ export function exportConsolidatedComparisonToXlsx(
     { wch: 18 },
     { wch: 18 },
     { wch: 18 },
-    // Nao Tratados
-    { wch: 16 },
-    { wch: 16 },
-    { wch: 16 },
   ]
 
   const wb = XLSX.utils.book_new()

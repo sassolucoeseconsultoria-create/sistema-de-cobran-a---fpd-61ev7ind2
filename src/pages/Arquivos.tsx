@@ -1515,54 +1515,54 @@ export const Arquivos: React.FC = () => {
                         'text-[#67e8f9]',
                         'fatura_paga',
                       )}
-                      {/* F: 2. Enviado Fatura(s) */}
+                      {/* F: 2. Não Tratados */}
+                      {renderStatusFooterCell(
+                        totals.naoTratados,
+                        comparedTotals.naoTratados,
+                        'text-[#fdba74]',
+                        'nao_tratados',
+                      )}
+                      {/* G: 3. Enviado Fatura(s) */}
                       {renderStatusFooterCell(
                         totals.envioFatura,
                         comparedTotals.envioFatura,
                         'text-[#4ade80]',
                         'envio_fatura',
                       )}
-                      {/* G: 3. Promessa de Pagto. */}
+                      {/* H: 4. Promessa de Pagto. */}
                       {renderStatusFooterCell(
                         totals.promessaPagto,
                         comparedTotals.promessaPagto,
                         'text-[#d8b4fe]',
                         'promessa_pagto',
                       )}
-                      {/* H: 4. Sem Contato */}
+                      {/* I: 5. Sem Contato */}
                       {renderStatusFooterCell(
                         totals.semContato,
                         comparedTotals.semContato,
                         'text-[#cbd5e1]',
                         'sem_contato',
                       )}
-                      {/* I: 5. Cancelados */}
+                      {/* J: 6. Cancelados */}
                       {renderStatusFooterCell(
                         totals.cancelados,
                         comparedTotals.cancelados,
                         'text-slate-300',
                         'cancelados',
                       )}
-                      {/* J: 6. Pendente */}
+                      {/* K: 7. Pendente */}
                       {renderStatusFooterCell(
                         totals.pendente,
                         comparedTotals.pendente,
                         'text-[#fca5a5]',
                         'pendente',
                       )}
-                      {/* K: 7. Contato Realizado */}
+                      {/* L: 8. Contato Realizado */}
                       {renderStatusFooterCell(
                         totals.contatoRealizado,
                         comparedTotals.contatoRealizado,
                         'text-[#5eead4]',
                         'contato_realizado',
-                      )}
-                      {/* L: 8. Não Tratados */}
-                      {renderStatusFooterCell(
-                        totals.naoTratados,
-                        comparedTotals.naoTratados,
-                        'text-[#fdba74]',
-                        'nao_tratados',
                       )}
                     </>
                   )

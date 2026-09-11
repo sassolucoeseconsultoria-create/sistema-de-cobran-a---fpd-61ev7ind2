@@ -29,8 +29,8 @@ export interface AnalyticRowRecord extends RecordModel {
 export type RelacionamentoAba = 'Móvel' | 'Residencial'
 
 export const OCORRENCIAS_OPTIONS = [
-  'Não Tratados',
   'Fatura(s) Paga(s)',
+  'Não Tratados',
   'Enviado Fatura(s)',
   'Sem Contato',
   'Promessa de Pagto.',
@@ -316,6 +316,14 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
     borderTint: 'rgba(8, 145, 178, 0.25)',
   },
   {
+    key: 'nao_tratados',
+    label: 'Não Tratados',
+    color: '#EA580C',
+    textColor: '#C2410C',
+    bgTint: 'rgba(234, 88, 12, 0.08)',
+    borderTint: 'rgba(234, 88, 12, 0.25)',
+  },
+  {
     key: 'envio_fatura',
     label: 'Enviado Fatura(s)',
     color: '#16A34A',
@@ -362,13 +370,5 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
     textColor: '#0F766E',
     bgTint: 'rgba(13, 148, 136, 0.08)',
     borderTint: 'rgba(13, 148, 136, 0.25)',
-  },
-  {
-    key: 'nao_tratados',
-    label: 'Não Tratados',
-    color: '#EA580C',
-    textColor: '#C2410C',
-    bgTint: 'rgba(234, 88, 12, 0.08)',
-    borderTint: 'rgba(234, 88, 12, 0.25)',
   },
 ]
