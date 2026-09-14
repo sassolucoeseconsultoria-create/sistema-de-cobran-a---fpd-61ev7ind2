@@ -31,6 +31,7 @@ export type RelacionamentoAba = 'Móvel' | 'Residencial'
 export const OCORRENCIAS_OPTIONS = [
   'Fatura(s) Paga(s)',
   'Não Tratados',
+  'Pendente',
   'Enviado Fatura(s)',
   'Sem Contato',
   'Promessa de Pagto.',
@@ -323,6 +324,14 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
     borderTint: 'rgba(234, 88, 12, 0.25)',
   },
   {
+    key: 'pendente',
+    label: 'Pendente',
+    color: '#DC2626',
+    textColor: '#B91C1C',
+    bgTint: 'rgba(220, 38, 38, 0.08)',
+    borderTint: 'rgba(220, 38, 38, 0.25)',
+  },
+  {
     key: 'envio_fatura',
     label: 'Enviado Fatura(s)',
     color: '#16A34A',
@@ -353,14 +362,6 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
     textColor: '#0F172A',
     bgTint: 'rgba(15, 23, 42, 0.08)',
     borderTint: 'rgba(15, 23, 42, 0.25)',
-  },
-  {
-    key: 'pendente',
-    label: 'Pendente',
-    color: '#DC2626',
-    textColor: '#B91C1C',
-    bgTint: 'rgba(220, 38, 38, 0.08)',
-    borderTint: 'rgba(220, 38, 38, 0.25)',
   },
   {
     key: 'contato_realizado',

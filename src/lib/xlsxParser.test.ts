@@ -777,31 +777,30 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     const { FPD_STATUSES } = await import('@/types/fpd')
     const expectedKeys = [
       'fatura_paga',
+      'nao_tratados',
+      'pendente',
       'envio_fatura',
       'promessa_pagto',
       'sem_contato',
       'cancelados',
-      'pendente',
       'contato_realizado',
-      'nao_tratados',
     ]
 
     const expectedLabels = [
       'Fatura(s) Paga(s)',
+      'Não Tratados',
+      'Pendente',
       'Enviado Fatura(s)',
       'Promessa de Pagto.',
       'Sem Contato',
       'Cancelados',
-      'Pendente',
       'Contato Realizado',
-      'Não Tratados',
     ]
 
     expect(FPD_STATUSES.map((s) => s.key)).toEqual(expectedKeys)
     expect(FPD_STATUSES.map((s) => s.label)).toEqual(expectedLabels)
     expect(FPD_STATUSES).toHaveLength(8)
   })
-
   it('regression test: cell with text outside official categories must record original text faithfully', async () => {
     const { getCanonicalCategoryOrRaw } = await import('@/lib/xlsxParser')
     const { parseAnalyticalWorksheet } = await import('@/lib/analyticalImportParser')

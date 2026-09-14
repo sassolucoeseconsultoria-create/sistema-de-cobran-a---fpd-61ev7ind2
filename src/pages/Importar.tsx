@@ -1810,11 +1810,11 @@ export const Importar: React.FC = () => {
                             <th className="p-2">Loja (Planilha ➔ Canônica)</th>
                             <th className="p-2 text-right">Total</th>
                             <th className="p-2 text-right text-[#0891B2]">Pagas</th>
+                            <th className="p-2 text-right text-[#EA580C]">Não Tratados</th>
+                            <th className="p-2 text-right text-[#DC2626]">Pendente</th>
                             <th className="p-2 text-right text-[#16A34A]">Enviado</th>
                             <th className="p-2 text-right text-[#9333EA]">Promessa</th>
                             <th className="p-2 text-right text-[#64748B]">Sem Contato</th>
-                            <th className="p-2 text-right text-[#DC2626]">Pendente</th>
-                            <th className="p-2 text-right text-[#EA580C]">Não Tratados</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#E3E9F2]">
@@ -1836,6 +1836,12 @@ export const Importar: React.FC = () => {
                               <td className="p-2 text-right font-semibold text-[#0891B2]">
                                 {s.fatura_paga}
                               </td>
+                              <td className="p-2 text-right font-semibold text-[#EA580C]">
+                                {s.nao_tratados}
+                              </td>
+                              <td className="p-2 text-right font-semibold text-[#DC2626]">
+                                {s.pendente}
+                              </td>
                               <td className="p-2 text-right font-semibold text-[#16A34A]">
                                 {s.envio_fatura}
                               </td>
@@ -1844,12 +1850,6 @@ export const Importar: React.FC = () => {
                               </td>
                               <td className="p-2 text-right font-semibold text-[#64748B]">
                                 {s.sem_contato}
-                              </td>
-                              <td className="p-2 text-right font-semibold text-[#DC2626]">
-                                {s.pendente}
-                              </td>
-                              <td className="p-2 text-right font-semibold text-[#EA580C]">
-                                {s.nao_tratados}
                               </td>
                             </tr>
                           ))}

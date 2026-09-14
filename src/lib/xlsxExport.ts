@@ -40,11 +40,11 @@ export function exportVendorsToXlsx(
     'TOTAL LINHAS',
     'Fatura(s) Paga(s)',
     'Não Tratados',
+    'Pendente',
     'Enviado Fatura(s)',
     'Promessa de Pagto.',
     'Sem Contato',
     'Cancelados',
-    'Pendente',
     'Contato Realizado',
   ]
 
@@ -56,11 +56,11 @@ export function exportVendorsToXlsx(
     r.totalLinhas,
     r.faturaPaga,
     r.naoTratados,
+    r.pendente,
     r.envioFatura,
     r.promessaPagto,
     r.semContato,
     r.cancelados,
-    r.pendente,
     r.contatoRealizado,
   ])
 
@@ -72,11 +72,11 @@ export function exportVendorsToXlsx(
     totals.totalLinhas,
     totals.faturaPaga,
     totals.naoTratados,
+    totals.pendente,
     totals.envioFatura,
     totals.promessaPagto,
     totals.semContato,
     totals.cancelados,
-    totals.pendente,
     totals.contatoRealizado,
   ]
 
@@ -91,11 +91,11 @@ export function exportVendorsToXlsx(
     { wch: 15 }, // TOTAL LINHAS
     { wch: 18 }, // Fatura(s) Paga(s)
     { wch: 16 }, // Não Tratados
+    { wch: 15 }, // Pendente
     { wch: 20 }, // Enviado Fatura(s)
     { wch: 20 }, // Promessa de Pagto.
     { wch: 16 }, // Sem Contato
     { wch: 15 }, // Cancelados
-    { wch: 15 }, // Pendente
     { wch: 18 }, // Contato Realizado
   ]
   const wb = XLSX.utils.book_new()
@@ -135,11 +135,11 @@ export function exportConsolidatedToXlsx(
     'TOTAL LINHAS',
     'Fatura(s) Paga(s)',
     'Não Tratados',
+    'Pendente',
     'Enviado Fatura(s)',
     'Promessa de Pagto.',
     'Sem Contato',
     'Cancelados',
-    'Pendente',
     'Contato Realizado',
   ]
 
@@ -150,11 +150,11 @@ export function exportConsolidatedToXlsx(
     r.hasData ? r.totalLinhas : '',
     r.hasData ? r.faturaPaga : '',
     r.hasData ? r.naoTratados : '',
+    r.hasData ? r.pendente : '',
     r.hasData ? r.envioFatura : '',
     r.hasData ? r.promessaPagto : '',
     r.hasData ? r.semContato : '',
     r.hasData ? r.cancelados : '',
-    r.hasData ? r.pendente : '',
     r.hasData ? r.contatoRealizado : '',
   ])
 
@@ -166,11 +166,11 @@ export function exportConsolidatedToXlsx(
     totals.totalLinhas,
     totals.faturaPaga,
     totals.naoTratados,
+    totals.pendente,
     totals.envioFatura,
     totals.promessaPagto,
     totals.semContato,
     totals.cancelados,
-    totals.pendente,
     totals.contatoRealizado,
   ]
 
@@ -186,11 +186,11 @@ export function exportConsolidatedToXlsx(
     { wch: 15 }, // TOTAL LINHAS
     { wch: 18 }, // Fatura(s) Paga(s)
     { wch: 16 }, // Não Tratados
+    { wch: 15 }, // Pendente
     { wch: 20 }, // Enviado Fatura(s)
     { wch: 20 }, // Promessa de Pagto.
     { wch: 16 }, // Sem Contato
     { wch: 15 }, // Cancelados
-    { wch: 15 }, // Pendente
     { wch: 18 }, // Contato Realizado
   ]
   const wb = XLSX.utils.book_new()
@@ -247,6 +247,9 @@ export function exportConsolidatedComparisonToXlsx(
     `Não Tratados (${pLabel})`,
     `Não Tratados (${cLabel})`,
     'VAR. Não Tratados',
+    `Pendente (${pLabel})`,
+    `Pendente (${cLabel})`,
+    'VAR. Pendente',
     `Env. Fatura (${pLabel})`,
     `Env. Fatura (${cLabel})`,
     'VAR. Env. Fatura',
@@ -259,9 +262,6 @@ export function exportConsolidatedComparisonToXlsx(
     `Cancelados (${pLabel})`,
     `Cancelados (${cLabel})`,
     'VAR. Cancelados',
-    `Pendente (${pLabel})`,
-    `Pendente (${cLabel})`,
-    'VAR. Pendente',
     `Contato Realizado (${pLabel})`,
     `Contato Realizado (${cLabel})`,
     'VAR. Contato Realizado',
@@ -291,6 +291,9 @@ export function exportConsolidatedComparisonToXlsx(
       r.hasDataPrimary ? p.naoTratados : 0,
       r.hasDataCompared ? c.naoTratados : 0,
       formatDiffStr(d.naoTratados),
+      r.hasDataPrimary ? p.pendente : 0,
+      r.hasDataCompared ? c.pendente : 0,
+      formatDiffStr(d.pendente),
       r.hasDataPrimary ? p.envioFatura : 0,
       r.hasDataCompared ? c.envioFatura : 0,
       formatDiffStr(d.envioFatura),
@@ -303,9 +306,6 @@ export function exportConsolidatedComparisonToXlsx(
       r.hasDataPrimary ? p.cancelados : 0,
       r.hasDataCompared ? c.cancelados : 0,
       formatDiffStr(d.cancelados),
-      r.hasDataPrimary ? p.pendente : 0,
-      r.hasDataCompared ? c.pendente : 0,
-      formatDiffStr(d.pendente),
       r.hasDataPrimary ? p.contatoRealizado : 0,
       r.hasDataCompared ? c.contatoRealizado : 0,
       formatDiffStr(d.contatoRealizado),
@@ -325,6 +325,9 @@ export function exportConsolidatedComparisonToXlsx(
     totalsPrimary.naoTratados,
     totalsCompared.naoTratados,
     formatDiffStr(totalsPrimary.naoTratados - totalsCompared.naoTratados),
+    totalsPrimary.pendente,
+    totalsCompared.pendente,
+    formatDiffStr(totalsPrimary.pendente - totalsCompared.pendente),
     totalsPrimary.envioFatura,
     totalsCompared.envioFatura,
     formatDiffStr(totalsPrimary.envioFatura - totalsCompared.envioFatura),
@@ -337,9 +340,6 @@ export function exportConsolidatedComparisonToXlsx(
     totalsPrimary.cancelados,
     totalsCompared.cancelados,
     formatDiffStr(totalsPrimary.cancelados - totalsCompared.cancelados),
-    totalsPrimary.pendente,
-    totalsCompared.pendente,
-    formatDiffStr(totalsPrimary.pendente - totalsCompared.pendente),
     totalsPrimary.contatoRealizado,
     totalsCompared.contatoRealizado,
     formatDiffStr(totalsPrimary.contatoRealizado - totalsCompared.contatoRealizado),
@@ -364,6 +364,10 @@ export function exportConsolidatedComparisonToXlsx(
     { wch: 16 },
     { wch: 16 },
     { wch: 16 },
+    // Pendente
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 16 },
     // Envio Fatura
     { wch: 18 },
     { wch: 18 },
@@ -380,16 +384,11 @@ export function exportConsolidatedComparisonToXlsx(
     { wch: 16 },
     { wch: 16 },
     { wch: 16 },
-    // Pendente
-    { wch: 16 },
-    { wch: 16 },
-    { wch: 16 },
     // Contato Realizado
     { wch: 18 },
     { wch: 18 },
     { wch: 18 },
   ]
-
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Comparativo')
 
@@ -423,11 +422,11 @@ export function exportImportedFilesToXlsx(
     'TOTAL LINHAS',
     'Fatura(s) Paga(s)',
     'Não Tratados',
+    'Pendente',
     'Enviado Fatura(s)',
     'Promessa de Pagto.',
     'Sem Contato',
     'Cancelados',
-    'Pendente',
     'Contato Realizado',
   ]
 
@@ -445,11 +444,11 @@ export function exportImportedFilesToXlsx(
       f.total_linhas || 0,
       f.fatura_paga || 0,
       f.nao_tratados || 0,
+      f.pendente || 0,
       enviado,
       f.promessa_pagto || 0,
       f.sem_contato || 0,
       f.cancelados || 0,
-      f.pendente || 0,
       f.contato_realizado || 0,
     ]
   })
@@ -465,11 +464,11 @@ export function exportImportedFilesToXlsx(
       totals.totalLinhas,
       totals.faturaPaga,
       totals.naoTratados,
+      totals.pendente,
       totals.envioFatura,
       totals.promessaPagto,
       totals.semContato,
       totals.cancelados,
-      totals.pendente,
       totals.contatoRealizado,
     ]
     wsData = [...wsData, totalsRow]
@@ -485,14 +484,13 @@ export function exportImportedFilesToXlsx(
     { wch: 15 }, // TOTAL LINHAS
     { wch: 18 }, // Fatura(s) Paga(s)
     { wch: 16 }, // Não Tratados
+    { wch: 15 }, // Pendente
     { wch: 20 }, // Enviado Fatura(s)
     { wch: 20 }, // Promessa de Pagto.
     { wch: 16 }, // Sem Contato
     { wch: 15 }, // Cancelados
-    { wch: 15 }, // Pendente
     { wch: 18 }, // Contato Realizado
   ]
-
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Arquivos_Importados')
 

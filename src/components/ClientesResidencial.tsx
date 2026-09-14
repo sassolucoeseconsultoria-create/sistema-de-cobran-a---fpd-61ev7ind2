@@ -842,6 +842,8 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
                                 'h-8 text-xs bg-white border-[#E3E9F2] focus:border-[#0E9F8A] transition-all font-medium',
                                 edit.ocorrencias === 'Não Tratados' &&
                                   'text-[#EA580C] bg-orange-50/40 border-orange-200',
+                                edit.ocorrencias === 'Pendente' &&
+                                  'text-[#DC2626] bg-red-50/40 border-red-200',
                                 edit.ocorrencias === 'Fatura(s) Paga(s)' &&
                                   'text-[#0891B2] bg-cyan-50/40 border-cyan-200',
                                 edit.ocorrencias === 'Enviado Fatura(s)' &&

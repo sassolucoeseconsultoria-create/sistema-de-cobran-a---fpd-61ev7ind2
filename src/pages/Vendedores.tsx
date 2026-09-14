@@ -1102,25 +1102,25 @@ export const Vendedores: React.FC = () => {
                 <td className="px-2.5 py-3 text-center text-[#fdba74] tabular-nums border-r border-[#1e456f]">
                   {animatedNaoTratados.toLocaleString('pt-BR')}
                 </td>
-                {/* G: 3. Enviado Fatura(s) */}
+                {/* G: 3. Pendente */}
+                <td className="px-2.5 py-3 text-center text-[#fca5a5] tabular-nums border-r border-[#1e456f]">
+                  {animatedPendente.toLocaleString('pt-BR')}
+                </td>
+                {/* H: 4. Enviado Fatura(s) */}
                 <td className="px-2.5 py-3 text-center text-[#4ade80] tabular-nums border-r border-[#1e456f]">
                   {animatedEnvioFatura.toLocaleString('pt-BR')}
                 </td>
-                {/* H: 4. Promessa de Pagto. */}
+                {/* I: 5. Promessa de Pagto. */}
                 <td className="px-2.5 py-3 text-center text-[#d8b4fe] tabular-nums border-r border-[#1e456f]">
                   {animatedPromessaPagto.toLocaleString('pt-BR')}
                 </td>
-                {/* I: 5. Sem Contato */}
+                {/* J: 6. Sem Contato */}
                 <td className="px-2.5 py-3 text-center text-[#cbd5e1] tabular-nums border-r border-[#1e456f]">
                   {animatedSemContato.toLocaleString('pt-BR')}
                 </td>
-                {/* J: 6. Cancelados */}
+                {/* K: 7. Cancelados */}
                 <td className="px-2.5 py-3 text-center text-slate-300 tabular-nums border-r border-[#1e456f]">
                   {animatedCancelados.toLocaleString('pt-BR')}
-                </td>
-                {/* K: 7. Pendente */}
-                <td className="px-2.5 py-3 text-center text-[#fca5a5] tabular-nums border-r border-[#1e456f]">
-                  {animatedPendente.toLocaleString('pt-BR')}
                 </td>
                 {/* L: 8. Contato Realizado */}
                 <td className="px-2.5 py-3 text-center text-[#5eead4] tabular-nums border-r border-[#1e456f]">

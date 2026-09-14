@@ -1522,40 +1522,40 @@ export const Arquivos: React.FC = () => {
                         'text-[#fdba74]',
                         'nao_tratados',
                       )}
-                      {/* G: 3. Enviado Fatura(s) */}
+                      {/* G: 3. Pendente */}
+                      {renderStatusFooterCell(
+                        totals.pendente,
+                        comparedTotals.pendente,
+                        'text-[#fca5a5]',
+                        'pendente',
+                      )}
+                      {/* H: 4. Enviado Fatura(s) */}
                       {renderStatusFooterCell(
                         totals.envioFatura,
                         comparedTotals.envioFatura,
                         'text-[#4ade80]',
                         'envio_fatura',
                       )}
-                      {/* H: 4. Promessa de Pagto. */}
+                      {/* I: 5. Promessa de Pagto. */}
                       {renderStatusFooterCell(
                         totals.promessaPagto,
                         comparedTotals.promessaPagto,
                         'text-[#d8b4fe]',
                         'promessa_pagto',
                       )}
-                      {/* I: 5. Sem Contato */}
+                      {/* J: 6. Sem Contato */}
                       {renderStatusFooterCell(
                         totals.semContato,
                         comparedTotals.semContato,
                         'text-[#cbd5e1]',
                         'sem_contato',
                       )}
-                      {/* J: 6. Cancelados */}
+                      {/* K: 7. Cancelados */}
                       {renderStatusFooterCell(
                         totals.cancelados,
                         comparedTotals.cancelados,
                         'text-slate-300',
                         'cancelados',
-                      )}
-                      {/* K: 7. Pendente */}
-                      {renderStatusFooterCell(
-                        totals.pendente,
-                        comparedTotals.pendente,
-                        'text-[#fca5a5]',
-                        'pendente',
                       )}
                       {/* L: 8. Contato Realizado */}
                       {renderStatusFooterCell(
