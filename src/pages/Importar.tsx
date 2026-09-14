@@ -851,10 +851,19 @@ export const Importar: React.FC = () => {
         description: `${result.storesCount} loja(s) processadas, ${result.totalAnalyticalInserted} registros analíticos gravados e ranking de vendedores atualizado.`,
       })
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const errorStr = err instanceof Error ? err.message : String(err)
+      const is429 =
+        errorStr.toLowerCase().includes('too many requests') ||
+        errorStr.toLowerCase().includes('rate limit') ||
+        (err as { status?: number })?.status === 429
+
+      const friendlyMsg = is429
+        ? 'Importação mais lenta por limite de requisições: aguarde, o processo continua automaticamente.'
+        : errorStr || 'Ocorreu um erro ao salvar os registros.'
+
       toast({
         title: 'Erro na importação em lote',
-        description: msg || 'Ocorreu um erro ao salvar os registros.',
+        description: friendlyMsg,
         variant: 'destructive',
       })
     } finally {

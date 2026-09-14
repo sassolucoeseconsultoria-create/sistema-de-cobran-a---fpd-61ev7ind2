@@ -1,4 +1,5 @@
 import pb from '@/lib/pocketbase/client'
+import { executeWithRateLimitRetry, sleep } from '@/lib/pocketbase/rateLimiter'
 import type {
   StoreRecord,
   FpdRecord,
@@ -8,9 +9,12 @@ import type {
 } from '@/types/fpd'
 
 export async function fetchStores(): Promise<StoreRecord[]> {
-  return await pb.collection('stores').getFullList<StoreRecord>({
-    sort: 'name',
-  })
+  return await executeWithRateLimitRetry(() =>
+    pb.collection('stores').getFullList<StoreRecord>({
+      sort: 'name',
+      requestKey: null,
+    }),
+  )
 }
 
 export async function createStore(data: {
@@ -18,11 +22,16 @@ export async function createStore(data: {
   coordenacao?: string
   supervisao?: string
 }): Promise<StoreRecord> {
-  return await pb.collection('stores').create<StoreRecord>({
-    name: data.name.trim(),
-    coordenacao: data.coordenacao?.trim() || '',
-    supervisao: data.supervisao?.trim() || '',
-  })
+  return await executeWithRateLimitRetry(() =>
+    pb.collection('stores').create<StoreRecord>(
+      {
+        name: data.name.trim(),
+        coordenacao: data.coordenacao?.trim() || '',
+        supervisao: data.supervisao?.trim() || '',
+      },
+      { requestKey: null },
+    ),
+  )
 }
 
 export async function updateStore(
@@ -33,11 +42,15 @@ export async function updateStore(
     supervisao: string
   }>,
 ): Promise<StoreRecord> {
-  return await pb.collection('stores').update<StoreRecord>(id, data)
+  return await executeWithRateLimitRetry(() =>
+    pb.collection('stores').update<StoreRecord>(id, data, { requestKey: null }),
+  )
 }
 
 export async function deleteStore(id: string): Promise<boolean> {
-  return await pb.collection('stores').delete(id)
+  return await executeWithRateLimitRetry(() =>
+    pb.collection('stores').delete(id, { requestKey: null }),
+  )
 }
 
 export async function findStoreByName(
@@ -49,17 +62,23 @@ export async function findStoreByName(
 }
 
 export async function fetchFpdRecords(): Promise<FpdRecord[]> {
-  return await pb.collection('fpd_records').getFullList<FpdRecord>({
-    sort: '-importado_em,-created',
-    expand: 'store',
-  })
+  return await executeWithRateLimitRetry(() =>
+    pb.collection('fpd_records').getFullList<FpdRecord>({
+      sort: '-importado_em,-created',
+      expand: 'store',
+      requestKey: null,
+    }),
+  )
 }
 
 export async function fetchFpdRecordsByStore(storeId: string): Promise<FpdRecord[]> {
-  return await pb.collection('fpd_records').getFullList<FpdRecord>({
-    filter: `store = "${storeId}"`,
-    sort: '-importado_em,-created',
-  })
+  return await executeWithRateLimitRetry(() =>
+    pb.collection('fpd_records').getFullList<FpdRecord>({
+      filter: `store = "${storeId}"`,
+      sort: '-importado_em,-created',
+      requestKey: null,
+    }),
+  )
 }
 
 const toSafeInt = (val: unknown): number => {
@@ -88,9 +107,12 @@ export async function saveFpdRecord(data: {
   let existingId: string | null = null
   if (data.referente) {
     try {
-      const existing = await pb.collection('fpd_records').getList<FpdRecord>(1, 1, {
-        filter: `store = "${data.storeId}" && referente = "${data.referente.replace(/"/g, '\\"')}"`,
-      })
+      const existing = await executeWithRateLimitRetry(() =>
+        pb.collection('fpd_records').getList<FpdRecord>(1, 1, {
+          filter: `store = "${data.storeId}" && referente = "${data.referente?.replace(/"/g, '\\"') || ''}"`,
+          requestKey: null,
+        }),
+      )
       if (existing.items.length > 0) {
         existingId = existing.items[0].id
       }
@@ -115,13 +137,19 @@ export async function saveFpdRecord(data: {
   }
 
   if (existingId) {
-    return await pb.collection('fpd_records').update<FpdRecord>(existingId, payload)
+    return await executeWithRateLimitRetry(() =>
+      pb.collection('fpd_records').update<FpdRecord>(existingId, payload, { requestKey: null }),
+    )
   }
-  return await pb.collection('fpd_records').create<FpdRecord>(payload)
+  return await executeWithRateLimitRetry(() =>
+    pb.collection('fpd_records').create<FpdRecord>(payload, { requestKey: null }),
+  )
 }
 
 export async function deleteFpdRecord(id: string): Promise<boolean> {
-  return await pb.collection('fpd_records').delete(id)
+  return await executeWithRateLimitRetry(() =>
+    pb.collection('fpd_records').delete(id, { requestKey: null }),
+  )
 }
 
 export async function clearAllFpdRecords(): Promise<number> {
@@ -178,14 +206,53 @@ export async function saveImportedFile(data: {
     outros: toSafeInt(data.outros),
   }
 
-  return await pb.collection('imported_files').create<ImportedFileRecord>(payload)
+  // Idempotência: verificar se já existe arquivo com mesmo nome e loja para a mesma referência
+  let existingId: string | null = null
+  try {
+    const escapedName = data.fileName.replace(/"/g, '\\"')
+    const escapedRef = (data.referenceDate || '').trim().replace(/"/g, '\\"')
+    let filter = `file_name = "${escapedName}"`
+    if (escapedRef) {
+      filter += ` && reference_date = "${escapedRef}"`
+    }
+    if (data.storeName) {
+      filter += ` && store_name = "${data.storeName.replace(/"/g, '\\"')}"`
+    }
+
+    const existing = await executeWithRateLimitRetry(() =>
+      pb.collection('imported_files').getList<ImportedFileRecord>(1, 1, {
+        filter,
+        requestKey: null,
+      }),
+    )
+    if (existing.items.length > 0) {
+      existingId = existing.items[0].id
+    }
+  } catch {
+    // fallback para create se der erro na busca
+  }
+
+  if (existingId) {
+    return await executeWithRateLimitRetry(() =>
+      pb
+        .collection('imported_files')
+        .update<ImportedFileRecord>(existingId, payload, { requestKey: null }),
+    )
+  }
+
+  return await executeWithRateLimitRetry(() =>
+    pb.collection('imported_files').create<ImportedFileRecord>(payload, { requestKey: null }),
+  )
 }
 
 export async function fetchImportedFiles(): Promise<ImportedFileRecord[]> {
-  return await pb.collection('imported_files').getFullList<ImportedFileRecord>({
-    sort: '-created',
-    expand: 'store',
-  })
+  return await executeWithRateLimitRetry(() =>
+    pb.collection('imported_files').getFullList<ImportedFileRecord>({
+      sort: '-created',
+      expand: 'store',
+      requestKey: null,
+    }),
+  )
 }
 
 export async function fetchDistinctReferenceDates(): Promise<string[]> {
@@ -295,9 +362,12 @@ export async function clearAllImportedFiles(): Promise<number> {
 }
 
 export async function fetchVendorConsolidations(): Promise<VendorConsolidationRecord[]> {
-  return await pb.collection('vendor_consolidations').getFullList<VendorConsolidationRecord>({
-    sort: '-total_linhas,vendedor',
-  })
+  return await executeWithRateLimitRetry(() =>
+    pb.collection('vendor_consolidations').getFullList<VendorConsolidationRecord>({
+      sort: '-total_linhas,vendedor',
+      requestKey: null,
+    }),
+  )
 }
 
 export async function clearAllVendorConsolidations(): Promise<number> {
@@ -598,7 +668,10 @@ export async function saveVendorConsolidationsFromLines(
   }
 
   let savedCount = 0
-  for (const [, item] of map.entries()) {
+  const entries = Array.from(map.values())
+
+  for (let i = 0; i < entries.length; i++) {
+    const item = entries[i]
     const matchKey = `${item.vendedor.trim().toUpperCase()}__${item.loja.trim().toUpperCase()}__${(item.data_referencia || '').trim()}`
     const existing = existingMap.get(matchKey)
     const payload = {
@@ -618,12 +691,20 @@ export async function saveVendorConsolidationsFromLines(
       nao_tratados: item.nao_tratados,
     }
 
-    if (existing) {
-      await pb.collection('vendor_consolidations').update(existing.id, payload)
-    } else {
-      await pb.collection('vendor_consolidations').create(payload)
-    }
+    await executeWithRateLimitRetry(() => {
+      if (existing) {
+        return pb
+          .collection('vendor_consolidations')
+          .update(existing.id, payload, { requestKey: null })
+      }
+      return pb.collection('vendor_consolidations').create(payload, { requestKey: null })
+    })
     savedCount++
+
+    // Pacing entre atualizações de vendedores para não inundar o servidor
+    if (i < entries.length - 1) {
+      await sleep(100)
+    }
   }
 
   return savedCount

@@ -30,6 +30,7 @@ import {
   type MovelInsertItem,
   type ResidencialInsertItem,
 } from '@/services/relacionamentoService'
+import { executeWithRateLimitRetry, sleep } from '@/lib/pocketbase/rateLimiter'
 
 export type BatchImportType = 'movel' | 'residencial'
 
@@ -485,7 +486,8 @@ export async function executeBatchImport(
 
   // 1. Resolve store IDs for all stores found in batch
   const storeIdMap = new Map<string, string>() // canonicalName -> storeId
-  for (const sSummary of parsed.storeSummaries) {
+  for (let sIdx = 0; sIdx < parsed.storeSummaries.length; sIdx++) {
+    const sSummary = parsed.storeSummaries[sIdx]
     let storeId = sSummary.storeId
     let match = storeId ? currentStoresList.find((s) => s.id === storeId) : null
     if (!match) {
@@ -494,11 +496,13 @@ export async function executeBatchImport(
     if (match) {
       storeId = match.id
     } else {
-      // Create new store
+      // Create new store with rate limit retry
       try {
-        const created = await createStore({
-          name: sSummary.canonicalStoreName.trim().toUpperCase(),
-        })
+        const created = await executeWithRateLimitRetry(() =>
+          createStore({
+            name: sSummary.canonicalStoreName.trim().toUpperCase(),
+          }),
+        )
         storeId = created.id
         currentStoresList.push(created)
       } catch {
@@ -512,9 +516,13 @@ export async function executeBatchImport(
     if (storeId) {
       storeIdMap.set(sSummary.canonicalStoreName.trim().toUpperCase(), storeId)
     }
+
+    if (sIdx < parsed.storeSummaries.length - 1) {
+      await sleep(50)
+    }
   }
 
-  // 2. Save into imported_files and fpd_records per store
+  // 2. Save into imported_files and fpd_records per store sequentially with pacing & retry
   onProgress?.('Consolidando totais por loja (fpd_records e imported_files)...', 30)
   let totalFpdUpdated = 0
 
@@ -522,31 +530,15 @@ export async function executeBatchImport(
     const s = parsed.storeSummaries[idx]
     const storeId = storeIdMap.get(s.canonicalStoreName.trim().toUpperCase()) || ''
 
-    // Save individual imported_files entry
-    await saveImportedFile({
-      storeId: storeId || undefined,
-      storeName: s.canonicalStoreName,
-      fileName: `${parsed.fileName} [LOTE ${parsed.importType === 'movel' ? 'MÓVEL' : 'RESIDENCIAL'}]`,
-      referenceDate: refDate,
-      total_linhas: s.totalLinhas,
-      enviado_faturas: s.envio_fatura,
-      envio_fatura: s.envio_fatura,
-      pendente: s.pendente,
-      fatura_paga: s.fatura_paga,
-      sem_contato: s.sem_contato,
-      promessa_pagto: s.promessa_pagto,
-      cancelados: s.cancelados,
-      nao_tratados: s.nao_tratados,
-      contato_realizado: s.contato_realizado,
-      outros: 0,
-    })
-
-    // Upsert consolidated fpd_record
-    if (storeId) {
-      await saveFpdRecord({
-        storeId,
-        referente: refDate,
+    // Save individual imported_files entry with retry
+    await executeWithRateLimitRetry(() =>
+      saveImportedFile({
+        storeId: storeId || undefined,
+        storeName: s.canonicalStoreName,
+        fileName: `${parsed.fileName} [LOTE ${parsed.importType === 'movel' ? 'MÓVEL' : 'RESIDENCIAL'}]`,
+        referenceDate: refDate,
         total_linhas: s.totalLinhas,
+        enviado_faturas: s.envio_fatura,
         envio_fatura: s.envio_fatura,
         pendente: s.pendente,
         fatura_paga: s.fatura_paga,
@@ -556,9 +548,40 @@ export async function executeBatchImport(
         nao_tratados: s.nao_tratados,
         contato_realizado: s.contato_realizado,
         outros: 0,
-      })
+      }),
+    )
+
+    // Upsert consolidated fpd_record with retry
+    if (storeId) {
+      await executeWithRateLimitRetry(() =>
+        saveFpdRecord({
+          storeId,
+          referente: refDate,
+          total_linhas: s.totalLinhas,
+          envio_fatura: s.envio_fatura,
+          pendente: s.pendente,
+          fatura_paga: s.fatura_paga,
+          sem_contato: s.sem_contato,
+          promessa_pagto: s.promessa_pagto,
+          cancelados: s.cancelados,
+          nao_tratados: s.nao_tratados,
+          contato_realizado: s.contato_realizado,
+          outros: 0,
+        }),
+      )
       totalFpdUpdated++
     }
+
+    // Pacing entre lojas
+    if (idx < parsed.storeSummaries.length - 1) {
+      await sleep(100)
+    }
+
+    const pct = 30 + Math.round(((idx + 1) / parsed.storeSummaries.length) * 25)
+    onProgress?.(
+      `Consolidando loja ${idx + 1}/${parsed.storeSummaries.length}: ${s.canonicalStoreName}`,
+      pct,
+    )
   }
 
   // 3. Save vendor consolidations

@@ -1,5 +1,6 @@
 import pb from '@/lib/pocketbase/client'
 import { buildStoreFilterClause, getStoreVariants } from '@/lib/storeMatchingUtils'
+import { executeWithRateLimitRetry, sleep, isRateLimitError } from '@/lib/pocketbase/rateLimiter'
 import type {
   MovelRecord,
   ResidencialRecord,
@@ -35,9 +36,6 @@ let pendingLojasRequest: Promise<string[]> | null = null
 // Short TTL memory cache for distinct lojas to prevent repeat requests
 let cachedLojas: { data: string[]; timestamp: number } | null = null
 const LOJAS_CACHE_TTL = 30000 // 30 seconds
-
-// Delay helper for throttling
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
  * Invalidate stores cache when new data is imported or deleted
@@ -136,11 +134,13 @@ export async function fetchAnalyticalRows(
     const filterStr = filterParts.length > 0 ? filterParts.join(' && ') : undefined
 
     if (selectedAba === 'Móvel') {
-      const res = await pb.collection('movel').getList<MovelRecord>(page, perPage, {
-        filter: filterStr,
-        sort: sortStr,
-        requestKey: null, // Avoid client auto-cancellation conflicts
-      })
+      const res = await executeWithRetry(() =>
+        pb.collection('movel').getList<MovelRecord>(page, perPage, {
+          filter: filterStr,
+          sort: sortStr,
+          requestKey: null,
+        }),
+      )
 
       const items: UnifiedAnalyticRecord[] = res.items.map((r) => ({
         ...r,
@@ -160,11 +160,13 @@ export async function fetchAnalyticalRows(
     }
 
     if (selectedAba === 'Residencial') {
-      const res = await pb.collection('residencial').getList<ResidencialRecord>(page, perPage, {
-        filter: filterStr,
-        sort: sortStr,
-        requestKey: null,
-      })
+      const res = await executeWithRetry(() =>
+        pb.collection('residencial').getList<ResidencialRecord>(page, perPage, {
+          filter: filterStr,
+          sort: sortStr,
+          requestKey: null,
+        }),
+      )
 
       const items: UnifiedAnalyticRecord[] = res.items.map((r) => ({
         ...r,
@@ -187,16 +189,20 @@ export async function fetchAnalyticalRows(
     // Limit perPage on individual queries to prevent excessive data transfer
     const fetchLimit = Math.min(perPage, 50)
     const [resMovel, resResidencial] = await Promise.all([
-      pb.collection('movel').getList<MovelRecord>(page, fetchLimit, {
-        filter: filterStr,
-        sort: sortStr,
-        requestKey: null,
-      }),
-      pb.collection('residencial').getList<ResidencialRecord>(page, fetchLimit, {
-        filter: filterStr,
-        sort: sortStr,
-        requestKey: null,
-      }),
+      executeWithRetry(() =>
+        pb.collection('movel').getList<MovelRecord>(page, fetchLimit, {
+          filter: filterStr,
+          sort: sortStr,
+          requestKey: null,
+        }),
+      ),
+      executeWithRetry(() =>
+        pb.collection('residencial').getList<ResidencialRecord>(page, fetchLimit, {
+          filter: filterStr,
+          sort: sortStr,
+          requestKey: null,
+        }),
+      ),
     ])
 
     const movelUnified: UnifiedAnalyticRecord[] = resMovel.items.map((r) => ({
@@ -358,41 +364,22 @@ function extractRetryAfterMs(err: unknown): number | null {
 
 /**
  * Execute a PocketBase operation with exponential backoff and Retry-After support on HTTP 429 errors.
- * Retries up to `maxRetries` times (default: 5) before throwing.
+ * Retries up to `maxRetries` times (default: 6) before throwing.
  */
 async function executeWithRetry<T>(
   action: () => Promise<T>,
-  maxRetries = 5,
+  maxRetries = 6,
   initialBackoffMs = 1000,
 ): Promise<T> {
-  let attempt = 0
-  let currentDelay = initialBackoffMs
-
-  while (true) {
-    try {
-      return await action()
-    } catch (err: unknown) {
-      const status = (err as { status?: number })?.status
-      if (status === 429 && attempt < maxRetries) {
-        attempt++
-        const retryAfterMs = extractRetryAfterMs(err)
-        const jitter = Math.floor(Math.random() * 250)
-        const waitTime = retryAfterMs !== null ? retryAfterMs + jitter : currentDelay + jitter
-
-        console.warn(
-          `[relacionamentoService] HTTP 429 recebido. Tentativa ${attempt} de ${maxRetries}. Aguardando ${waitTime}ms...`,
-        )
-        await sleep(waitTime)
-        currentDelay = Math.min(currentDelay * 2, 16000)
-      } else {
-        throw err
-      }
-    }
-  }
+  return executeWithRateLimitRetry(action, {
+    maxRetries,
+    initialBackoffMs,
+    maxBackoffMs: 20000,
+  })
 }
 
-// Pause between sequential requests (250ms - 350ms) to safely stay under rate limits
-const SEQUENTIAL_PAUSE_MS = 300
+// Pause between sequential requests (150ms) to safely stay under rate limits without stalling
+const SEQUENTIAL_PAUSE_MS = 150
 
 export interface MovelInsertItem {
   arquivo?: string
@@ -548,15 +535,15 @@ export async function insertMovelBatch(
         // Update existing record
         await executeWithRetry(
           () => pb.collection('movel').update(existingRecord.id, payload, { requestKey: null }),
-          5,
-          1000,
+          6,
+          800,
         )
       } else {
         // Create new record
         await executeWithRetry(
           () => pb.collection('movel').create(payload, { requestKey: null }),
-          5,
-          1000,
+          6,
+          800,
         )
       }
       insertedTotal++
@@ -564,7 +551,10 @@ export async function insertMovelBatch(
       const fileInfo = item.arquivo ? `arquivo '${item.arquivo}'` : 'arquivo desconhecido'
       const lineInfo =
         item.linha !== undefined && item.linha !== null ? `, linha ${item.linha}` : ''
-      const errorDetail = extractErrorMessage(err)
+      const is429 = isRateLimitError(err)
+      const errorDetail = is429
+        ? 'Limite de requisições excedido (Too Many Requests). Reprocesse o lote.'
+        : extractErrorMessage(err)
       accumulatedErrors.push(`[Móvel] ${fileInfo}${lineInfo}: ${errorDetail}`)
     }
 
@@ -680,15 +670,15 @@ export async function insertResidencialBatch(
         await executeWithRetry(
           () =>
             pb.collection('residencial').update(existingRecord.id, payload, { requestKey: null }),
-          5,
-          1000,
+          6,
+          800,
         )
       } else {
         // Create new record
         await executeWithRetry(
           () => pb.collection('residencial').create(payload, { requestKey: null }),
-          5,
-          1000,
+          6,
+          800,
         )
       }
       insertedTotal++
@@ -696,7 +686,10 @@ export async function insertResidencialBatch(
       const fileInfo = item.arquivo ? `arquivo '${item.arquivo}'` : 'arquivo desconhecido'
       const lineInfo =
         item.linha !== undefined && item.linha !== null ? `, linha ${item.linha}` : ''
-      const errorDetail = extractErrorMessage(err)
+      const is429 = isRateLimitError(err)
+      const errorDetail = is429
+        ? 'Limite de requisições excedido (Too Many Requests). Reprocesse o lote.'
+        : extractErrorMessage(err)
       accumulatedErrors.push(`[Residencial] ${fileInfo}${lineInfo}: ${errorDetail}`)
     }
 
