@@ -258,12 +258,77 @@ export function parseAnalyticalWorksheet(
     if (statusColIndex >= 0 && statusColIndex < row.length) {
       const rawStatusCell = row[statusColIndex]
       rowOcorrenciaLabel = getCanonicalCategoryOrRaw(rawStatusCell)
-    } else {
-      // Se não há coluna de status identificada
-      rowOcorrenciaLabel = ''
     }
 
-    // Célula vazia na coluna de ocorrências: a linha deve ser expurgada das quantidades / registros analíticos
+    // Para tipo residencial: derivar a ocorrência de múltiplos campos quando a coluna
+    // de status isolada não casar ou estiver ausente/vazia:
+    // FATURA, PAGO, VLR PAGO, INDICADOR, PREVENTIVA FPD, VIROU FPD, DSC_STATUS_CONTRATO (mesma lógica da migração 0040).
+    // Linhas válidas NÃO podem ser expurgadas — só expurgar linha sem nenhum campo de ocorrência identificável (célula totalmente vazia).
+    if (sheetType === 'residencial') {
+      const faturaVal = rowDataMap['FATURA'] ?? rowDataMap['fatura'] ?? typedFields['fatura']
+      const pagoVal = rowDataMap['PAGO'] ?? rowDataMap['pago'] ?? typedFields['pago']
+      const vlrPagoVal =
+        rowDataMap['VLR PAGO'] ??
+        rowDataMap['VLR_PAGO'] ??
+        rowDataMap['vlr_pago'] ??
+        typedFields['vlr_pago']
+      const indicadorVal =
+        rowDataMap['INDICADOR'] ?? rowDataMap['indicador'] ?? typedFields['indicador']
+      const preventivaVal =
+        rowDataMap['PREVENTIVA FPD'] ??
+        rowDataMap['preventiva_fpd'] ??
+        typedFields['preventiva_fpd']
+      const virouFpdVal =
+        rowDataMap['VIROU FPD'] ?? rowDataMap['virou_fpd'] ?? typedFields['virou_fpd']
+      const dscStatusVal =
+        rowDataMap['DSC_STATUS_CONTRATO'] ??
+        rowDataMap['dsc_status_contrato'] ??
+        typedFields['dsc_status_contrato']
+
+      // Prioridade 1: Pagamento identificado (fatura paga, pago=1, vlr_pago > 0)
+      const faturaStr =
+        faturaVal !== null && faturaVal !== undefined ? String(faturaVal).trim() : ''
+      const pagoStr = pagoVal !== null && pagoVal !== undefined ? String(pagoVal).trim() : ''
+      const vlrPagoNum =
+        vlrPagoVal !== null && vlrPagoVal !== undefined
+          ? Number(String(vlrPagoVal).replace(',', '.'))
+          : NaN
+
+      const isFaturaPaga =
+        (faturaStr && getCanonicalCategoryOrRaw(faturaStr) === 'Fatura(s) Paga(s)') ||
+        pagoVal === 1 ||
+        pagoStr === '1' ||
+        pagoStr.toLowerCase() === 'pago' ||
+        (!isNaN(vlrPagoNum) && vlrPagoNum > 0)
+
+      if (isFaturaPaga) {
+        rowOcorrenciaLabel = 'Fatura(s) Paga(s)'
+      } else if (!rowOcorrenciaLabel || !rowOcorrenciaLabel.trim()) {
+        // Prioridade 2: Indicador / Preventiva FPD / Virou FPD / DSC_STATUS_CONTRATO
+        if (indicadorVal) {
+          const catIndicador = getCanonicalCategoryOrRaw(indicadorVal)
+          if (catIndicador) rowOcorrenciaLabel = catIndicador
+        }
+        if (!rowOcorrenciaLabel && preventivaVal) {
+          const catPrev = getCanonicalCategoryOrRaw(preventivaVal)
+          if (catPrev) rowOcorrenciaLabel = catPrev
+        }
+        if (!rowOcorrenciaLabel && virouFpdVal) {
+          const catVirou = getCanonicalCategoryOrRaw(virouFpdVal)
+          if (catVirou) rowOcorrenciaLabel = catVirou
+        }
+        if (!rowOcorrenciaLabel && dscStatusVal) {
+          const catDsc = getCanonicalCategoryOrRaw(dscStatusVal)
+          if (catDsc) rowOcorrenciaLabel = catDsc
+        }
+        if (!rowOcorrenciaLabel && faturaStr) {
+          const catFat = getCanonicalCategoryOrRaw(faturaStr)
+          if (catFat) rowOcorrenciaLabel = catFat
+        }
+      }
+    }
+
+    // Célula vazia na coluna de ocorrências / nenhum campo identificável: a linha deve ser expurgada
     if (!rowOcorrenciaLabel || !rowOcorrenciaLabel.trim()) {
       continue
     }

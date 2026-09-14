@@ -116,4 +116,108 @@ describe('analyticalImportParser', () => {
     expect(parsed.rows[0].ocorrencias).toBe('Fatura(s) Paga(s)')
     expect(parsed.rows[1].ocorrencias).toBe('Promessa de Pagto.')
   })
+
+  it('correctly handles Preventiva FPD Residencial layout with multi-field derivation (Preventiva FPD, Virou FPD, PAGO, FATURA)', async () => {
+    const { parseAnalyticalWorksheet } = await import('./analyticalImportParser')
+    const XLSX = await import('xlsx')
+
+    // Typical Preventiva FPD Residencial spreadsheet structure without dedicated "OCORRÊNCIAS" column
+    const headers = [
+      'NR ANO MES',
+      'NM LOJA',
+      'NM VENDEDOR',
+      'CLIENTE',
+      'CPF',
+      'FATURA',
+      'PAGO',
+      'VLR PAGO',
+      'INDICADOR',
+      'PREVENTIVA FPD',
+      'VIROU FPD',
+      'DSC_STATUS_CONTRATO',
+    ]
+
+    const dataRows = [
+      // Line 1: Virou FPD, Em Aberto, PAGO=0 -> Pendente
+      [
+        202605,
+        'CELNET MATRIZ PLANALTINA DF',
+        'GIULIA DANIELLY',
+        'CLIENTE A',
+        '12345678900',
+        'Em Aberto',
+        0,
+        '',
+        'Virou FPD',
+        0,
+        1,
+        'CONECTADO',
+      ],
+      // Line 2: Preventiva FPD, PAGO=1 -> Fatura(s) Paga(s)
+      [
+        202605,
+        'CELNET MATRIZ PLANALTINA DF',
+        'GLEISSON',
+        'CLIENTE B',
+        '23456789011',
+        'Paga',
+        1,
+        '122.40',
+        'Preventiva FPD',
+        1,
+        0,
+        'CONECTADO',
+      ],
+      // Line 3: Preventiva FPD, fatura Em Aberto, PAGO=0 -> Pendente
+      [
+        202605,
+        'CELNET DF PLAZA',
+        'VENDEDOR C',
+        'CLIENTE C',
+        '34567890122',
+        'Em Aberto',
+        0,
+        0,
+        'Preventiva FPD',
+        1,
+        0,
+        'CONECTADO',
+      ],
+      // Line 4: DSC_STATUS_CONTRATO = DESCONECTADO -> Cancelados
+      [
+        202605,
+        'CELNET DF PLAZA',
+        'VENDEDOR D',
+        'CLIENTE D',
+        '45678901233',
+        'Em Aberto',
+        0,
+        '',
+        '',
+        0,
+        0,
+        'DESCONECTADO',
+      ],
+      // Line 5: Empty line / no occurrences -> should be purged
+      ['', '', '', '', '', '', '', '', '', '', '', ''],
+    ]
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows])
+    const parsed = parseAnalyticalWorksheet(ws, 'Residencial', 'residencial')
+
+    // Lines 1 to 4 should be retained; line 5 purged
+    expect(parsed.rows).toHaveLength(4)
+
+    expect(parsed.rows[0].cliente).toBe('CLIENTE A')
+    expect(parsed.rows[0].ocorrencias).toBe('Pendente')
+
+    expect(parsed.rows[1].cliente).toBe('CLIENTE B')
+    expect(parsed.rows[1].ocorrencias).toBe('Fatura(s) Paga(s)')
+
+    expect(parsed.rows[2].cliente).toBe('CLIENTE C')
+    expect(parsed.rows[2].ocorrencias).toBe('Pendente')
+
+    expect(parsed.rows[3].cliente).toBe('CLIENTE D')
+    expect(parsed.rows[3].ocorrencias).toBe('Cancelados')
+  })
 })

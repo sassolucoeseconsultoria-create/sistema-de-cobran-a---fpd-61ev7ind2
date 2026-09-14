@@ -187,6 +187,8 @@ export const EXACT_FATURA_PAGA = new Set([
   'ja paga',
   'ja quitado',
   'ja liquidado',
+  'pago=1',
+  '1',
 ])
 
 export const EXACT_SEM_CONTATO = new Set([
@@ -221,6 +223,9 @@ export const EXACT_CANCELADOS = new Set([
   'cancelados',
   'canceladas',
   'cancel',
+  'desconectado',
+  'desconectada',
+  'desconectados',
   'devolucao',
   'devolvido',
   'devolvida',
@@ -251,6 +256,9 @@ export const EXACT_PENDENTE = new Set([
   'retorno agendado',
   'retornar',
   'retorno',
+  'preventiva fpd',
+  'virou fpd',
+  'em aberto',
 ])
 
 export const EXACT_CONTATO_REALIZADO = new Set([
@@ -670,6 +678,8 @@ export const KNOWN_STATUS_PHRASES: { phrase: string; key: FpdStatusKey }[] = [
   { phrase: 'cancelada', key: 'cancelados' },
   { phrase: 'cancelados', key: 'cancelados' },
   { phrase: 'canceladas', key: 'cancelados' },
+  { phrase: 'desconectado', key: 'cancelados' },
+  { phrase: 'desconectada', key: 'cancelados' },
   { phrase: 'desistencia', key: 'cancelados' },
   { phrase: 'devolucao', key: 'cancelados' },
 
@@ -680,6 +690,9 @@ export const KNOWN_STATUS_PHRASES: { phrase: string; key: FpdStatusKey }[] = [
   { phrase: 'aguardando retorno', key: 'pendente' },
   { phrase: 'retorno agendado', key: 'pendente' },
   { phrase: 'pendente', key: 'pendente' },
+  { phrase: 'preventiva fpd', key: 'pendente' },
+  { phrase: 'virou fpd', key: 'pendente' },
+  { phrase: 'em aberto', key: 'pendente' },
 
   // 7. Contato Realizado
   { phrase: 'contato realizado', key: 'contato_realizado' },
@@ -869,10 +882,13 @@ export function classifyStatusCell(cellVal: unknown): FpdStatusKey | null {
   // 3. Fatura Paga: "paga", "pago", "quitad", "liquidad"
   if (
     norm.includes('paga') ||
-    norm.includes('pago') ||
     norm.includes('quitad') ||
     norm.includes('liquidad') ||
-    EXACT_FATURA_PAGA.has(norm)
+    EXACT_FATURA_PAGA.has(norm) ||
+    norm === 'pago' ||
+    norm === 'pago=1' ||
+    norm === '1' ||
+    norm.startsWith('pago')
   ) {
     return 'fatura_paga'
   }
@@ -890,6 +906,7 @@ export function classifyStatusCell(cellVal: unknown): FpdStatusKey | null {
   // 5. Cancelados
   if (
     norm.includes('cancel') ||
+    norm.includes('desconect') ||
     norm.includes('fraude') ||
     norm.includes('desist') ||
     norm.includes('devolv') ||
@@ -898,12 +915,15 @@ export function classifyStatusCell(cellVal: unknown): FpdStatusKey | null {
     return 'cancelados'
   }
 
-  // 6. Pendente
+  // 6. Pendente (Preventiva FPD, Virou FPD, Em Aberto, etc.)
   if (
     norm.includes('pendente') ||
     norm.includes('em analise') ||
     norm.includes('em tratativa') ||
     norm.includes('aguardando') ||
+    norm.includes('preventiva fpd') ||
+    norm.includes('virou fpd') ||
+    norm.includes('em aberto') ||
     EXACT_PENDENTE.has(norm)
   ) {
     return 'pendente'
@@ -978,10 +998,13 @@ export function getCanonicalCategoryOrRaw(cellVal: unknown): string {
   // 3. Fatura(s) Paga(s)
   if (
     norm.includes('paga') ||
-    norm.includes('pago') ||
     norm.includes('quitad') ||
     norm.includes('liquidad') ||
-    EXACT_FATURA_PAGA.has(norm)
+    EXACT_FATURA_PAGA.has(norm) ||
+    norm === 'pago' ||
+    norm === 'pago=1' ||
+    norm === '1' ||
+    norm.startsWith('pago')
   ) {
     return 'Fatura(s) Paga(s)'
   }
@@ -999,6 +1022,7 @@ export function getCanonicalCategoryOrRaw(cellVal: unknown): string {
   // 5. Cancelados
   if (
     norm.includes('cancel') ||
+    norm.includes('desconect') ||
     norm.includes('fraude') ||
     norm.includes('desist') ||
     norm.includes('devolv') ||
@@ -1007,12 +1031,15 @@ export function getCanonicalCategoryOrRaw(cellVal: unknown): string {
     return 'Cancelados'
   }
 
-  // 6. Pendente
+  // 6. Pendente (Preventiva FPD, Virou FPD, Em Aberto, etc.)
   if (
     norm.includes('pendente') ||
     norm.includes('em analise') ||
     norm.includes('em tratativa') ||
     norm.includes('aguardando') ||
+    norm.includes('preventiva fpd') ||
+    norm.includes('virou fpd') ||
+    norm.includes('em aberto') ||
     EXACT_PENDENTE.has(norm)
   ) {
     return 'Pendente'

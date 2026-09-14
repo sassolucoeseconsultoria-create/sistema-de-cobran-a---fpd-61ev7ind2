@@ -265,19 +265,63 @@ export async function parseBatchXlsxFile(
     }
 
     // Determine occurrences category:
-    // Exclusively by the status/occurrences column cell value.
+    // Exclusively by the status/occurrences column cell value, with multi-field fallback for Residencial.
     // Empty/blank cell -> EXPURGADA (does not increment totalLinhas, nao_tratados, or store summary)
     let category: FpdStatusKey | null = null
     if (statusColIndex >= 0 && statusColIndex < row.length) {
       const rawCell = row[statusColIndex]
-      if (rawCell === null || rawCell === undefined || String(rawCell).trim() === '') {
-        category = null
-      } else {
+      if (rawCell !== null && rawCell !== undefined && String(rawCell).trim() !== '') {
         const normCell = normalizeText(rawCell)
         category = normCell ? classifyStatusCell(normCell) : null
       }
-    } else {
-      category = null
+    }
+
+    // Para lote Residencial: derivar a ocorrência de múltiplos campos se a coluna isolada não casou
+    if (!category && importType === 'residencial') {
+      let isFaturaPaga = false
+      let candidateStatus: FpdStatusKey | null = null
+
+      for (let c = 0; c < row.length; c++) {
+        const headerName = detectedColumns.find((dc) => dc.columnIndex === c)?.name || ''
+        const normHeader = normalizeText(headerName)
+        const cellRaw = row[c]
+        if (cellRaw === null || cellRaw === undefined || String(cellRaw).trim() === '') continue
+        const cellStr = String(cellRaw).trim()
+        const normCell = normalizeText(cellStr)
+
+        if (normHeader === 'fatura') {
+          if (classifyStatusCell(normCell) === 'fatura_paga') {
+            isFaturaPaga = true
+          } else if (!candidateStatus) {
+            candidateStatus = classifyStatusCell(normCell)
+          }
+        } else if (normHeader === 'pago') {
+          if (cellStr === '1' || normCell === 'pago' || normCell === 'sim' || normCell === 'true') {
+            isFaturaPaga = true
+          }
+        } else if (normHeader === 'vlr pago' || normHeader === 'vlr_pago') {
+          const num = Number(cellStr.replace(',', '.'))
+          if (!isNaN(num) && num > 0) {
+            isFaturaPaga = true
+          }
+        } else if (
+          normHeader === 'indicador' ||
+          normHeader === 'preventiva fpd' ||
+          normHeader === 'virou fpd' ||
+          normHeader === 'dsc_status_contrato' ||
+          normHeader === 'status contrato'
+        ) {
+          if (!candidateStatus) {
+            candidateStatus = classifyStatusCell(normCell)
+          }
+        }
+      }
+
+      if (isFaturaPaga) {
+        category = 'fatura_paga'
+      } else if (candidateStatus) {
+        category = candidateStatus
+      }
     }
 
     // Célula vazia ou sem ocorrência válida -> EXPURGADA (não contabiliza em totalLinhas nem em nenhuma categoria)

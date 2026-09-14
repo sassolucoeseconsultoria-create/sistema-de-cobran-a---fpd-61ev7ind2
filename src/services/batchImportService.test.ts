@@ -720,5 +720,106 @@ describe('batchImportService', () => {
         expect.any(Array),
       )
     })
+
+    it('processes Preventiva FPD Residencial batch with multiple status columns faithfully without dumping into nao_tratados', async () => {
+      const headers = [
+        'NR ANO MES',
+        'LOJA',
+        'VENDEDOR',
+        'CLIENTE',
+        'CPF',
+        'FATURA',
+        'PAGO',
+        'VLR PAGO',
+        'INDICADOR',
+        'PREVENTIVA FPD',
+        'VIROU FPD',
+        'DSC_STATUS_CONTRATO',
+      ]
+      const rows = [
+        headers,
+        [
+          202605,
+          'CELNET MATRIZ PLANALTINA DF',
+          'VENDEDOR 1',
+          'CLIENTE 1',
+          '111',
+          'Paga',
+          1,
+          '50.00',
+          'Preventiva FPD',
+          1,
+          0,
+          'CONECTADO',
+        ],
+        [
+          202605,
+          'CELNET MATRIZ PLANALTINA DF',
+          'VENDEDOR 2',
+          'CLIENTE 2',
+          '222',
+          'Em Aberto',
+          0,
+          '',
+          'Virou FPD',
+          0,
+          1,
+          'CONECTADO',
+        ],
+        [
+          202605,
+          'CELNET DF PLAZA',
+          'VENDEDOR 3',
+          'CLIENTE 3',
+          '333',
+          'Em Aberto',
+          0,
+          '',
+          '',
+          0,
+          0,
+          'DESCONECTADO',
+        ],
+      ]
+      const ws = XLSX.utils.aoa_to_sheet(rows)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Residencial')
+
+      const wbBuf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+      const file = new File([wbBuf], 'Preventiva FPD Safra de Maio-Julho-26 - base 08-09-26.xlsx', {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
+
+      const parsed = await parseBatchXlsxFile(file, 'residencial', [
+        { id: 'store-1', name: 'CELNET MATRIZ PLANALTINA DF', coordenacao: '', supervisao: '' },
+        { id: 'store-2', name: 'CELNET DF PLAZA', coordenacao: '', supervisao: '' },
+      ] as any)
+
+      // Total valid rows: 3
+      expect(parsed.totalValidRows).toBe(3)
+      expect(parsed.totalExpurgadasRows).toBe(0)
+
+      // Check analyticalRows
+      expect(parsed.analyticalRows).toHaveLength(3)
+      expect(parsed.analyticalRows[0].ocorrencias).toBe('Fatura(s) Paga(s)')
+      expect(parsed.analyticalRows[1].ocorrencias).toBe('Pendente')
+      expect(parsed.analyticalRows[2].ocorrencias).toBe('Cancelados')
+
+      // Check storeSummaries
+      const planaltina = parsed.storeSummaries.find(
+        (s) => s.canonicalStoreName === 'CELNET MATRIZ PLANALTINA DF',
+      )
+      expect(planaltina).toBeDefined()
+      expect(planaltina?.totalLinhas).toBe(2)
+      expect(planaltina?.fatura_paga).toBe(1)
+      expect(planaltina?.pendente).toBe(1)
+      expect(planaltina?.nao_tratados).toBe(0)
+
+      const dfPlaza = parsed.storeSummaries.find((s) => s.canonicalStoreName === 'CELNET DF PLAZA')
+      expect(dfPlaza).toBeDefined()
+      expect(dfPlaza?.totalLinhas).toBe(1)
+      expect(dfPlaza?.cancelados).toBe(1)
+      expect(dfPlaza?.nao_tratados).toBe(0)
+    })
   })
 })
