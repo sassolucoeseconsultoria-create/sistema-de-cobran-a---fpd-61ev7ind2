@@ -44,7 +44,14 @@ import {
   matchStore,
   fetchDistinctReferenceDates,
 } from '@/services/fpdService'
-import { parseXlsxFile, classifyRow, guessStoreName, type ParsedFileData } from '@/lib/xlsxParser'
+import {
+  parseXlsxFile,
+  classifyRow,
+  classifyStatusCell,
+  normalizeText,
+  guessStoreName,
+  type ParsedFileData,
+} from '@/lib/xlsxParser'
 import type { ParsedVendorLine } from '@/types/fpd'
 import {
   parseBatchXlsxFile,
@@ -488,7 +495,11 @@ export const Importar: React.FC = () => {
             const resolvedStore = await resolveOrCreateStoreRecord(rawRowLoja)
             const normalizedLoja = resolvedStore ? resolvedStore.name : rawRowLoja.toUpperCase()
 
-            const cat = classifyRow([r.ocorrencias || ''])
+            const rawStatus = r.ocorrencias || ''
+            const cat =
+              classifyStatusCell(rawStatus) ||
+              classifyRow([normalizeText(rawStatus)]) ||
+              classifyRow([rawStatus])
             if (cat) {
               const agg = await getOrInitStoreAgg(normalizedLoja)
               agg.total_linhas++
@@ -524,7 +535,11 @@ export const Importar: React.FC = () => {
             const resolvedStore = await resolveOrCreateStoreRecord(rawRowLoja)
             const normalizedLoja = resolvedStore ? resolvedStore.name : rawRowLoja.toUpperCase()
 
-            const cat = classifyRow([r.ocorrencias || ''])
+            const rawStatus = r.ocorrencias || ''
+            const cat =
+              classifyStatusCell(rawStatus) ||
+              classifyRow([normalizeText(rawStatus)]) ||
+              classifyRow([rawStatus])
             if (cat) {
               const agg = await getOrInitStoreAgg(normalizedLoja)
               agg.total_linhas++
@@ -580,11 +595,17 @@ export const Importar: React.FC = () => {
 
       // 4. Salvar fpd_records para CADA LOJA distinta encontrada nas linhas
       for (const [, agg] of storeAggMap.entries()) {
-        const sId = agg.storeRecord ? agg.storeRecord.id : storeId
-        if (!sId) continue
+        let targetStoreId = agg.storeRecord ? agg.storeRecord.id : ''
+        if (!targetStoreId) {
+          const resolved = await resolveOrCreateStoreRecord(agg.storeName)
+          if (resolved) {
+            targetStoreId = resolved.id
+          }
+        }
+        if (!targetStoreId) continue
 
         await saveFpdRecord({
-          storeId: sId,
+          storeId: targetStoreId,
           referente: refDate,
           total_linhas: agg.total_linhas,
           envio_fatura: agg.envio_fatura,

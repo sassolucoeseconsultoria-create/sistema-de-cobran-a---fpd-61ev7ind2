@@ -391,10 +391,15 @@ export function classifyRow(input: string | string[], extraCells?: unknown[]): F
   let cells: string[]
   if (Array.isArray(input)) {
     cells = input
+      .map((c) => (c !== null && c !== undefined ? normalizeText(c) : ''))
+      .filter(Boolean)
   } else if (extraCells && Array.isArray(extraCells)) {
-    cells = extraCells.map((c) => (c !== null && c !== undefined ? normalizeText(c) : ''))
+    cells = extraCells
+      .map((c) => (c !== null && c !== undefined ? normalizeText(c) : ''))
+      .filter(Boolean)
   } else if (typeof input === 'string') {
-    cells = [input]
+    const norm = normalizeText(input)
+    cells = norm ? [norm] : []
   } else {
     cells = []
   }

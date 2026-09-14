@@ -551,5 +551,174 @@ describe('batchImportService', () => {
         expect.any(Function),
       )
     })
+
+    it('cenário com arquivo contendo linhas de loja física e linhas de loja CALL/ILHA: deve isolar CALL de loja física e somar totais com consistência', async () => {
+      const { saveFpdRecord, saveVendorConsolidationsFromLines } =
+        await import('@/services/fpdService')
+
+      const storesWithBoth: StoreRecord[] = [
+        {
+          id: 'store-fisica-1',
+          collectionId: 'stores',
+          collectionName: 'stores',
+          name: 'CELNET NOVA SUIÇA',
+          coordenacao: 'Karen',
+          supervisao: 'Karen',
+          created: '2026-01-01',
+          updated: '2026-01-01',
+        },
+        {
+          id: 'store-call-1',
+          collectionId: 'stores',
+          collectionName: 'stores',
+          name: 'CELNET CALL NOVA SUIÇA',
+          coordenacao: '',
+          supervisao: '',
+          created: '2026-01-01',
+          updated: '2026-01-01',
+        },
+      ]
+
+      const summaryFisica: BatchStoreSummary = {
+        rawStoreName: 'CELNET NOVA SUIÇA',
+        canonicalStoreName: 'CELNET NOVA SUIÇA',
+        storeId: 'store-fisica-1',
+        totalLinhas: 2,
+        fatura_paga: 2,
+        envio_fatura: 0,
+        promessa_pagto: 0,
+        sem_contato: 0,
+        cancelados: 0,
+        pendente: 0,
+        contato_realizado: 0,
+        nao_tratados: 0,
+        outros: 0,
+        vendorLinesCount: 1,
+        analyticalRowsCount: 2,
+      }
+
+      const summaryCall: BatchStoreSummary = {
+        rawStoreName: 'CELNET CALL NOVA SUIÇA',
+        canonicalStoreName: 'CELNET CALL NOVA SUIÇA',
+        storeId: 'store-call-1',
+        totalLinhas: 3,
+        fatura_paga: 0,
+        envio_fatura: 0,
+        promessa_pagto: 0,
+        sem_contato: 0,
+        cancelados: 0,
+        pendente: 3,
+        contato_realizado: 0,
+        nao_tratados: 0,
+        outros: 0,
+        vendorLinesCount: 1,
+        analyticalRowsCount: 3,
+      }
+
+      const parsedMultiStoreData = {
+        fileName: 'CELNET NOVA SUIÇA.xlsx',
+        importType: 'movel' as const,
+        targetSheetName: 'Móvel',
+        totalValidRows: 5,
+        totalExpurgadasRows: 0,
+        storeSummaries: [summaryFisica, summaryCall],
+        analyticalRows: [
+          // 2 linhas da loja física
+          {
+            linha: 2,
+            loja: 'CELNET NOVA SUIÇA',
+            vendedor: 'VENDEDOR FISICO',
+            cliente: 'CLIENTE 1',
+            ocorrencias: 'Fatura(s) Paga(s)',
+            dados: {},
+          },
+          {
+            linha: 3,
+            loja: 'CELNET NOVA SUIÇA',
+            vendedor: 'VENDEDOR FISICO',
+            cliente: 'CLIENTE 2',
+            ocorrencias: 'Fatura(s) Paga(s)',
+            dados: {},
+          },
+          // 3 linhas da loja CALL
+          {
+            linha: 4,
+            loja: 'CELNET CALL NOVA SUIÇA',
+            vendedor: 'VENDEDOR CALL',
+            cliente: 'CLIENTE CALL 1',
+            ocorrencias: 'Pendente',
+            dados: {},
+          },
+          {
+            linha: 5,
+            loja: 'CELNET CALL NOVA SUIÇA',
+            vendedor: 'VENDEDOR CALL',
+            cliente: 'CLIENTE CALL 2',
+            ocorrencias: 'Pendente',
+            dados: {},
+          },
+          {
+            linha: 6,
+            loja: 'CELNET CALL NOVA SUIÇA',
+            vendedor: 'VENDEDOR CALL',
+            cliente: 'CLIENTE CALL 3',
+            ocorrencias: 'Pendente',
+            dados: {},
+          },
+        ],
+        vendorLines: [
+          {
+            vendedor: 'VENDEDOR FISICO',
+            loja: 'CELNET NOVA SUIÇA',
+            status: 'fatura_paga' as const,
+            quantidade: 2,
+          },
+          {
+            vendedor: 'VENDEDOR CALL',
+            loja: 'CELNET CALL NOVA SUIÇA',
+            status: 'pendente' as const,
+            quantidade: 3,
+          },
+        ],
+      }
+
+      const result = await executeBatchImport(parsedMultiStoreData, '26/08/2026', storesWithBoth)
+
+      expect(result.storesCount).toBe(2)
+      expect(result.totalFpdUpdated).toBe(2)
+      expect(result.totalAnalyticalInserted).toBe(5)
+
+      // saveFpdRecord deve ter sido chamado para ambas as lojas separadamente com seus respectivos storeIds
+      expect(saveFpdRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          storeId: 'store-fisica-1',
+          total_linhas: 2,
+          fatura_paga: 2,
+        }),
+      )
+      expect(saveFpdRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          storeId: 'store-call-1',
+          total_linhas: 3,
+          pendente: 3,
+        }),
+      )
+
+      // saveVendorConsolidationsFromLines deve receber linhas com lojas isoladas
+      expect(saveVendorConsolidationsFromLines).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            loja: 'CELNET NOVA SUIÇA',
+            vendedor: 'VENDEDOR FISICO',
+          }),
+          expect.objectContaining({
+            loja: 'CELNET CALL NOVA SUIÇA',
+            vendedor: 'VENDEDOR CALL',
+          }),
+        ]),
+        '26/08/2026',
+        expect.any(Array),
+      )
+    })
   })
 })

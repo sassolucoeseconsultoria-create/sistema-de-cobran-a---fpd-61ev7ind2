@@ -1276,4 +1276,20 @@ describe('parseWorksheet with AE (Móvel) and AW (Residencial) column counts', (
     expect(classifyStatusCell('OCORRENCIA')).toBeNull()
     expect(classifyStatusCell('QUALQUER OUTRO TEXTO ALEATORIO')).toBeNull()
   })
+
+  it('regression test: classifyRow normalizes array inputs with uppercase or canonical labels correctly', () => {
+    // Array with uppercase or mixed case canonical strings
+    expect(classifyRow(['Pendente'])).toBe('pendente')
+    expect(classifyRow(['PENDENTE'])).toBe('pendente')
+    expect(classifyRow(['Fatura(s) Paga(s)'])).toBe('fatura_paga')
+    expect(classifyRow(['FATURA(S) PAGA(S)'])).toBe('fatura_paga')
+    expect(classifyRow(['Enviado Fatura(s)'])).toBe('envio_fatura')
+    expect(classifyRow(['ENVIADO FATURA(S)'])).toBe('envio_fatura')
+    expect(classifyRow(['Promessa de Pagto.'])).toBe('promessa_pagto')
+    expect(classifyRow(['PROMESSA DE PAGTO.'])).toBe('promessa_pagto')
+    expect(classifyRow(['Sem Contato'])).toBe('sem_contato')
+    expect(classifyRow(['Cancelados'])).toBe('cancelados')
+    expect(classifyRow(['Contato Realizado'])).toBe('contato_realizado')
+    expect(classifyRow(['Não Tratados'])).toBe('nao_tratados')
+  })
 })
