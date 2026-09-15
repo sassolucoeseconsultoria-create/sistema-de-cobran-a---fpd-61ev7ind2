@@ -266,8 +266,12 @@ export async function parseBatchXlsxFile(
     }
 
     // Determine occurrences category:
-    // Exclusively by the status/occurrences column cell value, with multi-field fallback for Residencial.
-    // Empty/blank cell -> EXPURGADA (does not increment totalLinhas, nao_tratados, or store summary)
+    // Fidelidade estrita à planilha:
+    // Quando a linha possui a coluna Ocorrências preenchida com um valor válido, esse valor
+    // prevalece SEMPRE (canonizado: "Não Tratados" -> nao_tratados, etc.).
+    // A derivação multi-campo (FATURA, PAGO, VLR PAGO, INDICADOR, PREVENTIVA FPD, VIROU FPD, DSC_STATUS_CONTRATO)
+    // só deve ser aplicada quando a coluna Ocorrências NÃO existe na planilha ou a célula está vazia.
+    // Empty/blank cell -> EXPURGADA quando não há como classificar.
     let category: FpdStatusKey | null = null
     if (statusColIndex >= 0 && statusColIndex < row.length) {
       const rawCell = row[statusColIndex]
@@ -277,10 +281,9 @@ export async function parseBatchXlsxFile(
       }
     }
 
-    // Para lote Residencial: aplicar a mesma prioridade quando a categoria isolada for
-    // 'nao_tratados' (ou nula): derivar de PAGO/FATURA/VLR PAGO/INDICADOR/PREVENTIVA FPD/VIROU FPD/DSC_STATUS_CONTRATO
-    // antes de contar como nao_tratados.
-    if ((!category || category === 'nao_tratados') && importType === 'residencial') {
+    // Para lote Residencial: aplicar a derivação multi-campo APENAS quando a coluna
+    // de ocorrências não existir ou a célula estiver vazia (!category).
+    if (!category && importType === 'residencial') {
       let isFaturaPaga = false
       let isPendente = false
       let isCancelado = false
@@ -342,7 +345,7 @@ export async function parseBatchXlsxFile(
         category = 'pendente'
       } else if (isCancelado) {
         category = 'cancelados'
-      } else if (candidateStatus && candidateStatus !== 'nao_tratados') {
+      } else if (candidateStatus) {
         category = candidateStatus
       }
     }

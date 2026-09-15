@@ -250,21 +250,20 @@ export function parseAnalyticalWorksheet(
     }
 
     // Determine occurrences classification:
-    // Exclusively by the status/occurrences column cell value:
-    // - Vazia -> EXPURGADA (linha não deve gerar contagem nem registro de ocorrência)
-    // - Casa com categoria oficial -> rótulo canônico
-    // - Não casa -> texto original da célula (trim)
+    // Fidelidade estrita à planilha:
+    // Quando a linha possui a coluna Ocorrências preenchida com um valor válido,
+    // esse valor prevalece SEMPRE (canonizado: "Não Tratados" -> Não Tratados, etc.).
+    // A derivação multi-campo (FATURA, PAGO, VLR PAGO, INDICADOR, PREVENTIVA FPD, VIROU FPD, DSC_STATUS_CONTRATO)
+    // só deve ser aplicada quando a coluna Ocorrências NÃO existe na planilha ou a célula está vazia.
     let rowOcorrenciaLabel = ''
     if (statusColIndex >= 0 && statusColIndex < row.length) {
       const rawStatusCell = row[statusColIndex]
       rowOcorrenciaLabel = getCanonicalCategoryOrRaw(rawStatusCell)
     }
 
-    // Para tipo residencial: derivar a ocorrência de múltiplos campos quando a coluna
-    // de status isolada não casar ou estiver ausente/vazia:
-    // FATURA, PAGO, VLR PAGO, INDICADOR, PREVENTIVA FPD, VIROU FPD, DSC_STATUS_CONTRATO (mesma lógica da migração 0040).
-    // Linhas válidas NÃO podem ser expurgadas — só expurgar linha sem nenhum campo de ocorrência identificável (célula totalmente vazia).
-    if (sheetType === 'residencial') {
+    // Para tipo residencial: derivar a ocorrência de múltiplos campos APENAS quando
+    // a coluna de ocorrências NÃO existir ou estiver vazia na planilha.
+    if (sheetType === 'residencial' && (!rowOcorrenciaLabel || !rowOcorrenciaLabel.trim())) {
       const faturaVal = rowDataMap['FATURA'] ?? rowDataMap['fatura'] ?? typedFields['fatura']
       const pagoVal = rowDataMap['PAGO'] ?? rowDataMap['pago'] ?? typedFields['pago']
       const vlrPagoVal =
@@ -304,12 +303,11 @@ export function parseAnalyticalWorksheet(
         (faturaStr && getCanonicalCategoryOrRaw(faturaStr) === 'Fatura(s) Paga(s)') ||
         (!isNaN(vlrPagoNum) && vlrPagoNum > 0)
 
-      // Regra de prioridade para Residencial:
+      // Regra de prioridade para Residencial quando coluna de ocorrências ausente/vazia:
       // (i) pago=1, fatura contendo "Paga" ou vlr_pago>0 -> "Fatura(s) Paga(s)"
       // (ii) virou_fpd=1 / indicador contém "virou fpd" / preventiva_fpd=1 / indicador contém "preventiva fpd" / fatura contém "em aberto" -> "Pendente"
-      //      (essa regra DEVE prevalecer sobre "Não Tratados" pré-existente)
       // (iii) dsc_status_contrato/indicador contendo "cancel"/"desconect" -> "Cancelados"
-      // (iv) "Não Tratados" apenas se nada acima classificar; célula totalmente vazia continua expurgada
+      // (iv) fallback para outros campos antes de manter vazio; célula totalmente vazia continua expurgada
       const normIndicador = indicadorVal ? normalizeText(String(indicadorVal)) : ''
       const normPreventiva = preventivaVal ? normalizeText(String(preventivaVal)) : ''
       const normVirou = virouFpdVal ? normalizeText(String(virouFpdVal)) : ''
@@ -341,48 +339,43 @@ export function parseAnalyticalWorksheet(
       if (isFaturaPaga) {
         rowOcorrenciaLabel = 'Fatura(s) Paga(s)'
       } else if (isPendenteRegra) {
-        // Prevalece sobre "Não Tratados" ou qualquer rótulo não prioritário
         rowOcorrenciaLabel = 'Pendente'
       } else if (isCanceladoRegra) {
         rowOcorrenciaLabel = 'Cancelados'
-      } else if (
-        !rowOcorrenciaLabel ||
-        !rowOcorrenciaLabel.trim() ||
-        rowOcorrenciaLabel === 'Não Tratados'
-      ) {
-        // Fallback para outros campos antes de manter Não Tratados
+      } else {
+        // Fallback para outros campos
         let fallbackFound = false
         if (indicadorVal) {
           const catIndicador = getCanonicalCategoryOrRaw(indicadorVal)
-          if (catIndicador && catIndicador !== 'Não Tratados') {
+          if (catIndicador) {
             rowOcorrenciaLabel = catIndicador
             fallbackFound = true
           }
         }
         if (!fallbackFound && preventivaVal) {
           const catPrev = getCanonicalCategoryOrRaw(preventivaVal)
-          if (catPrev && catPrev !== 'Não Tratados') {
+          if (catPrev) {
             rowOcorrenciaLabel = catPrev
             fallbackFound = true
           }
         }
         if (!fallbackFound && virouFpdVal) {
           const catVirou = getCanonicalCategoryOrRaw(virouFpdVal)
-          if (catVirou && catVirou !== 'Não Tratados') {
+          if (catVirou) {
             rowOcorrenciaLabel = catVirou
             fallbackFound = true
           }
         }
         if (!fallbackFound && dscStatusVal) {
           const catDsc = getCanonicalCategoryOrRaw(dscStatusVal)
-          if (catDsc && catDsc !== 'Não Tratados') {
+          if (catDsc) {
             rowOcorrenciaLabel = catDsc
             fallbackFound = true
           }
         }
         if (!fallbackFound && faturaStr) {
           const catFat = getCanonicalCategoryOrRaw(faturaStr)
-          if (catFat && catFat !== 'Não Tratados') {
+          if (catFat) {
             rowOcorrenciaLabel = catFat
             fallbackFound = true
           }

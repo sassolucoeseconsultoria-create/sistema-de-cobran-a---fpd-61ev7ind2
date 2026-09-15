@@ -822,7 +822,7 @@ describe('batchImportService', () => {
       expect(dfPlaza?.nao_tratados).toBe(0)
     })
 
-    it('regression: batch residencial with status column as "Não Tratados" re-classifies Virou FPD / Em Aberto to pendente in storeSummary', async () => {
+    it('faithful to spreadsheet: batch residencial with status column as "Não Tratados" preserves nao_tratados in storeSummary', async () => {
       const headers = [
         'LOJA',
         'VENDEDOR',
@@ -861,6 +861,59 @@ describe('batchImportService', () => {
       XLSX.utils.book_append_sheet(wb, ws, 'Residencial')
       const buffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
       const file = new File([buffer], 'batch_res.xlsx', {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
+
+      const parsed = await parseBatchXlsxFile(file, 'residencial', mockStores as any)
+      const jkSummary = parsed.storeSummaries.find(
+        (s) => s.canonicalStoreName === 'CELNET SHOPPING JK',
+      )
+      expect(jkSummary).toBeDefined()
+      expect(jkSummary?.totalLinhas).toBe(2)
+      expect(jkSummary?.pendente).toBe(0)
+      expect(jkSummary?.fatura_paga).toBe(0)
+      expect(jkSummary?.nao_tratados).toBe(2)
+    })
+
+    it('multi-field fallback: batch residencial with empty status column applies multi-field derivation in storeSummary', async () => {
+      const headers = [
+        'LOJA',
+        'VENDEDOR',
+        'STATUS',
+        'FATURA',
+        'PAGO',
+        'VLR PAGO',
+        'INDICADOR',
+        'VIROU FPD',
+      ]
+      const rows = [
+        headers,
+        [
+          'CELNET SHOPPING JK',
+          'ADELMA VIEIRA',
+          '', // status vazio -> derivação multi-campo
+          'Em Aberto',
+          '0',
+          '0',
+          'Virou FPD',
+          '1',
+        ],
+        [
+          'CELNET SHOPPING JK',
+          'ADELMA VIEIRA',
+          '', // status vazio -> derivação multi-campo (pago=1, vlr_pago>0)
+          'Paga',
+          '1',
+          '150',
+          'Virou FPD',
+          '1',
+        ],
+      ]
+      const ws = XLSX.utils.aoa_to_sheet(rows)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Residencial')
+      const buffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+      const file = new File([buffer], 'batch_res_fallback.xlsx', {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       })
 
