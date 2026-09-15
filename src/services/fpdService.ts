@@ -102,9 +102,10 @@ export async function saveFpdRecord(data: {
   nao_tratados?: number
   contato_realizado?: number
   outros?: number
+  accumulate?: boolean
 }): Promise<FpdRecord> {
   // Check if a record already exists for this store + referente (if referente provided)
-  let existingId: string | null = null
+  let existingRecord: FpdRecord | null = null
   if (data.referente) {
     try {
       const existing = await executeWithRateLimitRetry(() =>
@@ -114,31 +115,49 @@ export async function saveFpdRecord(data: {
         }),
       )
       if (existing.items.length > 0) {
-        existingId = existing.items[0].id
+        existingRecord = existing.items[0]
       }
     } catch {
       // ignore
     }
   }
 
+  const shouldAccumulate = data.accumulate === true && existingRecord !== null
+
   const payload = {
     store: data.storeId,
     referente: data.referente?.trim() || '',
-    total_linhas: toSafeInt(data.total_linhas),
-    envio_fatura: toSafeInt(data.envio_fatura),
-    pendente: toSafeInt(data.pendente),
-    fatura_paga: toSafeInt(data.fatura_paga),
-    sem_contato: toSafeInt(data.sem_contato),
-    promessa_pagto: toSafeInt(data.promessa_pagto),
-    cancelados: toSafeInt(data.cancelados),
-    nao_tratados: toSafeInt(data.nao_tratados),
-    contato_realizado: toSafeInt(data.contato_realizado),
-    outros: toSafeInt(data.outros),
+    total_linhas:
+      toSafeInt(data.total_linhas) +
+      (shouldAccumulate ? toSafeInt(existingRecord!.total_linhas) : 0),
+    envio_fatura:
+      toSafeInt(data.envio_fatura) +
+      (shouldAccumulate ? toSafeInt(existingRecord!.envio_fatura) : 0),
+    pendente:
+      toSafeInt(data.pendente) + (shouldAccumulate ? toSafeInt(existingRecord!.pendente) : 0),
+    fatura_paga:
+      toSafeInt(data.fatura_paga) + (shouldAccumulate ? toSafeInt(existingRecord!.fatura_paga) : 0),
+    sem_contato:
+      toSafeInt(data.sem_contato) + (shouldAccumulate ? toSafeInt(existingRecord!.sem_contato) : 0),
+    promessa_pagto:
+      toSafeInt(data.promessa_pagto) +
+      (shouldAccumulate ? toSafeInt(existingRecord!.promessa_pagto) : 0),
+    cancelados:
+      toSafeInt(data.cancelados) + (shouldAccumulate ? toSafeInt(existingRecord!.cancelados) : 0),
+    nao_tratados:
+      toSafeInt(data.nao_tratados) +
+      (shouldAccumulate ? toSafeInt(existingRecord!.nao_tratados) : 0),
+    contato_realizado:
+      toSafeInt(data.contato_realizado) +
+      (shouldAccumulate ? toSafeInt(existingRecord!.contato_realizado) : 0),
+    outros: toSafeInt(data.outros) + (shouldAccumulate ? toSafeInt(existingRecord!.outros) : 0),
   }
 
-  if (existingId) {
+  if (existingRecord) {
     return await executeWithRateLimitRetry(() =>
-      pb.collection('fpd_records').update<FpdRecord>(existingId, payload, { requestKey: null }),
+      pb
+        .collection('fpd_records')
+        .update<FpdRecord>(existingRecord!.id, payload, { requestKey: null }),
     )
   }
   return await executeWithRateLimitRetry(() =>
@@ -677,18 +696,19 @@ export async function saveVendorConsolidationsFromLines(
     const payload = {
       vendedor: item.vendedor,
       loja: item.loja,
-      supervisao: item.supervisao,
+      supervisao: item.supervisao || existing?.supervisao || '',
       data_referencia: item.data_referencia,
-      total_linhas: item.total_linhas,
-      fatura_paga: item.fatura_paga,
-      envio_fatura: item.envio_fatura,
-      promessa_pagto: item.promessa_pagto,
-      sem_contato: item.sem_contato,
-      cancelados: item.cancelados,
-      pendente: item.pendente,
-      contato_realizado: item.contato_realizado,
-      outros: item.outros,
-      nao_tratados: item.nao_tratados,
+      total_linhas: item.total_linhas + (existing ? toSafeInt(existing.total_linhas) : 0),
+      fatura_paga: item.fatura_paga + (existing ? toSafeInt(existing.fatura_paga) : 0),
+      envio_fatura: item.envio_fatura + (existing ? toSafeInt(existing.envio_fatura) : 0),
+      promessa_pagto: item.promessa_pagto + (existing ? toSafeInt(existing.promessa_pagto) : 0),
+      sem_contato: item.sem_contato + (existing ? toSafeInt(existing.sem_contato) : 0),
+      cancelados: item.cancelados + (existing ? toSafeInt(existing.cancelados) : 0),
+      pendente: item.pendente + (existing ? toSafeInt(existing.pendente) : 0),
+      contato_realizado:
+        item.contato_realizado + (existing ? toSafeInt(existing.contato_realizado) : 0),
+      outros: item.outros + (existing ? toSafeInt(existing.outros) : 0),
+      nao_tratados: item.nao_tratados + (existing ? toSafeInt(existing.nao_tratados) : 0),
     }
 
     await executeWithRateLimitRetry(() => {

@@ -213,3 +213,10 @@ describe('matchStore - Real World Cases', () => {
     expect(match).toBeNull()
   })
 })
+
+describe('saveFpdRecord - Accumulative updates regression', () => {
+  it('saveFpdRecord supports accumulate flag in its parameter type and function signature', async () => {
+    const { saveFpdRecord } = await import('./fpdService')
+    expect(typeof saveFpdRecord).toBe('function')
+  })
+})

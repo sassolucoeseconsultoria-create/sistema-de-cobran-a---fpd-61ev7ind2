@@ -220,4 +220,68 @@ describe('analyticalImportParser', () => {
     expect(parsed.rows[3].cliente).toBe('CLIENTE D')
     expect(parsed.rows[3].ocorrencias).toBe('Cancelados')
   })
+
+  it('regression: residential line with existing "Não Tratados" status column but virou_fpd=1 and fatura="Em Aberto" classifies as Pendente', async () => {
+    const { parseAnalyticalWorksheet } = await import('./analyticalImportParser')
+    const XLSX = await import('xlsx')
+
+    const headers = [
+      'NM LOJA',
+      'NM VENDEDOR',
+      'CLIENTE',
+      'Ocorrências',
+      'FATURA',
+      'PAGO',
+      'VLR PAGO',
+      'INDICADOR',
+      'VIROU FPD',
+    ]
+
+    const dataRows = [
+      [
+        'CELNET SHOPPING JK',
+        'ADELMA VIEIRA',
+        'JAKSON RODRIGUES',
+        'Não Tratados', // Coluna de ocorrências veio como 'Não Tratados'
+        'Em Aberto',
+        0,
+        0,
+        'Virou FPD',
+        1,
+      ],
+      [
+        'CELNET SHOPPING JK',
+        'ADELMA VIEIRA',
+        'MARIA SILVA',
+        'Não Tratados', // Coluna de ocorrências veio como 'Não Tratados'
+        'Paga',
+        1,
+        200,
+        'Virou FPD',
+        1,
+      ],
+      [
+        'CELNET SHOPPING JK',
+        'ADELMA VIEIRA',
+        'JOAO PEREIRA',
+        'Não Tratados',
+        'Em Aberto',
+        0,
+        0,
+        'Cancelado',
+        0,
+      ],
+    ]
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows])
+    const parsed = parseAnalyticalWorksheet(ws, 'Residencial', 'residencial')
+
+    expect(parsed.rows).toHaveLength(3)
+    // Virou FPD + Em Aberto deve prevalecer sobre "Não Tratados" -> "Pendente"
+    expect(parsed.rows[0].ocorrencias).toBe('Pendente')
+    // PAGO=1 / Fatura Paga deve prevalecer -> "Fatura(s) Paga(s)"
+    expect(parsed.rows[1].ocorrencias).toBe('Fatura(s) Paga(s)')
+    // Cancelado deve prevalecer -> "Cancelados"
+    expect(parsed.rows[2].ocorrencias).toBe('Cancelados')
+  })
 })

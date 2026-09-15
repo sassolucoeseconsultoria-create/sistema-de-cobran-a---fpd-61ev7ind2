@@ -277,9 +277,13 @@ export async function parseBatchXlsxFile(
       }
     }
 
-    // Para lote Residencial: derivar a ocorrência de múltiplos campos se a coluna isolada não casou
-    if (!category && importType === 'residencial') {
+    // Para lote Residencial: aplicar a mesma prioridade quando a categoria isolada for
+    // 'nao_tratados' (ou nula): derivar de PAGO/FATURA/VLR PAGO/INDICADOR/PREVENTIVA FPD/VIROU FPD/DSC_STATUS_CONTRATO
+    // antes de contar como nao_tratados.
+    if ((!category || category === 'nao_tratados') && importType === 'residencial') {
       let isFaturaPaga = false
+      let isPendente = false
+      let isCancelado = false
       let candidateStatus: FpdStatusKey | null = null
 
       for (let c = 0; c < row.length; c++) {
@@ -291,8 +295,10 @@ export async function parseBatchXlsxFile(
         const normCell = normalizeText(cellStr)
 
         if (normHeader === 'fatura') {
-          if (classifyStatusCell(normCell) === 'fatura_paga') {
+          if (normCell.includes('paga') || classifyStatusCell(normCell) === 'fatura_paga') {
             isFaturaPaga = true
+          } else if (normCell.includes('em aberto') || normCell.includes('aberto')) {
+            isPendente = true
           } else if (!candidateStatus) {
             candidateStatus = classifyStatusCell(normCell)
           }
@@ -305,14 +311,26 @@ export async function parseBatchXlsxFile(
           if (!isNaN(num) && num > 0) {
             isFaturaPaga = true
           }
-        } else if (
-          normHeader === 'indicador' ||
-          normHeader === 'preventiva fpd' ||
-          normHeader === 'virou fpd' ||
-          normHeader === 'dsc_status_contrato' ||
-          normHeader === 'status contrato'
-        ) {
-          if (!candidateStatus) {
+        } else if (normHeader === 'indicador') {
+          if (normCell.includes('virou fpd') || normCell.includes('preventiva fpd')) {
+            isPendente = true
+          } else if (normCell.includes('cancel') || normCell.includes('desconect')) {
+            isCancelado = true
+          } else if (!candidateStatus) {
+            candidateStatus = classifyStatusCell(normCell)
+          }
+        } else if (normHeader === 'virou fpd') {
+          if (cellStr === '1' || normCell === '1' || normCell.includes('virou fpd')) {
+            isPendente = true
+          }
+        } else if (normHeader === 'preventiva fpd') {
+          if (cellStr === '1' || normCell === '1' || normCell.includes('preventiva fpd')) {
+            isPendente = true
+          }
+        } else if (normHeader === 'dsc_status_contrato' || normHeader === 'status contrato') {
+          if (normCell.includes('cancel') || normCell.includes('desconect')) {
+            isCancelado = true
+          } else if (!candidateStatus) {
             candidateStatus = classifyStatusCell(normCell)
           }
         }
@@ -320,7 +338,11 @@ export async function parseBatchXlsxFile(
 
       if (isFaturaPaga) {
         category = 'fatura_paga'
-      } else if (candidateStatus) {
+      } else if (isPendente) {
+        category = 'pendente'
+      } else if (isCancelado) {
+        category = 'cancelados'
+      } else if (candidateStatus && candidateStatus !== 'nao_tratados') {
         category = candidateStatus
       }
     }
@@ -551,7 +573,7 @@ export async function executeBatchImport(
       }),
     )
 
-    // Upsert consolidated fpd_record with retry
+    // Upsert consolidated fpd_record with retry (accumulate: true para não sobrescrever lotes de outros tipos)
     if (storeId) {
       await executeWithRateLimitRetry(() =>
         saveFpdRecord({
@@ -567,6 +589,7 @@ export async function executeBatchImport(
           nao_tratados: s.nao_tratados,
           contato_realizado: s.contato_realizado,
           outros: 0,
+          accumulate: true,
         }),
       )
       totalFpdUpdated++

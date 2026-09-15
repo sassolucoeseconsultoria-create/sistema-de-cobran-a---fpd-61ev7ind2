@@ -617,6 +617,7 @@ export const Importar: React.FC = () => {
           nao_tratados: agg.nao_tratados,
           contato_realizado: agg.contato_realizado,
           outros: agg.outros,
+          accumulate: false,
         })
       }
 

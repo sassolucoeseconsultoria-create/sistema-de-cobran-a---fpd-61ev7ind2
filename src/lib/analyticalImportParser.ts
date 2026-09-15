@@ -295,35 +295,110 @@ export function parseAnalyticalWorksheet(
           : NaN
 
       const isFaturaPaga =
-        (faturaStr && getCanonicalCategoryOrRaw(faturaStr) === 'Fatura(s) Paga(s)') ||
         pagoVal === 1 ||
         pagoStr === '1' ||
         pagoStr.toLowerCase() === 'pago' ||
+        pagoStr.toLowerCase() === 'sim' ||
+        pagoStr.toLowerCase() === 'true' ||
+        (faturaStr && normalizeText(faturaStr).includes('paga')) ||
+        (faturaStr && getCanonicalCategoryOrRaw(faturaStr) === 'Fatura(s) Paga(s)') ||
         (!isNaN(vlrPagoNum) && vlrPagoNum > 0)
+
+      // Regra de prioridade para Residencial:
+      // (i) pago=1, fatura contendo "Paga" ou vlr_pago>0 -> "Fatura(s) Paga(s)"
+      // (ii) virou_fpd=1 / indicador contém "virou fpd" / preventiva_fpd=1 / indicador contém "preventiva fpd" / fatura contém "em aberto" -> "Pendente"
+      //      (essa regra DEVE prevalecer sobre "Não Tratados" pré-existente)
+      // (iii) dsc_status_contrato/indicador contendo "cancel"/"desconect" -> "Cancelados"
+      // (iv) "Não Tratados" apenas se nada acima classificar; célula totalmente vazia continua expurgada
+      const normIndicador = indicadorVal ? normalizeText(String(indicadorVal)) : ''
+      const normPreventiva = preventivaVal ? normalizeText(String(preventivaVal)) : ''
+      const normVirou = virouFpdVal ? normalizeText(String(virouFpdVal)) : ''
+      const normFatura = faturaStr ? normalizeText(faturaStr) : ''
+      const normDscStatus = dscStatusVal ? normalizeText(String(dscStatusVal)) : ''
+
+      const isVirouFpd =
+        virouFpdVal === 1 ||
+        normVirou === '1' ||
+        normVirou.includes('virou fpd') ||
+        normIndicador.includes('virou fpd')
+
+      const isPreventivaFpd =
+        preventivaVal === 1 ||
+        normPreventiva === '1' ||
+        normPreventiva.includes('preventiva fpd') ||
+        normIndicador.includes('preventiva fpd')
+
+      const isFaturaEmAberto = normFatura.includes('em aberto') || normFatura.includes('aberto')
+
+      const isPendenteRegra = isVirouFpd || isPreventivaFpd || isFaturaEmAberto
+
+      const isCanceladoRegra =
+        normDscStatus.includes('cancel') ||
+        normDscStatus.includes('desconect') ||
+        normIndicador.includes('cancel') ||
+        normIndicador.includes('desconect')
 
       if (isFaturaPaga) {
         rowOcorrenciaLabel = 'Fatura(s) Paga(s)'
-      } else if (!rowOcorrenciaLabel || !rowOcorrenciaLabel.trim()) {
-        // Prioridade 2: Indicador / Preventiva FPD / Virou FPD / DSC_STATUS_CONTRATO
+      } else if (isPendenteRegra) {
+        // Prevalece sobre "Não Tratados" ou qualquer rótulo não prioritário
+        rowOcorrenciaLabel = 'Pendente'
+      } else if (isCanceladoRegra) {
+        rowOcorrenciaLabel = 'Cancelados'
+      } else if (
+        !rowOcorrenciaLabel ||
+        !rowOcorrenciaLabel.trim() ||
+        rowOcorrenciaLabel === 'Não Tratados'
+      ) {
+        // Fallback para outros campos antes de manter Não Tratados
+        let fallbackFound = false
         if (indicadorVal) {
           const catIndicador = getCanonicalCategoryOrRaw(indicadorVal)
-          if (catIndicador) rowOcorrenciaLabel = catIndicador
+          if (catIndicador && catIndicador !== 'Não Tratados') {
+            rowOcorrenciaLabel = catIndicador
+            fallbackFound = true
+          }
         }
-        if (!rowOcorrenciaLabel && preventivaVal) {
+        if (!fallbackFound && preventivaVal) {
           const catPrev = getCanonicalCategoryOrRaw(preventivaVal)
-          if (catPrev) rowOcorrenciaLabel = catPrev
+          if (catPrev && catPrev !== 'Não Tratados') {
+            rowOcorrenciaLabel = catPrev
+            fallbackFound = true
+          }
         }
-        if (!rowOcorrenciaLabel && virouFpdVal) {
+        if (!fallbackFound && virouFpdVal) {
           const catVirou = getCanonicalCategoryOrRaw(virouFpdVal)
-          if (catVirou) rowOcorrenciaLabel = catVirou
+          if (catVirou && catVirou !== 'Não Tratados') {
+            rowOcorrenciaLabel = catVirou
+            fallbackFound = true
+          }
         }
-        if (!rowOcorrenciaLabel && dscStatusVal) {
+        if (!fallbackFound && dscStatusVal) {
           const catDsc = getCanonicalCategoryOrRaw(dscStatusVal)
-          if (catDsc) rowOcorrenciaLabel = catDsc
+          if (catDsc && catDsc !== 'Não Tratados') {
+            rowOcorrenciaLabel = catDsc
+            fallbackFound = true
+          }
         }
-        if (!rowOcorrenciaLabel && faturaStr) {
+        if (!fallbackFound && faturaStr) {
           const catFat = getCanonicalCategoryOrRaw(faturaStr)
-          if (catFat) rowOcorrenciaLabel = catFat
+          if (catFat && catFat !== 'Não Tratados') {
+            rowOcorrenciaLabel = catFat
+            fallbackFound = true
+          }
+        }
+        if (!fallbackFound && (!rowOcorrenciaLabel || !rowOcorrenciaLabel.trim())) {
+          // Se nenhuma categoria classificou mas linha tem dados residenciais identificados
+          if (
+            indicadorVal ||
+            preventivaVal ||
+            virouFpdVal ||
+            faturaVal ||
+            pagoVal ||
+            dscStatusVal
+          ) {
+            rowOcorrenciaLabel = 'Não Tratados'
+          }
         }
       }
     }
