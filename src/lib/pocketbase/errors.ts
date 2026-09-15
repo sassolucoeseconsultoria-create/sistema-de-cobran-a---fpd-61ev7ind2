@@ -21,44 +21,9 @@ export function extractFieldErrors(error: unknown): FieldErrors {
 }
 
 export function getErrorMessage(error: unknown): string {
-  if (!error) return 'Erro desconhecido.'
-
-  const errObj = error as {
-    status?: number
-    statusCode?: number
-    message?: string
-    response?: { message?: string; data?: Record<string, unknown> }
-  }
-
-  // Friendly PT-BR message for HTTP 429
-  const responseObj = errObj.response as
-    | { status?: number; message?: string; data?: Record<string, unknown> }
-    | undefined
-  if (
-    errObj.status === 429 ||
-    errObj.statusCode === 429 ||
-    responseObj?.status === 429 ||
-    (errObj.message && errObj.message.toLowerCase().includes('too many requests')) ||
-    (responseObj?.message && responseObj.message.toLowerCase().includes('too many requests'))
-  ) {
-    return 'Importação mais lenta por limite de requisições: aguarde, o processo continua automaticamente.'
-  }
-
   if (!(error instanceof ClientResponseError)) {
-    return error instanceof Error ? error.message : 'Ocorreu um erro inesperado.'
+    return error instanceof Error ? error.message : 'An unexpected error occurred.'
   }
-
   const msgs = Object.values(extractFieldErrors(error))
-  if (msgs.length > 0) {
-    return msgs.join(' ')
-  }
-
-  if (error.response?.message) {
-    if (error.response.message.toLowerCase().includes('too many requests')) {
-      return 'Importação mais lenta por limite de requisições: aguarde, o processo continua automaticamente.'
-    }
-    return error.response.message
-  }
-
-  return error.message || 'Ocorreu um erro inesperado.'
+  return msgs.length > 0 ? msgs.join(' ') : (error.message || 'An unexpected error occurred.')
 }
