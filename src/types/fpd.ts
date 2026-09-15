@@ -372,3 +372,16 @@ export const FPD_STATUSES: FpdStatusConfig[] = [
     borderTint: 'rgba(13, 148, 136, 0.25)',
   },
 ]
+
+export interface ReferenceDatePermissionRecord {
+  id: string
+  collectionId: string
+  collectionName: string
+  referente: string
+  gerente?: boolean
+  supervisor?: boolean
+  coordenador?: boolean
+  created: string
+  updated: string
+  [key: string]: unknown
+}

@@ -40,7 +40,6 @@ import {
   clearAllFpdRecords,
   clearAllVendorConsolidations,
   clearAllStores,
-  fetchDistinctReferenceDates,
 } from '@/services/fpdService'
 import { exportConsolidatedToXlsx, exportConsolidatedComparisonToXlsx } from '@/lib/xlsxExport'
 import {
@@ -59,10 +58,13 @@ import {
 import { cn } from '@/lib/utils'
 import { StoreAnalyticsDrawer } from '@/components/StoreAnalyticsDrawer'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
+import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
 
 export const Arquivos: React.FC = () => {
   const { toast } = useToast()
   const userAccess = useUserStoreAccess()
+  const { allowedReferenceDates: availableReferenceDates, isDateAllowed } =
+    useAllowedReferenceDates()
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [records, setRecords] = useState<FpdRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -70,9 +72,22 @@ export const Arquivos: React.FC = () => {
   // Filters
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [availableReferenceDates, setAvailableReferenceDates] = useState<string[]>([])
   const [selectedReferenceDate, setSelectedReferenceDate] = useState<string>('all')
   const [comparisonReferenceDate, setComparisonReferenceDate] = useState<string>('')
+
+  // Efeito para garantir que se a data selecionada for desabilitada para o perfil, volte para 'all' ou vazia
+  useEffect(() => {
+    if (
+      selectedReferenceDate !== 'all' &&
+      selectedReferenceDate !== 'none' &&
+      !isDateAllowed(selectedReferenceDate)
+    ) {
+      setSelectedReferenceDate('all')
+    }
+    if (comparisonReferenceDate && !isDateAllowed(comparisonReferenceDate)) {
+      setComparisonReferenceDate('')
+    }
+  }, [selectedReferenceDate, comparisonReferenceDate, isDateAllowed])
   const [selectedCoordenacoes, setSelectedCoordenacoes] = useState<string[]>([])
   const [selectedSupervisoes, setSelectedSupervisoes] = useState<string[]>([])
 
@@ -102,14 +117,9 @@ export const Arquivos: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [fetchedStores, fetchedRecords, fetchedRefDates] = await Promise.all([
-        fetchStores(),
-        fetchFpdRecords(),
-        fetchDistinctReferenceDates(),
-      ])
+      const [fetchedStores, fetchedRecords] = await Promise.all([fetchStores(), fetchFpdRecords()])
       setStores(fetchedStores)
       setRecords(fetchedRecords)
-      setAvailableReferenceDates(fetchedRefDates)
     } catch (err: unknown) {
       console.error(err)
       toast({

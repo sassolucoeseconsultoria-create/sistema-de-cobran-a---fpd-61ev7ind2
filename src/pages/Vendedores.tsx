@@ -37,7 +37,6 @@ import {
   clearAllVendorConsolidations,
   fetchStores,
   matchStore,
-  fetchDistinctReferenceDates,
 } from '@/services/fpdService'
 import { exportVendorsToXlsx } from '@/lib/xlsxExport'
 import { getStoreVariants, buildStoreFilterClause, isSameStore } from '@/lib/storeMatchingUtils'
@@ -51,10 +50,13 @@ import {
 } from '@/types/fpd'
 import { cn } from '@/lib/utils'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
+import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
 
 export const Vendedores: React.FC = () => {
   const { toast } = useToast()
   const userAccess = useUserStoreAccess()
+  const { allowedReferenceDates: availableReferenceDates, isDateAllowed } =
+    useAllowedReferenceDates()
   const [records, setRecords] = useState<VendorConsolidationRecord[]>([])
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -62,8 +64,18 @@ export const Vendedores: React.FC = () => {
   // Filters
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [availableReferenceDates, setAvailableReferenceDates] = useState<string[]>([])
   const [selectedReferenceDate, setSelectedReferenceDate] = useState<string>('all')
+
+  // Se a data selecionada for desabilitada para o perfil, faz fallback para 'all'
+  useEffect(() => {
+    if (
+      selectedReferenceDate !== 'all' &&
+      selectedReferenceDate !== 'none' &&
+      !isDateAllowed(selectedReferenceDate)
+    ) {
+      setSelectedReferenceDate('all')
+    }
+  }, [selectedReferenceDate, isDateAllowed])
   const [selectedLoja, setSelectedLoja] = useState<string>(() => {
     if (userAccess.isGerente) {
       if (userAccess.hasNoStoreAssigned) return ''
@@ -92,14 +104,12 @@ export const Vendedores: React.FC = () => {
   const loadData = useCallback(async () => {
     try {
       setLoading(true)
-      const [fetchedVendors, fetchedStores, fetchedRefDates] = await Promise.all([
+      const [fetchedVendors, fetchedStores] = await Promise.all([
         fetchVendorConsolidations(),
         fetchStores(),
-        fetchDistinctReferenceDates(),
       ])
       setRecords(fetchedVendors)
       setStores(fetchedStores)
-      setAvailableReferenceDates(fetchedRefDates)
 
       // Se for Gerente e possuir managerStoreId, pré-ajustar selectedLoja
       if (userAccess.isGerente && !userAccess.hasNoStoreAssigned) {

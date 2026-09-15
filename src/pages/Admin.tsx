@@ -23,8 +23,17 @@ import {
 import pb from '@/lib/pocketbase/client'
 import { useAuth, type UserRole, type User } from '@/contexts/AuthContext'
 import { FIXED_STORE_NAMES, fixedStoresAsRecords } from '@/services/fixedStores'
-import { fetchStores, normalizeStoreString } from '@/services/fpdService'
-import type { StoreRecord } from '@/types/fpd'
+import {
+  fetchStores,
+  normalizeStoreString,
+  fetchDistinctReferenceDates,
+} from '@/services/fpdService'
+import {
+  fetchReferenceDatePermissions,
+  saveReferenceDatePermission,
+} from '@/services/referenceDatePermissionService'
+import type { StoreRecord, ReferenceDatePermissionRecord } from '@/types/fpd'
+import { Switch } from '@/components/ui/switch'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -70,6 +79,12 @@ export const Admin: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<'ALL' | UserRole>('ALL')
+
+  // Reference Date Permissions state
+  const [refDates, setRefDates] = useState<string[]>([])
+  const [refPermissions, setRefPermissions] = useState<ReferenceDatePermissionRecord[]>([])
+  const [loadingRefDates, setLoadingRefDates] = useState(true)
+  const [savingRefDate, setSavingRefDate] = useState<string | null>(null)
 
   // Modal State for Create / Edit
   const [modalOpen, setModalOpen] = useState(false)
@@ -138,11 +153,49 @@ export const Admin: React.FC = () => {
       setLoading(false)
     }
     await loadStores()
+    await loadReferenceDatesData()
+  }
+
+  const loadReferenceDatesData = async () => {
+    try {
+      setLoadingRefDates(true)
+      const [dates, perms] = await Promise.all([
+        fetchDistinctReferenceDates(),
+        fetchReferenceDatePermissions(),
+      ])
+      setRefDates(dates)
+      setRefPermissions(perms)
+    } catch (err) {
+      console.error('Falha ao carregar datas de referência ou permissões:', err)
+      toast({
+        title: 'Erro ao carregar datas de referência',
+        description: 'Não foi possível carregar as permissões por perfil.',
+        variant: 'destructive',
+      })
+    } finally {
+      setLoadingRefDates(false)
+    }
   }
 
   useEffect(() => {
     loadData()
   }, [])
+
+  // Realtime updates for reference_date_permissions
+  useRealtime<ReferenceDatePermissionRecord>('reference_date_permissions', (e) => {
+    if (e.action === 'create') {
+      setRefPermissions((prev) => {
+        if (prev.some((p) => p.id === e.record.id)) return prev
+        return [...prev, e.record]
+      })
+    } else if (e.action === 'update') {
+      setRefPermissions((prev) =>
+        prev.map((p) => (p.id === e.record.id ? { ...p, ...e.record } : p)),
+      )
+    } else if (e.action === 'delete') {
+      setRefPermissions((prev) => prev.filter((p) => p.id !== e.record.id))
+    }
+  })
 
   // Realtime updates for users collection
   useRealtime<User>('users', (e) => {
@@ -767,6 +820,80 @@ export const Admin: React.FC = () => {
     }))
   }
 
+  // Toggle handler for Reference Date permissions per profile
+  const handleToggleRefPermission = async (
+    dateStr: string,
+    roleKey: 'gerente' | 'supervisor' | 'coordenador',
+    currentVal: boolean,
+  ) => {
+    const existing = refPermissions.find((p) => p.referente?.trim() === dateStr.trim())
+    const newVal = !currentVal
+    const payload = {
+      referente: dateStr.trim(),
+      gerente: existing ? existing.gerente !== false : true,
+      supervisor: existing ? existing.supervisor !== false : true,
+      coordenador: existing ? existing.coordenador !== false : true,
+      [roleKey]: newVal,
+    }
+
+    // Optimistic update
+    const previousPermissions = [...refPermissions]
+    setRefPermissions((prev) => {
+      const idx = prev.findIndex((p) => p.referente?.trim() === dateStr.trim())
+      if (idx >= 0) {
+        const copy = [...prev]
+        copy[idx] = { ...copy[idx], [roleKey]: newVal }
+        return copy
+      }
+      return [
+        ...prev,
+        {
+          id: `opt_${Date.now()}`,
+          collectionId: 'reference_date_permissions',
+          collectionName: 'reference_date_permissions',
+          referente: dateStr.trim(),
+          gerente: payload.gerente,
+          supervisor: payload.supervisor,
+          coordenador: payload.coordenador,
+          created: new Date().toISOString(),
+          updated: new Date().toISOString(),
+        },
+      ]
+    })
+
+    const roleLabel =
+      roleKey === 'gerente' ? 'Gerente' : roleKey === 'supervisor' ? 'Supervisão' : 'Coordenação'
+
+    setSavingRefDate(`${dateStr}-${roleKey}`)
+
+    try {
+      const saved = await saveReferenceDatePermission(payload)
+      setRefPermissions((prev) => {
+        const idx = prev.findIndex((p) => p.referente?.trim() === dateStr.trim())
+        if (idx >= 0) {
+          const copy = [...prev]
+          copy[idx] = saved
+          return copy
+        }
+        return [...prev, saved]
+      })
+      toast({
+        title: 'Permissão atualizada',
+        description: `Data ${dateStr} ${newVal ? 'habilitada' : 'desabilitada'} para ${roleLabel}.`,
+      })
+    } catch (err) {
+      console.error('Erro ao atualizar permissão de data de referência:', err)
+      setRefPermissions(previousPermissions)
+      toast({
+        title: 'Erro ao salvar',
+        description: 'Não foi possível atualizar a permissão da data de referência.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingRefDate(null)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Top Header Card / Action Bar */}
@@ -892,6 +1019,214 @@ export const Admin: React.FC = () => {
             <Store className="w-5 h-5 text-[#EA580C]" />
           </div>
         </div>
+      </div>
+
+      {/* Seção: Datas de Referência (Configuração de Visibilidade por Perfil) */}
+      <div className="bg-white rounded-xl border border-[#E3E9F2] shadow-xs overflow-hidden">
+        <div className="p-5 border-b border-[#E3E9F2] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-[#F8FAFC] to-white">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#12365A]/10 flex items-center justify-center text-[#12365A] shrink-0 border border-[#12365A]/15">
+              <Shield className="w-5 h-5 text-[#12365A]" />
+            </div>
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#12365A]/5 text-[#12365A] text-[10px] font-bold uppercase tracking-wider mb-1">
+                <span>Controle de Apresentação</span>
+              </div>
+              <h3 className="text-base font-bold text-[#12365A]">Datas de Referência</h3>
+              <p className="text-xs text-[#5B6B82]">
+                Habilite ou desabilite quais datas de referência são apresentadas aos perfis de
+                Gerente, Supervisão e Coordenação. O perfil <strong>ADM</strong> tem acesso
+                irrestrito a todas as referências.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadReferenceDatesData}
+            disabled={loadingRefDates}
+            className="h-8 text-xs border-[#E3E9F2] text-[#5B6B82] hover:text-[#12365A] hover:bg-[#F8FAFC] gap-1.5 self-start sm:self-auto shrink-0"
+            title="Atualizar datas de referência"
+          >
+            <RefreshCw className={cn('w-3.5 h-3.5', loadingRefDates && 'animate-spin')} />
+            <span>Atualizar Datas</span>
+          </Button>
+        </div>
+
+        {loadingRefDates ? (
+          <div className="p-8 text-center text-[#5B6B82] flex flex-col items-center justify-center gap-2">
+            <div className="w-6 h-6 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs">Carregando datas de referência...</span>
+          </div>
+        ) : refDates.length === 0 ? (
+          <div className="p-8 text-center text-[#5B6B82] flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
+            <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
+            <p className="font-semibold text-[#12365A] text-sm">
+              Nenhuma Data de Referência encontrada
+            </p>
+            <p className="text-xs text-[#5B6B82]">
+              Importe planilhas na tela de importação para registrar novas datas de referência no
+              sistema.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead className="bg-[#12365A] text-white font-semibold uppercase tracking-wider text-[11px]">
+                <tr>
+                  <th className="px-4 py-3 min-w-[160px]">DATA DE REFERÊNCIA</th>
+                  <th className="px-4 py-3 text-center min-w-[130px]">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-[#12365A] border border-white" />
+                      <span>ADM</span>
+                    </div>
+                  </th>
+                  <th className="px-4 py-3 text-center min-w-[140px]">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-[#EA580C]" />
+                      <span>GERENTE</span>
+                    </div>
+                  </th>
+                  <th className="px-4 py-3 text-center min-w-[140px]">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-[#0D9488]" />
+                      <span>SUPERVISÃO</span>
+                    </div>
+                  </th>
+                  <th className="px-4 py-3 text-center min-w-[140px]">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-[#0284C7]" />
+                      <span>COORDENAÇÃO</span>
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E3E9F2]">
+                {refDates.map((dateStr, idx) => {
+                  const perm = refPermissions.find((p) => p.referente?.trim() === dateStr.trim())
+                  const isGerenteActive = perm ? perm.gerente !== false : true
+                  const isSupervisorActive = perm ? perm.supervisor !== false : true
+                  const isCoordenadorActive = perm ? perm.coordenador !== false : true
+
+                  const isSavingGerente = savingRefDate === `${dateStr}-gerente`
+                  const isSavingSupervisor = savingRefDate === `${dateStr}-supervisor`
+                  const isSavingCoordenador = savingRefDate === `${dateStr}-coordenador`
+
+                  return (
+                    <tr
+                      key={dateStr}
+                      className={cn(
+                        'hover:bg-[#F0F5FC] transition-colors',
+                        idx % 2 === 1 ? 'bg-[#FAFCFF]' : 'bg-white',
+                      )}
+                    >
+                      {/* Data de Referência */}
+                      <td className="px-4 py-3.5 font-bold text-[#12365A] font-mono text-xs">
+                        <div className="flex items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className="bg-blue-50/70 text-[#12365A] border-blue-200 font-mono text-xs px-2.5 py-0.5"
+                          >
+                            {dateStr}
+                          </Badge>
+                        </div>
+                      </td>
+
+                      {/* ADM - Sempre ativo / incondicional */}
+                      <td className="px-4 py-3.5 text-center">
+                        <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold">
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Sempre Habilitado</span>
+                        </div>
+                      </td>
+
+                      {/* Gerente Toggle */}
+                      <td className="px-4 py-3.5 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <Switch
+                            aria-label={`Habilitar ${dateStr} para Gerente`}
+                            checked={isGerenteActive}
+                            disabled={isSavingGerente}
+                            onCheckedChange={() =>
+                              handleToggleRefPermission(dateStr, 'gerente', isGerenteActive)
+                            }
+                            className="data-[state=checked]:bg-[#EA580C]"
+                          />
+                          <span
+                            className={cn(
+                              'text-[11px] font-semibold w-16 text-left',
+                              isGerenteActive ? 'text-[#EA580C]' : 'text-slate-400',
+                            )}
+                          >
+                            {isSavingGerente
+                              ? 'Salvando...'
+                              : isGerenteActive
+                                ? 'Habilitado'
+                                : 'Desativado'}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Supervisor Toggle */}
+                      <td className="px-4 py-3.5 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <Switch
+                            aria-label={`Habilitar ${dateStr} para Supervisão`}
+                            checked={isSupervisorActive}
+                            disabled={isSavingSupervisor}
+                            onCheckedChange={() =>
+                              handleToggleRefPermission(dateStr, 'supervisor', isSupervisorActive)
+                            }
+                            className="data-[state=checked]:bg-[#0D9488]"
+                          />
+                          <span
+                            className={cn(
+                              'text-[11px] font-semibold w-16 text-left',
+                              isSupervisorActive ? 'text-[#0D9488]' : 'text-slate-400',
+                            )}
+                          >
+                            {isSavingSupervisor
+                              ? 'Salvando...'
+                              : isSupervisorActive
+                                ? 'Habilitado'
+                                : 'Desativado'}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Coordenador Toggle */}
+                      <td className="px-4 py-3.5 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <Switch
+                            aria-label={`Habilitar ${dateStr} para Coordenação`}
+                            checked={isCoordenadorActive}
+                            disabled={isSavingCoordenador}
+                            onCheckedChange={() =>
+                              handleToggleRefPermission(dateStr, 'coordenador', isCoordenadorActive)
+                            }
+                            className="data-[state=checked]:bg-[#0284C7]"
+                          />
+                          <span
+                            className={cn(
+                              'text-[11px] font-semibold w-16 text-left',
+                              isCoordenadorActive ? 'text-[#0284C7]' : 'text-slate-400',
+                            )}
+                          >
+                            {isSavingCoordenador
+                              ? 'Salvando...'
+                              : isCoordenadorActive
+                                ? 'Habilitado'
+                                : 'Desativado'}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Users Table Card */}

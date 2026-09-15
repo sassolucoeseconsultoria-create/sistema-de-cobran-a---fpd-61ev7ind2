@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-15T12:28:44.731Z",
+  "generatedAt": "2026-09-15T19:38:55.650Z",
   "collections": [
     {
       "name": "users",
@@ -1107,6 +1107,60 @@
         "CREATE INDEX idx_residencial_nr_contrato ON residencial (nr_contrato)",
         "CREATE UNIQUE INDEX `idx_residencial_arquivo_linha_unique` ON `residencial` (arquivo, linha)",
         "CREATE INDEX `idx_residencial_data_referencia` ON `residencial` (data_referencia)"
+      ]
+    },
+    {
+      "name": "reference_date_permissions",
+      "type": "base",
+      "apiRules": {
+        "list": "",
+        "view": "",
+        "create": "",
+        "update": "",
+        "delete": ""
+      },
+      "fields": [
+        {
+          "name": "referente",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "gerente",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "supervisor",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "coordenador",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_ref_date_permissions_referente ON reference_date_permissions (referente)"
       ]
     }
   ]

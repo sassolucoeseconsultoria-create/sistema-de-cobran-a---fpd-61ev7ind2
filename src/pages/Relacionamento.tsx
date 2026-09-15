@@ -44,6 +44,7 @@ import { Trash2 } from 'lucide-react'
 import { parseAnalyticalXlsxFile, ParsedAnalyticalFileData } from '@/lib/analyticalImportParser'
 import { fetchStores, matchStore } from '@/services/fpdService'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
+import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
 import type { MovelRecord, ResidencialRecord, StoreRecord } from '@/types/fpd'
 import { cn } from '@/lib/utils'
 import { ClientesMovel } from '@/components/ClientesMovel'
@@ -53,6 +54,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 export const Relacionamento: React.FC = () => {
   const { toast } = useToast()
   const userAccess = useUserStoreAccess()
+  const { isDateAllowed } = useAllowedReferenceDates()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Clientes tab: 'movel' | 'residencial'
@@ -71,7 +73,7 @@ export const Relacionamento: React.FC = () => {
     return 'TODAS'
   })
   const [rawAvailableLojas, setRawAvailableLojas] = useState<string[]>([])
-  const [availableDates, setAvailableDates] = useState<string[]>([])
+  const [rawAvailableDates, setRawAvailableDates] = useState<string[]>([])
   const [selectedDataReferencia, setSelectedDataReferencia] = useState<string>('TODAS')
 
   // Clear dialog state
@@ -211,7 +213,7 @@ export const Relacionamento: React.FC = () => {
         if (r.data_referencia && r.data_referencia.trim()) datesSet.add(r.data_referencia.trim())
       })
       const sortedDates = Array.from(datesSet).sort((a, b) => b.localeCompare(a))
-      setAvailableDates(sortedDates)
+      setRawAvailableDates(sortedDates)
     } catch (err) {
       console.error('Erro ao carregar dados iniciais de inadimplência:', err)
     }
@@ -221,6 +223,18 @@ export const Relacionamento: React.FC = () => {
   useEffect(() => {
     loadInitialData()
   }, [loadInitialData])
+
+  // Filtrar availableDates pelas permissões do perfil do usuário logado
+  const availableDates = useMemo(() => {
+    return rawAvailableDates.filter((d) => isDateAllowed(d))
+  }, [rawAvailableDates, isDateAllowed])
+
+  // Fallback se a data selecionada for desabilitada para o perfil
+  useEffect(() => {
+    if (selectedDataReferencia !== 'TODAS' && !isDateAllowed(selectedDataReferencia)) {
+      setSelectedDataReferencia('TODAS')
+    }
+  }, [selectedDataReferencia, isDateAllowed])
 
   // Filtered available lojas based on user profile and linked stores
   const availableLojas = useMemo(() => {
