@@ -164,12 +164,19 @@ describe('Integração de Filtros de Data de Referência por Perfil nas Telas', 
       expect(dateSelects.length).toBeGreaterThan(0)
     })
 
-    // No seletor principal de data, 08/09/2026 deve estar disponível, mas 26/08/2026 não
-    const primaryDateSelect = screen.getByDisplayValue(/Todas as referências/i) as HTMLSelectElement
+    // Supervisor só tem 1 data permitida (08/09/2026).
+    // Conforme a nova regra de negócio:
+    // - "Todas as referências" NÃO deve aparecer
+    // - A única referência permitida deve ser selecionada automaticamente
+    const primaryDateSelect = screen.getByRole('combobox', {
+      name: /selecione a referência principal/i,
+    }) as HTMLSelectElement
     const options = Array.from(primaryDateSelect.options).map((o) => o.text.trim())
 
+    expect(options.some((txt) => txt.includes('Todas as referências'))).toBe(false)
     expect(options.some((txt) => txt.includes('08/09/2026'))).toBe(true)
     expect(options.some((txt) => txt.includes('26/08/2026'))).toBe(false)
+    expect(primaryDateSelect.value).toBe('08/09/2026')
   })
 
   it('ADM no Painel de Lojas (/arquivos) vê todas as referências no seletor, mesmo com flag desabilitada para outros perfis', async () => {
@@ -193,12 +200,14 @@ describe('Integração de Filtros de Data de Referência por Perfil nas Telas', 
         /Todas as referências/i,
       ) as HTMLSelectElement
       const options = Array.from(primaryDateSelect.options).map((o) => o.text.trim())
+      expect(options.some((txt) => txt.includes('Todas as referências'))).toBe(true)
       expect(options.some((txt) => txt.includes('08/09/2026'))).toBe(true)
       expect(options.some((txt) => txt.includes('26/08/2026'))).toBe(true)
+      expect(primaryDateSelect.value).toBe('all')
     })
   })
 
-  it('Supervisor em Ranking por Vendedor (/vendedores) não vê a data desabilitada no seletor', async () => {
+  it('Supervisor em Ranking por Vendedor (/vendedores) não vê a data desabilitada no seletor e auto-seleciona a única data quando length === 1', async () => {
     vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
       user: supervisorUser,
       token: 'token',
@@ -215,12 +224,113 @@ describe('Integração de Filtros de Data de Referência por Perfil nas Telas', 
     )
 
     await waitFor(() => {
-      const dateSelect = screen.getByRole('combobox', {
-        name: /filtrar por data de referência/i,
-      }) as HTMLSelectElement
-      const options = Array.from(dateSelect.options).map((o) => o.text.trim())
-      expect(options.some((txt) => txt.includes('08/09/2026'))).toBe(true)
-      expect(options.some((txt) => txt.includes('26/08/2026'))).toBe(false)
+      const dateSelects = screen.getAllByRole('combobox')
+      expect(dateSelects.length).toBeGreaterThan(0)
     })
+
+    const dateSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement
+    const options = Array.from(dateSelect.options).map((o) => o.text.trim())
+
+    // Supervisor tem apenas 1 data permitida: 'Todas as referências' deve estar ausente
+    expect(options.some((txt) => txt.includes('Todas as referências'))).toBe(false)
+    expect(options.some((txt) => txt.includes('08/09/2026'))).toBe(true)
+    expect(options.some((txt) => txt.includes('26/08/2026'))).toBe(false)
+    expect(dateSelect.value).toBe('08/09/2026')
+  })
+
+  it('ADM em Ranking por Vendedor (/vendedores) com 2 referências vê a opção Todas as referências', async () => {
+    vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+      user: admUser,
+      token: 'token',
+      loading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshAuth: vi.fn(),
+    })
+
+    render(
+      <MemoryRouter>
+        <Vendedores />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      const dateSelect = screen.getByDisplayValue(/Todas as referências/i) as HTMLSelectElement
+      const options = Array.from(dateSelect.options).map((o) => o.text.trim())
+      expect(options.some((txt) => txt.includes('Todas as referências'))).toBe(true)
+      expect(options.some((txt) => txt.includes('08/09/2026'))).toBe(true)
+      expect(options.some((txt) => txt.includes('26/08/2026'))).toBe(true)
+    })
+  })
+
+  it('Supervisor em Principais Ofensores (/top-ofensores) não vê Todas as referências quando tem apenas 1 data', async () => {
+    vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+      user: supervisorUser,
+      token: 'token',
+      loading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshAuth: vi.fn(),
+    })
+
+    render(
+      <MemoryRouter>
+        <TopOfensores />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      const dateSelects = screen.getAllByRole('combobox')
+      expect(dateSelects.length).toBeGreaterThan(0)
+    })
+
+    const dateSelect = screen.getAllByRole('combobox')[0] as HTMLSelectElement
+    const options = Array.from(dateSelect.options).map((o) => o.text.trim())
+    expect(options.some((txt) => txt.includes('Todas as referências'))).toBe(false)
+    expect(options.some((txt) => txt.includes('08/09/2026'))).toBe(true)
+    expect(dateSelect.value).toBe('08/09/2026')
+  })
+
+  it('Centralização no useAllowedReferenceDates: hasMultipleReferences e initialReferenceDate', async () => {
+    const { renderHook } = await import('@testing-library/react')
+    const { useAllowedReferenceDates } = await import('@/hooks/useAllowedReferenceDates')
+
+    // 1. Cenário com perfil Supervisor (1 data permitida de 2)
+    vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+      user: supervisorUser,
+      token: 'token',
+      loading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshAuth: vi.fn(),
+    })
+
+    const { result: supResult } = renderHook(() => useAllowedReferenceDates())
+    await waitFor(() => {
+      expect(supResult.current.loading).toBe(false)
+    })
+
+    expect(supResult.current.allowedReferenceDates).toEqual(['08/09/2026'])
+    expect(supResult.current.hasMultipleReferences).toBe(false)
+    expect(supResult.current.initialReferenceDate).toBe('08/09/2026')
+
+    // 2. Cenário com perfil ADM (2 datas permitidas)
+    vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+      user: admUser,
+      token: 'token',
+      loading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshAuth: vi.fn(),
+    })
+
+    const { result: admResult } = renderHook(() => useAllowedReferenceDates())
+    await waitFor(() => {
+      expect(admResult.current.loading).toBe(false)
+    })
+
+    expect(admResult.current.allowedReferenceDates.length).toBe(2)
+    expect(admResult.current.hasMultipleReferences).toBe(true)
+    expect(admResult.current.initialReferenceDate).toBe('all')
   })
 })

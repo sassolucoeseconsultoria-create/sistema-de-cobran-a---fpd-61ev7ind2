@@ -55,8 +55,12 @@ import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
 export const Vendedores: React.FC = () => {
   const { toast } = useToast()
   const userAccess = useUserStoreAccess()
-  const { allowedReferenceDates: availableReferenceDates, isDateAllowed } =
-    useAllowedReferenceDates()
+  const {
+    allowedReferenceDates: availableReferenceDates,
+    hasMultipleReferences,
+    initialReferenceDate,
+    isDateAllowed,
+  } = useAllowedReferenceDates()
   const [records, setRecords] = useState<VendorConsolidationRecord[]>([])
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -66,16 +70,31 @@ export const Vendedores: React.FC = () => {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selectedReferenceDate, setSelectedReferenceDate] = useState<string>('all')
 
-  // Se a data selecionada for desabilitada para o perfil, faz fallback para 'all'
+  // Se só existir 1 referência, auto-seleciona a única disponível; se houver 2+ e data inválida, volta para 'all'
   useEffect(() => {
-    if (
+    if (availableReferenceDates.length === 1) {
+      const singleDate = availableReferenceDates[0]
+      if (selectedReferenceDate === 'all' || selectedReferenceDate !== singleDate) {
+        if (selectedReferenceDate !== 'none') {
+          setSelectedReferenceDate(singleDate)
+        }
+      }
+    } else if (availableReferenceDates.length >= 2) {
+      if (
+        selectedReferenceDate !== 'all' &&
+        selectedReferenceDate !== 'none' &&
+        !isDateAllowed(selectedReferenceDate)
+      ) {
+        setSelectedReferenceDate('all')
+      }
+    } else if (
       selectedReferenceDate !== 'all' &&
       selectedReferenceDate !== 'none' &&
       !isDateAllowed(selectedReferenceDate)
     ) {
       setSelectedReferenceDate('all')
     }
-  }, [selectedReferenceDate, isDateAllowed])
+  }, [selectedReferenceDate, availableReferenceDates, isDateAllowed])
   const [selectedLoja, setSelectedLoja] = useState<string>(() => {
     if (userAccess.isGerente) {
       if (userAccess.hasNoStoreAssigned) return ''
@@ -851,7 +870,7 @@ export const Vendedores: React.FC = () => {
                     : 'border-[#E3E9F2] text-[#12365A]',
                 )}
               >
-                <option value="all">Todas as referências</option>
+                {hasMultipleReferences && <option value="all">Todas as referências</option>}
                 {availableReferenceDates.map((date) => (
                   <option key={date} value={date}>
                     Referência: {date}

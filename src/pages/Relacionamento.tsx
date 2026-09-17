@@ -229,12 +229,25 @@ export const Relacionamento: React.FC = () => {
     return rawAvailableDates.filter((d) => isDateAllowed(d))
   }, [rawAvailableDates, isDateAllowed])
 
-  // Fallback se a data selecionada for desabilitada para o perfil
+  const hasMultipleReferences = availableDates.length >= 2
+
+  // Fallback e sincronização de data de referência:
+  // Se houver apenas 1 data disponível e o estado for TODAS ou inválido, seleciona a data única automaticamente.
+  // Se houver 2+ e a data atual for desabilitada, volta para 'TODAS'.
   useEffect(() => {
-    if (selectedDataReferencia !== 'TODAS' && !isDateAllowed(selectedDataReferencia)) {
+    if (availableDates.length === 1) {
+      const singleDate = availableDates[0]
+      if (selectedDataReferencia === 'TODAS' || selectedDataReferencia !== singleDate) {
+        setSelectedDataReferencia(singleDate)
+      }
+    } else if (availableDates.length >= 2) {
+      if (selectedDataReferencia !== 'TODAS' && !isDateAllowed(selectedDataReferencia)) {
+        setSelectedDataReferencia('TODAS')
+      }
+    } else if (selectedDataReferencia !== 'TODAS' && !isDateAllowed(selectedDataReferencia)) {
       setSelectedDataReferencia('TODAS')
     }
-  }, [selectedDataReferencia, isDateAllowed])
+  }, [selectedDataReferencia, availableDates, isDateAllowed])
 
   // Filtered available lojas based on user profile and linked stores
   const availableLojas = useMemo(() => {
@@ -783,12 +796,18 @@ export const Relacionamento: React.FC = () => {
               </span>
               <Select value={selectedDataReferencia} onValueChange={setSelectedDataReferencia}>
                 <SelectTrigger className="h-7 text-xs border-0 bg-transparent shadow-none px-1 font-semibold text-[#12365A] focus:ring-0">
-                  <SelectValue placeholder="Todas as datas" />
+                  <SelectValue
+                    placeholder={
+                      hasMultipleReferences ? 'Todas as datas' : availableDates[0] || 'Selecione'
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent className="bg-white">
-                  <SelectItem value="TODAS" className="text-xs font-semibold">
-                    Todas as datas
-                  </SelectItem>
+                  {hasMultipleReferences && (
+                    <SelectItem value="TODAS" className="text-xs font-semibold">
+                      Todas as datas
+                    </SelectItem>
+                  )}
                   {availableDates.map((d) => (
                     <SelectItem key={d} value={d} className="text-xs font-mono">
                       {d}

@@ -19,6 +19,17 @@ export interface UseAllowedReferenceDatesResult {
    */
   allowedReferenceDates: string[]
   /**
+   * Indica se há mais de uma data de referência permitida para o perfil (>= 2)
+   */
+  hasMultipleReferences: boolean
+  /**
+   * Data de referência padrão/inicial recomendada para o perfil:
+   * se houver 2+ referências, retorna o fallback agregado (ex.: 'all' ou 'TODAS');
+   * se houver exatamente 1 referência, retorna essa data única;
+   * se 0, retorna o fallback agregado.
+   */
+  initialReferenceDate: string
+  /**
    * Permissões carregadas do backend
    */
   permissions: ReferenceDatePermissionRecord[]
@@ -97,6 +108,15 @@ export function useAllowedReferenceDates(): UseAllowedReferenceDatesResult {
     return filterReferenceDatesForRole(allReferenceDates, role, permissions)
   }, [allReferenceDates, role, permissions])
 
+  const hasMultipleReferences = allowedReferenceDates.length >= 2
+
+  const initialReferenceDate = useMemo(() => {
+    if (allowedReferenceDates.length === 1) {
+      return allowedReferenceDates[0]
+    }
+    return 'all'
+  }, [allowedReferenceDates])
+
   const isDateAllowed = useCallback(
     (dateStr: string | null | undefined) => {
       return isReferenceDateAllowedForRole(dateStr, role, permissions)
@@ -107,6 +127,8 @@ export function useAllowedReferenceDates(): UseAllowedReferenceDatesResult {
   return {
     allReferenceDates,
     allowedReferenceDates,
+    hasMultipleReferences,
+    initialReferenceDate,
     permissions,
     loading,
     reload: load,

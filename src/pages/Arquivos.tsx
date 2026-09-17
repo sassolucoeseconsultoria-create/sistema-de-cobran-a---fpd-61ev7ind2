@@ -63,8 +63,12 @@ import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
 export const Arquivos: React.FC = () => {
   const { toast } = useToast()
   const userAccess = useUserStoreAccess()
-  const { allowedReferenceDates: availableReferenceDates, isDateAllowed } =
-    useAllowedReferenceDates()
+  const {
+    allowedReferenceDates: availableReferenceDates,
+    hasMultipleReferences,
+    initialReferenceDate,
+    isDateAllowed,
+  } = useAllowedReferenceDates()
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [records, setRecords] = useState<FpdRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -75,19 +79,38 @@ export const Arquivos: React.FC = () => {
   const [selectedReferenceDate, setSelectedReferenceDate] = useState<string>('all')
   const [comparisonReferenceDate, setComparisonReferenceDate] = useState<string>('')
 
-  // Efeito para garantir que se a data selecionada for desabilitada para o perfil, volte para 'all' ou vazia
+  // Efeito para sincronizar a data selecionada:
+  // 1. Se só existir 1 referência e estiver 'all', seleciona automaticamente a única disponível.
+  // 2. Se a referência selecionada não for permitida para o perfil, faz fallback para 'all' (ou para a única data se length === 1).
+  // 3. Se estava numa data única porque só existia 1, mas voltaram a existir 2+ referências e ela não é mais permitida, volta para 'all'.
   useEffect(() => {
-    if (
+    if (availableReferenceDates.length === 1) {
+      const singleDate = availableReferenceDates[0]
+      if (selectedReferenceDate === 'all' || selectedReferenceDate !== singleDate) {
+        if (selectedReferenceDate !== 'none') {
+          setSelectedReferenceDate(singleDate)
+        }
+      }
+    } else if (availableReferenceDates.length >= 2) {
+      if (
+        selectedReferenceDate !== 'all' &&
+        selectedReferenceDate !== 'none' &&
+        !isDateAllowed(selectedReferenceDate)
+      ) {
+        setSelectedReferenceDate('all')
+      }
+    } else if (
       selectedReferenceDate !== 'all' &&
       selectedReferenceDate !== 'none' &&
       !isDateAllowed(selectedReferenceDate)
     ) {
       setSelectedReferenceDate('all')
     }
+
     if (comparisonReferenceDate && !isDateAllowed(comparisonReferenceDate)) {
       setComparisonReferenceDate('')
     }
-  }, [selectedReferenceDate, comparisonReferenceDate, isDateAllowed])
+  }, [selectedReferenceDate, comparisonReferenceDate, availableReferenceDates, isDateAllowed])
   const [selectedCoordenacoes, setSelectedCoordenacoes] = useState<string[]>([])
   const [selectedSupervisoes, setSelectedSupervisoes] = useState<string[]>([])
 
@@ -819,7 +842,9 @@ export const Arquivos: React.FC = () => {
                 )}
                 title="Selecione a referência principal"
               >
-                <option value="all">Todas as referências (Mais recente por loja)</option>
+                {hasMultipleReferences && (
+                  <option value="all">Todas as referências (Mais recente por loja)</option>
+                )}
                 {availableReferenceDates.map((date) => (
                   <option key={date} value={date}>
                     Referência: {date}
