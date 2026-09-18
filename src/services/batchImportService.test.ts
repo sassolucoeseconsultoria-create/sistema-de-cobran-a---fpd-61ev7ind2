@@ -9,6 +9,18 @@ import {
 import type { StoreRecord } from '@/types/fpd'
 
 // Mock pocketbase & services called by executeBatchImport
+vi.mock('@/lib/pocketbase/client', () => ({
+  pb: {
+    collection: vi.fn(() => ({
+      getFullList: vi.fn(async () => []),
+      getList: vi.fn(async () => ({ items: [], totalPages: 1 })),
+      create: vi.fn(async (data: unknown) => ({ id: 'mock-id', ...(data as object) })),
+      update: vi.fn(async (id: string, data: unknown) => ({ id, ...(data as object) })),
+      delete: vi.fn(async () => true),
+    })),
+  },
+}))
+
 vi.mock('@/services/fpdService', () => ({
   matchStore: vi.fn((name: string, stores: StoreRecord[]) => {
     if (!name) return null

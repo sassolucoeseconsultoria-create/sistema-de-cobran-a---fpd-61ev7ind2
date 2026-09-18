@@ -4,6 +4,7 @@ import {
   findStatusColumnIndex,
   findValidatedStatusColumnIndex,
   classifyStatusCell,
+  classifyRow,
   extractRowQuantity,
   isHeaderOrTotalRow,
   normalizeText,
@@ -14,6 +15,11 @@ import {
   type ParsedAnalyticalRow,
   type ParsedAnalyticalSheetData,
 } from '@/lib/analyticalImportParser'
+import {
+  extractMovelDeduplicationKey,
+  extractResidencialDeduplicationKey,
+} from '@/lib/clientDeduplication'
+import { pb } from '@/lib/pocketbase/client'
 import type { FpdStatusKey, ParsedVendorLine, StoreRecord } from '@/types/fpd'
 import {
   matchStore,
@@ -562,15 +568,12 @@ export async function executeBatchImport(
     }
   }
 
-  // 2. Save into imported_files and fpd_records per store sequentially with pacing & retry
-  onProgress?.('Consolidando totais por loja (fpd_records e imported_files)...', 30)
-  let totalFpdUpdated = 0
-
+  // 2. Save individual imported_files entry per store sequentially
+  onProgress?.('Gravando histórico de arquivos importados...', 25)
   for (let idx = 0; idx < parsed.storeSummaries.length; idx++) {
     const s = parsed.storeSummaries[idx]
     const storeId = storeIdMap.get(s.canonicalStoreName.trim().toUpperCase()) || ''
 
-    // Save individual imported_files entry with retry
     await executeWithRateLimitRetry(() =>
       saveImportedFile({
         storeId: storeId || undefined,
@@ -591,55 +594,15 @@ export async function executeBatchImport(
       }),
     )
 
-    // Upsert consolidated fpd_record with retry (accumulate: true para não sobrescrever lotes de outros tipos)
-    if (storeId) {
-      await executeWithRateLimitRetry(() =>
-        saveFpdRecord({
-          storeId,
-          referente: refDate,
-          total_linhas: s.totalLinhas,
-          envio_fatura: s.envio_fatura,
-          pendente: s.pendente,
-          fatura_paga: s.fatura_paga,
-          sem_contato: s.sem_contato,
-          promessa_pagto: s.promessa_pagto,
-          cancelados: s.cancelados,
-          nao_tratados: s.nao_tratados,
-          contato_realizado: s.contato_realizado,
-          outros: 0,
-          accumulate: true,
-        }),
-      )
-      totalFpdUpdated++
-    }
-
-    // Pacing entre lojas
     if (idx < parsed.storeSummaries.length - 1) {
-      await sleep(100)
+      await sleep(50)
     }
-
-    const pct = 30 + Math.round(((idx + 1) / parsed.storeSummaries.length) * 25)
-    onProgress?.(
-      `Consolidando loja ${idx + 1}/${parsed.storeSummaries.length}: ${s.canonicalStoreName}`,
-      pct,
-    )
   }
 
-  // 3. Save vendor consolidations
-  onProgress?.('Atualizando ranking de vendedores (vendor_consolidations)...', 60)
-  let totalVendorSaved = 0
-  if (parsed.vendorLines && parsed.vendorLines.length > 0) {
-    totalVendorSaved = await saveVendorConsolidationsFromLines(
-      parsed.vendorLines,
-      refDate,
-      currentStoresList,
-    )
-  }
-
-  // 4. Save analytical records in movel or residencial
+  // 3. Save analytical records in movel or residencial FIRST (garantindo que o banco tenha as linhas únicas)
   onProgress?.(
     `Gravando registros na coleção ${parsed.importType === 'movel' ? 'Móvel' : 'Residencial'}...`,
-    75,
+    35,
   )
   let totalAnalyticalInserted = 0
 
@@ -664,8 +627,8 @@ export async function executeBatchImport(
 
     const dedupedMovel = deduplicateMovelBatchItems(movelItems)
     totalAnalyticalInserted = await insertMovelBatch(dedupedMovel, (inserted, total) => {
-      const pct = 75 + Math.round((inserted / (total || 1)) * 20)
-      onProgress?.(`Gravando Móvel: ${inserted}/${total}`, Math.min(95, pct))
+      const pct = 35 + Math.round((inserted / (total || 1)) * 30)
+      onProgress?.(`Gravando Móvel: ${inserted}/${total}`, Math.min(65, pct))
     })
   } else {
     // Resolver loja canônica default do lote caso venha vazia em alguma linha
@@ -702,9 +665,150 @@ export async function executeBatchImport(
 
     const dedupedRes = deduplicateResidencialBatchItems(resItems)
     totalAnalyticalInserted = await insertResidencialBatch(dedupedRes, (inserted, total) => {
-      const pct = 75 + Math.round((inserted / (total || 1)) * 20)
-      onProgress?.(`Gravando Residencial: ${inserted}/${total}`, Math.min(95, pct))
+      const pct = 35 + Math.round((inserted / (total || 1)) * 30)
+      onProgress?.(`Gravando Residencial: ${inserted}/${total}`, Math.min(65, pct))
     })
+  }
+
+  // 4. Save vendor consolidations
+  onProgress?.('Atualizando ranking de vendedores (vendor_consolidations)...', 70)
+  let totalVendorSaved = 0
+  if (parsed.vendorLines && parsed.vendorLines.length > 0) {
+    totalVendorSaved = await saveVendorConsolidationsFromLines(
+      parsed.vendorLines,
+      refDate,
+      currentStoresList,
+    )
+  }
+
+  // 5. Consolidar fpd_records por loja RECALCULANDO a partir de todas as linhas analíticas
+  // deduplicadas no banco (Móvel + Residencial) para esta referência e loja.
+  // Isso elimina o acúmulo aditivo inflacionado em reimportações ou arquivos cumulativos,
+  // garantindo que fpd_records reflita exatamente o total de clientes analíticos únicos.
+  onProgress?.('Consolidando totais analíticos deduplicados por loja (fpd_records)...', 80)
+  let totalFpdUpdated = 0
+
+  for (let idx = 0; idx < parsed.storeSummaries.length; idx++) {
+    const s = parsed.storeSummaries[idx]
+    const storeId = storeIdMap.get(s.canonicalStoreName.trim().toUpperCase()) || ''
+    if (!storeId) continue
+
+    let fpdPayload = {
+      storeId,
+      referente: refDate,
+      total_linhas: s.totalLinhas,
+      envio_fatura: s.envio_fatura,
+      pendente: s.pendente,
+      fatura_paga: s.fatura_paga,
+      sem_contato: s.sem_contato,
+      promessa_pagto: s.promessa_pagto,
+      cancelados: s.cancelados,
+      nao_tratados: s.nao_tratados,
+      contato_realizado: s.contato_realizado,
+      outros: 0,
+      accumulate: false,
+    }
+
+    try {
+      const canonicalStoreName = s.canonicalStoreName.trim().toUpperCase()
+      const escapedRef = refDate.replace(/"/g, '\\"')
+      const escapedLoja = canonicalStoreName.replace(/"/g, '\\"')
+
+      const [storeMovel, storeRes] = await Promise.all([
+        pb.collection('movel').getFullList<{
+          id: string
+          loja?: string
+          ocorrencias?: string
+          dados?: Record<string, unknown>
+        }>({
+          filter: `data_referencia = "${escapedRef}" && loja = "${escapedLoja}"`,
+          fields: 'id,loja,ocorrencias,dados',
+          requestKey: null,
+        }),
+        pb.collection('residencial').getFullList<{
+          id: string
+          loja?: string
+          ocorrencias?: string
+          nr_contrato?: string
+          dados?: Record<string, unknown>
+          typedFields?: Record<string, string>
+        }>({
+          filter: `data_referencia = "${escapedRef}" && loja = "${escapedLoja}"`,
+          fields: 'id,loja,ocorrencias,nr_contrato,dados,typedFields',
+          requestKey: null,
+        }),
+      ])
+
+      // Deduplicar linhas da loja em memória com as mesmas regras estritas da tela de Inadimplência
+      const seenMovelKeys = new Set<string>()
+      const uniqueStoreMovel = storeMovel.filter((m) => {
+        const key = extractMovelDeduplicationKey(m)
+        if (!key) return true
+        if (seenMovelKeys.has(key)) return false
+        seenMovelKeys.add(key)
+        return true
+      })
+
+      const seenResKeys = new Set<string>()
+      const uniqueStoreRes = storeRes.filter((r) => {
+        const key = extractResidencialDeduplicationKey(r)
+        if (!key) return true
+        if (seenResKeys.has(key)) return false
+        seenResKeys.add(key)
+        return true
+      })
+
+      const allStoreRows = [...uniqueStoreMovel, ...uniqueStoreRes]
+      if (allStoreRows.length > 0) {
+        const freshAgg = {
+          total_linhas: allStoreRows.length,
+          fatura_paga: 0,
+          envio_fatura: 0,
+          promessa_pagto: 0,
+          sem_contato: 0,
+          cancelados: 0,
+          pendente: 0,
+          contato_realizado: 0,
+          nao_tratados: 0,
+          outros: 0,
+        }
+
+        for (const row of allStoreRows) {
+          const rawSt = row.ocorrencias || ''
+          const cat =
+            classifyStatusCell(rawSt) ||
+            classifyRow([normalizeText(rawSt)]) ||
+            classifyRow([rawSt]) ||
+            'nao_tratados'
+          freshAgg[cat]++
+        }
+
+        fpdPayload = {
+          storeId,
+          referente: refDate,
+          ...freshAgg,
+          accumulate: false,
+        }
+      }
+    } catch (recalcErr) {
+      console.warn(
+        `[batchImportService] Erro ao recalcular totais analíticos para loja ${s.canonicalStoreName}:`,
+        recalcErr,
+      )
+    }
+
+    await executeWithRateLimitRetry(() => saveFpdRecord(fpdPayload))
+    totalFpdUpdated++
+
+    if (idx < parsed.storeSummaries.length - 1) {
+      await sleep(100)
+    }
+
+    const pct = 80 + Math.round(((idx + 1) / parsed.storeSummaries.length) * 18)
+    onProgress?.(
+      `Consolidando loja ${idx + 1}/${parsed.storeSummaries.length}: ${s.canonicalStoreName}`,
+      pct,
+    )
   }
 
   onProgress?.('Importação em lote concluída!', 100)
