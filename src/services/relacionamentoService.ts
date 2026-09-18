@@ -778,6 +778,7 @@ export interface ResidencialInsertItem {
   cliente?: string
   dados?: Record<string, unknown>
   typedFields?: Record<string, string>
+  nr_contrato?: string
   ocorrencias?: string
   data_promessa_de_pagto?: string
   comentarios?: string
