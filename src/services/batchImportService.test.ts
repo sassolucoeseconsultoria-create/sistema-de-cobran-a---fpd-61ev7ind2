@@ -522,7 +522,8 @@ describe('batchImportService', () => {
         vendorLines: [],
       }
 
-      await executeBatchImport(parsedResidencial, '08/09/2026', mockStores)
+      const explicitDate = '08/09/2026'
+      await executeBatchImport(parsedResidencial, explicitDate, mockStores)
 
       expect(insertResidencialBatch).toHaveBeenCalledWith(
         expect.arrayContaining([

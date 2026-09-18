@@ -4,6 +4,9 @@ import { executeWithRateLimitRetry, sleep, isRateLimitError } from '@/lib/pocket
 import {
   extractMovelDeduplicationKey,
   extractResidencialDeduplicationKey,
+  normalizeClientDeduplicationKey,
+  normalizeReferenceDateForDedup,
+  buildCompositeDeduplicationKey,
 } from '@/lib/clientDeduplication'
 import type {
   MovelRecord,
@@ -433,12 +436,18 @@ async function fetchExistingRecordsForDeduplication(
   const validRefs = Array.from(new Set(dataReferencias.map((r) => r.trim()).filter(Boolean)))
   const validFiles = Array.from(new Set(fileNames.map((f) => f.trim()).filter(Boolean)))
 
+  // REGRA ESTRITA: Auditoria de isolamento entre referências.
+  // Apenas busca registros que correspondam estritamente às referências do lote atual.
+  // Se validRefs estiver presente, NUNCA busca registros de outras referências,
+  // mesmo que coincida nome de arquivo!
   if (validRefs.length > 0) {
     const refClauses = validRefs.map((r) => `data_referencia = "${r.replace(/"/g, '\\"')}"`)
     filterParts.push(`(${refClauses.join(' || ')})`)
   } else if (validFiles.length > 0) {
     const fileClauses = validFiles.map((f) => `arquivo = "${f.replace(/"/g, '\\"')}"`)
     filterParts.push(`(${fileClauses.join(' || ')})`)
+    // Se não há referência explícita no lote, só busca registros do mesmo arquivo que também tenham data_referencia vazia
+    filterParts.push(`(data_referencia = "" || data_referencia = null)`)
   } else {
     return { byKeyAndRef, byFileAndLine }
   }
@@ -490,30 +499,34 @@ async function fetchExistingRecordsForDeduplication(
         }
 
         if (dedupKey && refKey) {
-          const mapKey = `${refKey}::${dedupKey}`
-          // Priorizar registro que tenha campos manuais preenchidos se houver mais de um no banco
-          const existing = byKeyAndRef.get(mapKey)
-          if (!existing) {
-            byKeyAndRef.set(mapKey, manualInfo)
-          } else {
-            const hasExistingManual = !!(
-              existing.ocorrencias ||
-              existing.data_promessa_de_pagto ||
-              existing.comentarios
-            )
-            const hasNewManual = !!(
-              manualInfo.ocorrencias ||
-              manualInfo.data_promessa_de_pagto ||
-              manualInfo.comentarios
-            )
-            if (!hasExistingManual && hasNewManual) {
+          const mapKey = buildCompositeDeduplicationKey(refKey, collectionName, dedupKey)
+          if (mapKey) {
+            // Priorizar registro que tenha campos manuais preenchidos se houver mais de um no banco
+            const existing = byKeyAndRef.get(mapKey)
+            if (!existing) {
               byKeyAndRef.set(mapKey, manualInfo)
+            } else {
+              const hasExistingManual = !!(
+                existing.ocorrencias ||
+                existing.data_promessa_de_pagto ||
+                existing.comentarios
+              )
+              const hasNewManual = !!(
+                manualInfo.ocorrencias ||
+                manualInfo.data_promessa_de_pagto ||
+                manualInfo.comentarios
+              )
+              if (!hasExistingManual && hasNewManual) {
+                byKeyAndRef.set(mapKey, manualInfo)
+              }
             }
           }
         }
 
+        // Fallback por arquivo + linha também DEVE ser isolado por data_referencia normalizada
         if (item.arquivo && item.linha !== undefined && item.linha !== null) {
-          const fileLineKey = `${item.arquivo.trim()}::${item.linha}`
+          const normRef = normalizeReferenceDateForDedup(refKey)
+          const fileLineKey = `${normRef}::${item.arquivo.trim()}::${item.linha}`
           byFileAndLine.set(fileLineKey, manualInfo)
         }
       }
@@ -547,8 +560,9 @@ export function deduplicateMovelBatchItems(rows: MovelInsertItem[]): MovelInsert
     const key = extractMovelDeduplicationKey(item)
     const ref = item.data_referencia?.trim() || ''
 
-    if (key && ref) {
-      const compositeKey = `${ref}::${key}`
+    const compositeKey = key && ref ? buildCompositeDeduplicationKey(ref, 'movel', key) : ''
+
+    if (compositeKey) {
       const existing = dedupMap.get(compositeKey)
       if (existing) {
         // Mesclar preservando ocorrências/promessa/comentários se já preenchidos no anterior
@@ -586,8 +600,9 @@ export function deduplicateResidencialBatchItems(
     const key = extractResidencialDeduplicationKey(item)
     const ref = item.data_referencia?.trim() || ''
 
-    if (key && ref) {
-      const compositeKey = `${ref}::${key}`
+    const compositeKey = key && ref ? buildCompositeDeduplicationKey(ref, 'residencial', key) : ''
+
+    if (compositeKey) {
       const existing = dedupMap.get(compositeKey)
       if (existing) {
         const merged: ResidencialInsertItem = {
@@ -666,14 +681,17 @@ export async function insertMovelBatch(
     const businessKey = extractMovelDeduplicationKey(item)
 
     // Localizar registro existente:
-    // (a) por chave de negócio + data_referencia
-    // (b) fallback: arquivo + linha (se não houver chave de negócio)
+    // (a) por chave de negócio + data_referencia (nunca cruzando referências)
+    // (b) fallback: data_referencia + arquivo + linha (se não houver chave de negócio)
     let existingRecord: ExistingRecordManualInfo | undefined
-    if (businessKey && refKey) {
-      existingRecord = byKeyAndRef.get(`${refKey}::${businessKey}`)
+    const compKey =
+      businessKey && refKey ? buildCompositeDeduplicationKey(refKey, 'movel', businessKey) : ''
+    if (compKey) {
+      existingRecord = byKeyAndRef.get(compKey)
     }
     if (!existingRecord && fileKey && item.linha !== undefined && item.linha !== null) {
-      existingRecord = byFileAndLine.get(`${fileKey}::${item.linha}`)
+      const normRef = normalizeReferenceDateForDedup(refKey)
+      existingRecord = byFileAndLine.get(`${normRef}::${fileKey}::${item.linha}`)
     }
 
     // Preserve manual fields from existing record if not explicitly provided in new item
@@ -697,7 +715,7 @@ export async function insertMovelBatch(
 
     try {
       if (existingRecord) {
-        // Update existing record
+        // Auditoria estrita: certificar que estamos atualizando um registro da MESMA referência
         await executeWithRetry(
           () => pb.collection('movel').update(existingRecord!.id, payload, { requestKey: null }),
           6,
@@ -711,8 +729,8 @@ export async function insertMovelBatch(
           800,
         )
         // Atualizar mapas em memória para caso registros seguintes coincidam
-        if (businessKey && refKey) {
-          byKeyAndRef.set(`${refKey}::${businessKey}`, {
+        if (compKey) {
+          byKeyAndRef.set(compKey, {
             id: created.id,
             arquivo: fileKey,
             linha: item.linha,
@@ -723,7 +741,8 @@ export async function insertMovelBatch(
           })
         }
         if (fileKey && item.linha !== undefined && item.linha !== null) {
-          byFileAndLine.set(`${fileKey}::${item.linha}`, {
+          const normRef = normalizeReferenceDateForDedup(refKey)
+          byFileAndLine.set(`${normRef}::${fileKey}::${item.linha}`, {
             id: created.id,
             arquivo: fileKey,
             linha: item.linha,
@@ -823,14 +842,19 @@ export async function insertResidencialBatch(
     const businessKey = extractResidencialDeduplicationKey(item)
 
     // Localizar registro existente:
-    // (a) por chave de negócio + data_referencia
-    // (b) fallback: arquivo + linha (se não houver chave de negócio)
+    // (a) por chave de negócio + data_referencia (nunca cruzando referências)
+    // (b) fallback: data_referencia + arquivo + linha (se não houver chave de negócio)
     let existingRecord: ExistingRecordManualInfo | undefined
-    if (businessKey && refKey) {
-      existingRecord = byKeyAndRef.get(`${refKey}::${businessKey}`)
+    const compKey =
+      businessKey && refKey
+        ? buildCompositeDeduplicationKey(refKey, 'residencial', businessKey)
+        : ''
+    if (compKey) {
+      existingRecord = byKeyAndRef.get(compKey)
     }
     if (!existingRecord && fileKey && item.linha !== undefined && item.linha !== null) {
-      existingRecord = byFileAndLine.get(`${fileKey}::${item.linha}`)
+      const normRef = normalizeReferenceDateForDedup(refKey)
+      existingRecord = byFileAndLine.get(`${normRef}::${fileKey}::${item.linha}`)
     }
 
     // Preserve manual fields if existing. Faithful occurrence: never default to 'Não Tratados'
@@ -874,8 +898,8 @@ export async function insertResidencialBatch(
           800,
         )
         // Atualizar mapas em memória para caso registros seguintes coincidam
-        if (businessKey && refKey) {
-          byKeyAndRef.set(`${refKey}::${businessKey}`, {
+        if (compKey) {
+          byKeyAndRef.set(compKey, {
             id: created.id,
             arquivo: fileKey,
             linha: item.linha,
@@ -886,7 +910,8 @@ export async function insertResidencialBatch(
           })
         }
         if (fileKey && item.linha !== undefined && item.linha !== null) {
-          byFileAndLine.set(`${fileKey}::${item.linha}`, {
+          const normRef = normalizeReferenceDateForDedup(refKey)
+          byFileAndLine.set(`${normRef}::${fileKey}::${item.linha}`, {
             id: created.id,
             arquivo: fileKey,
             linha: item.linha,

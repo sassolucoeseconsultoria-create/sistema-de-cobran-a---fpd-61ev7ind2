@@ -36,6 +36,8 @@ import {
   fetchDistinctAnalyticalLojas,
   insertMovelBatch,
   insertResidencialBatch,
+  deduplicateMovelBatchItems,
+  deduplicateResidencialBatchItems,
   invalidateAnalyticalCache,
   clearAllAnalyticalRows,
 } from '@/services/relacionamentoService'
@@ -669,7 +671,8 @@ export const Relacionamento: React.FC = () => {
             }
           })
 
-          await insertMovelBatch(movelBatchData, (insertedInBatch) => {
+          const dedupedMovel = deduplicateMovelBatchItems(movelBatchData)
+          await insertMovelBatch(dedupedMovel, (insertedInBatch) => {
             const currentDone = insertedGlobalCount + insertedInBatch
             setImportProgress(Math.min(95, Math.round((currentDone / totalLinesAll) * 100)))
           })
@@ -725,7 +728,8 @@ export const Relacionamento: React.FC = () => {
             }
           })
 
-          await insertResidencialBatch(resBatchData, (insertedInBatch) => {
+          const dedupedRes = deduplicateResidencialBatchItems(resBatchData)
+          await insertResidencialBatch(dedupedRes, (insertedInBatch) => {
             const currentDone = insertedGlobalCount + insertedInBatch
             setImportProgress(Math.min(95, Math.round((currentDone / totalLinesAll) * 100)))
           })

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   normalizeClientDeduplicationKey,
+  normalizeReferenceDateForDedup,
+  buildCompositeDeduplicationKey,
   extractResidencialDeduplicationKey,
   extractMovelDeduplicationKey,
 } from './clientDeduplication'
@@ -426,6 +428,116 @@ describe('Validação Anti-Duplicidade de Importação e Regressão', () => {
           linha: 5,
           ocorrencias: 'Enviado Fatura(s)',
           comentarios: 'Comentário manual da linha 5',
+        }),
+        expect.anything(),
+      )
+    })
+
+    it('REGRA DE ISOLAMENTO: mesma chave em referências DIFERENTES resulta em 2 registros independentes no batch', () => {
+      const rowsResidencial: ResidencialInsertItem[] = [
+        {
+          arquivo: 'lote_agosto.xlsx',
+          linha: 2,
+          loja: 'CELNET NOVA SUIÇA',
+          data_referencia: '26/08/2026',
+          typedFields: { nr_contrato: '56543211', ocorrencias: 'Pendente' },
+        },
+        {
+          arquivo: 'lote_setembro.xlsx',
+          linha: 2,
+          loja: 'CELNET NOVA SUIÇA',
+          data_referencia: '08/09/2026',
+          typedFields: { nr_contrato: '56543211', ocorrencias: 'Fatura Paga' },
+        },
+      ]
+
+      const dedupedRes = deduplicateResidencialBatchItems(rowsResidencial)
+      // DEVEM ser 2 registros distintos preservados, pois as referências são distintas
+      expect(dedupedRes).toHaveLength(2)
+      expect(dedupedRes.map((r) => r.data_referencia)).toEqual(['26/08/2026', '08/09/2026'])
+
+      const rowsMovel: MovelInsertItem[] = [
+        {
+          arquivo: 'movel_agosto.xlsx',
+          linha: 10,
+          loja: 'PARK SHOPPING',
+          data_referencia: '26/08/2026',
+          dados: { '0': '61999990000', '1': 'CLIENTE TESTE' },
+          ocorrencias: 'Contato Realizado',
+        },
+        {
+          arquivo: 'movel_setembro.xlsx',
+          linha: 10,
+          loja: 'PARK SHOPPING',
+          data_referencia: '08/09/2026',
+          dados: { '0': '61999990000', '1': 'CLIENTE TESTE' },
+          ocorrencias: 'Promessa de Pagto',
+        },
+      ]
+
+      const dedupedMovel = deduplicateMovelBatchItems(rowsMovel)
+      // DEVEM ser 2 registros distintos
+      expect(dedupedMovel).toHaveLength(2)
+      expect(dedupedMovel.map((r) => r.data_referencia)).toEqual(['26/08/2026', '08/09/2026'])
+    })
+
+    it('REGRA DE ISOLAMENTO: importação da ref. X nunca altera nem sobrescreve registros da ref. Y no banco', async () => {
+      const idAgosto = 'rec-agosto-26-08'
+      // No banco existe o contrato '56543211' para 26/08/2026
+      const mockGetList = vi.fn().mockImplementation((page, perPage, options) => {
+        const filterStr = options?.filter || ''
+        // Se a query pede '08/09/2026', o registro de 26/08 NÃO deve vir!
+        if (filterStr.includes('08/09/2026') && !filterStr.includes('26/08/2026')) {
+          return Promise.resolve({ items: [], totalPages: 1 })
+        }
+        return Promise.resolve({
+          items: [
+            {
+              id: idAgosto,
+              nr_contrato: '56543211',
+              data_referencia: '26/08/2026',
+              ocorrencias: 'Pendente',
+              comentarios: 'Histórico original de agosto',
+            },
+          ],
+          totalPages: 1,
+        })
+      })
+
+      const mockUpdate = vi.fn().mockResolvedValue({ id: 'dummy' })
+      const mockCreate = vi.fn().mockResolvedValue({ id: 'rec-setembro-novo' })
+
+      ;(pb.collection as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        getList: mockGetList,
+        update: mockUpdate,
+        create: mockCreate,
+      })
+
+      // Importar lote para referência 08/09/2026 com o MESMO contrato 56543211
+      const loteSetembro: ResidencialInsertItem[] = [
+        {
+          arquivo: 'setembro_import.xlsx',
+          linha: 4,
+          data_referencia: '08/09/2026',
+          loja: 'CELNET NOVA SUIÇA',
+          typedFields: {
+            nr_contrato: '56543211',
+            ocorrencias: 'Fatura Paga',
+          },
+        },
+      ]
+
+      await insertResidencialBatch(loteSetembro)
+
+      // O registro de agosto NUNCA deve sofrer update
+      expect(mockUpdate).not.toHaveBeenCalled()
+      // Um novo registro para setembro deve ser criado
+      expect(mockCreate).toHaveBeenCalledTimes(1)
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data_referencia: '08/09/2026',
+          nr_contrato: '56543211',
+          ocorrencias: 'Fatura Paga',
         }),
         expect.anything(),
       )

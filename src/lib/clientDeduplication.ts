@@ -23,6 +23,37 @@ export function normalizeClientDeduplicationKey(rawKey: unknown): string {
 }
 
 /**
+ * Normaliza uma data de referência para chave de unicidade:
+ * - trim
+ * - case-insensitive
+ * - normalização de barras e separadores se necessário
+ */
+export function normalizeReferenceDateForDedup(rawDate: unknown): string {
+  if (rawDate === null || rawDate === undefined) return ''
+  const str = String(rawDate).trim()
+  if (!str) return ''
+  return str.toLowerCase()
+}
+
+/**
+ * Constrói a chave composta de unicidade estrita:
+ * (data_referencia normalizada) + (aba móvel/residencial) + (chave normalizada)
+ *
+ * Garante que regras de não duplicidade valem APENAS dentro de cada referência
+ * e nunca cruzam referências diferentes.
+ */
+export function buildCompositeDeduplicationKey(
+  dataReferencia: string | undefined | null,
+  aba: 'movel' | 'residencial',
+  businessKey: string,
+): string {
+  const normRef = normalizeReferenceDateForDedup(dataReferencia)
+  const normKey = normalizeClientDeduplicationKey(businessKey)
+  if (!normRef || !normKey) return ''
+  return `${normRef}::${aba}::${normKey}`
+}
+
+/**
  * Extrai a chave de duplicidade de um registro Residencial.
  * Regra: Residencial -> campo `nr_contrato` (coluna NR_CONTRATO da planilha;
  * também disponível em `dados['NR_CONTRATO']` e typedFields['nr_contrato']).
