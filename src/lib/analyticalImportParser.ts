@@ -249,6 +249,16 @@ export function parseAnalyticalWorksheet(
       lojaVal = String(row[4]).trim()
     }
 
+    // Fallback detection for Residencial if standard column headers weren't named "Loja":
+    // Check known column index AU (46) first, then E (4)
+    if (!lojaVal && sheetType === 'residencial') {
+      if (row[46] !== null && row[46] !== undefined && String(row[46]).trim() !== '') {
+        lojaVal = String(row[46]).trim()
+      } else if (row[4] !== null && row[4] !== undefined && String(row[4]).trim() !== '') {
+        lojaVal = String(row[4]).trim()
+      }
+    }
+
     // Determine occurrences classification:
     // Fidelidade estrita à planilha:
     // Quando a linha possui a coluna Ocorrências preenchida com um valor válido,

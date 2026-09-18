@@ -273,7 +273,8 @@ export const TopOfensores: React.FC = () => {
       if (selectedReferenceDate === 'none') {
         rows = rows.filter((r) => !r.dataReferencia || r.dataReferencia.trim() === '')
       } else {
-        rows = rows.filter((r) => r.dataReferencia === selectedReferenceDate)
+        const normRef = selectedReferenceDate.trim()
+        rows = rows.filter((r) => (r.dataReferencia || '').trim() === normRef)
       }
     }
 

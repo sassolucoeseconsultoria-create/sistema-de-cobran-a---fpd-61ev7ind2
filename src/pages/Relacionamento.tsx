@@ -42,6 +42,7 @@ import {
 import { getStoreVariants, buildStoreFilterClause, isSameStore } from '@/lib/storeMatchingUtils'
 import { Trash2 } from 'lucide-react'
 import { parseAnalyticalXlsxFile, ParsedAnalyticalFileData } from '@/lib/analyticalImportParser'
+import { guessStoreName } from '@/lib/xlsxParser'
 import { fetchStores, matchStore } from '@/services/fpdService'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
@@ -157,7 +158,8 @@ export const Relacionamento: React.FC = () => {
       // Se userAccess.isAdm e loja === 'TODAS', não adiciona cláusula de loja => soma todas as lojas da base
 
       if (selectedDataReferencia && selectedDataReferencia !== 'TODAS') {
-        const escapedRef = selectedDataReferencia.replace(/"/g, '\\"')
+        const trimmedRef = selectedDataReferencia.trim()
+        const escapedRef = trimmedRef.replace(/"/g, '\\"')
         filterParts.push(
           `(data_referencia = "${escapedRef}" || data_referencia = "" || data_referencia = null)`,
         )
@@ -679,6 +681,16 @@ export const Relacionamento: React.FC = () => {
           setImportStatusMessage(
             `Gravando ${pf.residencialSheet.rows.length} linhas na tabela RESIDENCIAL (${pf.fileName})...`,
           )
+          // Tentar inferir a loja do arquivo para fallback quando a linha estiver sem loja
+          const guessedStoreFromFile = guessStoreName(pf.fileName)
+          let defaultFileStoreName = ''
+          if (guessedStoreFromFile) {
+            const matchedGuessed = matchStore(guessedStoreFromFile, stores)
+            defaultFileStoreName = matchedGuessed
+              ? matchedGuessed.name
+              : guessedStoreFromFile.toUpperCase()
+          }
+
           const resBatchData = pf.residencialSheet.rows.map((r) => {
             let normalizedLoja = r.loja?.trim() || ''
             if (normalizedLoja) {
@@ -695,6 +707,9 @@ export const Relacionamento: React.FC = () => {
                   )
                 }
               }
+            } else {
+              // Resolver OBRIGATORIAMENTE se vier vazia: derivar do nome do arquivo ou padrão
+              normalizedLoja = defaultFileStoreName || 'LOJA NÃO IDENTIFICADA'
             }
 
             return {

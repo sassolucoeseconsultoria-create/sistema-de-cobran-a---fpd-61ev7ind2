@@ -343,4 +343,32 @@ describe('analyticalImportParser', () => {
     expect(parsed.rows[1].ocorrencias).toBe('Fatura(s) Paga(s)')
     expect(parsed.rows[2].ocorrencias).toBe('Cancelados')
   })
+
+  it('residencial store fallback: resolves store from index AU (46) or index E (4) when header is not named Loja', async () => {
+    const { parseAnalyticalWorksheet } = await import('./analyticalImportParser')
+    const XLSX = await import('xlsx')
+
+    // Matriz com cabeçalhos genéricos onde coluna de loja não é "Loja"
+    // Cabeçalho com 47 colunas (0 a 46)
+    const headers = new Array(47).fill('').map((_, i) => `COL_${i}`)
+    headers[0] = 'CLIENTE'
+    headers[1] = 'CONTRATO'
+
+    const row1 = new Array(47).fill('')
+    row1[0] = 'CLIENTE TESTE 1'
+    row1[46] = 'LOJA FALLBACK AU'
+
+    const ws1 = XLSX.utils.aoa_to_sheet([headers, row1])
+    const parsed1 = parseAnalyticalWorksheet(ws1, 'Residencial', 'residencial')
+    expect(parsed1.rows).toHaveLength(1)
+    expect(parsed1.rows[0].loja).toBe('LOJA FALLBACK AU')
+
+    // Fallback coluna 4 (E)
+    const headersSmall = ['C0', 'C1', 'C2', 'C3', 'C4']
+    const row2 = ['CLIENTE TESTE 2', 'CTR2', '', '', 'LOJA FALLBACK E']
+    const ws2 = XLSX.utils.aoa_to_sheet([headersSmall, row2])
+    const parsed2 = parseAnalyticalWorksheet(ws2, 'Residencial', 'residencial')
+    expect(parsed2.rows).toHaveLength(1)
+    expect(parsed2.rows[0].loja).toBe('LOJA FALLBACK E')
+  })
 })

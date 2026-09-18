@@ -655,11 +655,24 @@ export async function executeBatchImport(
       onProgress?.(`Gravando Móvel: ${inserted}/${total}`, Math.min(95, pct))
     })
   } else {
+    // Resolver loja canônica default do lote caso venha vazia em alguma linha
+    const defaultBatchStore =
+      parsed.storeSummaries.length === 1 ? parsed.storeSummaries[0].canonicalStoreName : ''
+
     const resItems: ResidencialInsertItem[] = parsed.analyticalRows.map((r) => {
       let normalizedLoja = r.loja?.trim() || ''
       if (normalizedLoja) {
         const matched = matchStore(normalizedLoja, currentStoresList)
         if (matched) normalizedLoja = matched.name
+      } else {
+        // Se a linha vier sem loja, derivar da loja canônica do lote ou do nome do arquivo
+        if (defaultBatchStore) {
+          normalizedLoja = defaultBatchStore
+        } else if (parsed.storeSummaries.length > 0) {
+          normalizedLoja = parsed.storeSummaries[0].canonicalStoreName
+        } else {
+          normalizedLoja = 'LOJA NÃO IDENTIFICADA'
+        }
       }
       return {
         arquivo: parsed.fileName,

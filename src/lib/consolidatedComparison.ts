@@ -43,13 +43,14 @@ export function buildConsolidatedRow(
   records: FpdRecord[],
   referenceFilter: string,
 ): ConsolidatedRow {
+  const normalizedFilter = (referenceFilter || '').trim()
   const storeRecords = records.filter((r) => {
     if (r.store !== store.id) return false
-    if (referenceFilter === 'all') return true
-    if (referenceFilter === 'none') {
+    if (normalizedFilter === 'all') return true
+    if (normalizedFilter === 'none') {
       return !r.referente || r.referente.trim() === ''
     }
-    return r.referente === referenceFilter
+    return (r.referente || '').trim() === normalizedFilter
   })
 
   const latest = storeRecords[0]

@@ -516,7 +516,8 @@ export const Vendedores: React.FC = () => {
         if (selectedReferenceDate === 'none') {
           if (row.dataReferencia && row.dataReferencia.trim() !== '') return false
         } else {
-          if (row.dataReferencia !== selectedReferenceDate) return false
+          const normRef = selectedReferenceDate.trim()
+          if ((row.dataReferencia || '').trim() !== normRef) return false
         }
       }
 

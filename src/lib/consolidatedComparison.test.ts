@@ -234,4 +234,42 @@ describe('Consolidated Comparison Logic', () => {
 
     writeFileSpy.mockRestore()
   })
+
+  it('buildConsolidatedRow trims whitespace when matching referenceFilter (e.g. "08/09/2026 " vs "08/09/2026")', () => {
+    const store: StoreRecord = {
+      id: 's-trim',
+      collectionId: 'stores',
+      collectionName: 'stores',
+      name: 'LOJA TRIM TEST',
+      created: '',
+      updated: '',
+    }
+    const recs: FpdRecord[] = [
+      {
+        id: 'r-trim-1',
+        collectionId: 'fpd_records',
+        collectionName: 'fpd_records',
+        store: 's-trim',
+        referente: ' 08/09/2026 ',
+        total_linhas: 50,
+        fatura_paga: 20,
+        envio_fatura: 10,
+        promessa_pagto: 5,
+        sem_contato: 5,
+        cancelados: 2,
+        pendente: 5,
+        contato_realizado: 1,
+        nao_tratados: 2,
+        outros: 0,
+        importado_em: '',
+        created: '',
+        updated: '',
+      },
+    ]
+
+    const row = buildConsolidatedRow(store, recs, '08/09/2026')
+    expect(row.hasData).toBe(true)
+    expect(row.totalLinhas).toBe(50)
+    expect(row.faturaPaga).toBe(20)
+  })
 })

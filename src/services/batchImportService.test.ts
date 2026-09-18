@@ -477,6 +477,62 @@ describe('batchImportService', () => {
       }
 
       await executeBatchImport(parsedResidencial, explicitDate, mockStores)
+    })
+
+    it('resolves empty loja in residential items to canonical batch store instead of empty string', async () => {
+      const { insertResidencialBatch } = await import('@/services/relacionamentoService')
+      vi.clearAllMocks()
+
+      const summaryStore: BatchStoreSummary = {
+        rawStoreName: 'CELNET AGUAS CLARAS',
+        canonicalStoreName: 'CELNET AGUAS CLARAS',
+        storeId: 'store-ac',
+        totalLinhas: 1,
+        fatura_paga: 1,
+        envio_fatura: 0,
+        promessa_pagto: 0,
+        sem_contato: 0,
+        cancelados: 0,
+        pendente: 0,
+        contato_realizado: 0,
+        nao_tratados: 0,
+        outros: 0,
+        vendorLinesCount: 0,
+        analyticalRowsCount: 1,
+      }
+
+      const parsedResidencial = {
+        fileName: 'LOTE_RESIDENCIAL_SEM_LOJA.xlsx',
+        importType: 'residencial' as const,
+        targetSheetName: 'Residencial',
+        totalValidRows: 1,
+        totalExpurgadasRows: 0,
+        storeSummaries: [summaryStore],
+        analyticalRows: [
+          {
+            linha: 2,
+            loja: '', // Empty loja
+            vendedor: 'VENDEDOR TESTE',
+            cliente: 'CLIENTE TESTE',
+            ocorrencias: 'Não Tratados',
+            dados: {},
+            typedFields: {},
+          },
+        ],
+        vendorLines: [],
+      }
+
+      await executeBatchImport(parsedResidencial, '08/09/2026', mockStores)
+
+      expect(insertResidencialBatch).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            loja: 'CELNET AGUAS CLARAS',
+            data_referencia: '08/09/2026',
+          }),
+        ]),
+        expect.any(Function),
+      )
 
       expect(insertResidencialBatch).toHaveBeenCalledWith(
         expect.arrayContaining([
