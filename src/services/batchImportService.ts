@@ -27,6 +27,8 @@ import {
 import {
   insertMovelBatch,
   insertResidencialBatch,
+  deduplicateMovelBatchItems,
+  deduplicateResidencialBatchItems,
   type MovelInsertItem,
   type ResidencialInsertItem,
 } from '@/services/relacionamentoService'
@@ -647,7 +649,8 @@ export async function executeBatchImport(
       }
     })
 
-    totalAnalyticalInserted = await insertMovelBatch(movelItems, (inserted, total) => {
+    const dedupedMovel = deduplicateMovelBatchItems(movelItems)
+    totalAnalyticalInserted = await insertMovelBatch(dedupedMovel, (inserted, total) => {
       const pct = 75 + Math.round((inserted / (total || 1)) * 20)
       onProgress?.(`Gravando Móvel: ${inserted}/${total}`, Math.min(95, pct))
     })
@@ -671,7 +674,8 @@ export async function executeBatchImport(
       }
     })
 
-    totalAnalyticalInserted = await insertResidencialBatch(resItems, (inserted, total) => {
+    const dedupedRes = deduplicateResidencialBatchItems(resItems)
+    totalAnalyticalInserted = await insertResidencialBatch(dedupedRes, (inserted, total) => {
       const pct = 75 + Math.round((inserted / (total || 1)) * 20)
       onProgress?.(`Gravando Residencial: ${inserted}/${total}`, Math.min(95, pct))
     })

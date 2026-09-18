@@ -63,8 +63,10 @@ import { parseAnalyticalXlsxFile } from '@/lib/analyticalImportParser'
 import {
   insertMovelBatch,
   insertResidencialBatch,
-  type MovelInsertItem,
-  type ResidencialInsertItem,
+  deduplicateMovelBatchItems,
+  deduplicateResidencialBatchItems,
+  MovelInsertItem,
+  ResidencialInsertItem,
 } from '@/services/relacionamentoService'
 import { FPD_STATUSES, type StoreRecord } from '@/types/fpd'
 import { useAuth } from '@/contexts/AuthContext'
@@ -485,35 +487,17 @@ export const Importar: React.FC = () => {
 
       const allVendorLinesToSave: ParsedVendorLine[] = []
 
-      // 3. Processar linhas analíticas de Móvel e Residencial
+      // 3. Processar linhas analíticas de Móvel e Residencial com deduplicação
       if (analyticalData) {
         // 3.1 Móvel
         if (analyticalData.movelSheet && analyticalData.movelSheet.rows.length > 0) {
-          const movelBatchData: MovelInsertItem[] = []
+          const rawMovelItems: MovelInsertItem[] = []
           for (const r of analyticalData.movelSheet.rows) {
             const rawRowLoja = (r.loja || '').trim() || finalStoreName
             const resolvedStore = await resolveOrCreateStoreRecord(rawRowLoja)
             const normalizedLoja = resolvedStore ? resolvedStore.name : rawRowLoja.toUpperCase()
 
-            const rawStatus = r.ocorrencias || ''
-            const cat =
-              classifyStatusCell(rawStatus) ||
-              classifyRow([normalizeText(rawStatus)]) ||
-              classifyRow([rawStatus])
-            if (cat) {
-              const agg = await getOrInitStoreAgg(normalizedLoja)
-              agg.total_linhas++
-              agg[cat]++
-
-              allVendorLinesToSave.push({
-                vendedor: r.vendedor || 'NÃO INFORMADO',
-                loja: normalizedLoja,
-                status: cat,
-                quantidade: 1,
-              })
-            }
-
-            movelBatchData.push({
+            rawMovelItems.push({
               arquivo: item.file.name,
               linha: r.linha,
               loja: normalizedLoja,
@@ -524,36 +508,42 @@ export const Importar: React.FC = () => {
               ocorrencias: r.ocorrencias,
             })
           }
-          await insertMovelBatch(movelBatchData)
-        }
 
-        // 3.2 Residencial
-        if (analyticalData.residencialSheet && analyticalData.residencialSheet.rows.length > 0) {
-          const resBatchData: ResidencialInsertItem[] = []
-          for (const r of analyticalData.residencialSheet.rows) {
-            const rawRowLoja = (r.loja || '').trim() || finalStoreName
-            const resolvedStore = await resolveOrCreateStoreRecord(rawRowLoja)
-            const normalizedLoja = resolvedStore ? resolvedStore.name : rawRowLoja.toUpperCase()
+          // Deduplicar antes de consolidar fpd/ranking para evitar dupla contagem de contratos repetidos
+          const dedupedMovel = deduplicateMovelBatchItems(rawMovelItems)
 
-            const rawStatus = r.ocorrencias || ''
+          for (const mItem of dedupedMovel) {
+            const rawStatus = mItem.ocorrencias || ''
             const cat =
               classifyStatusCell(rawStatus) ||
               classifyRow([normalizeText(rawStatus)]) ||
               classifyRow([rawStatus])
             if (cat) {
-              const agg = await getOrInitStoreAgg(normalizedLoja)
+              const agg = await getOrInitStoreAgg(mItem.loja || finalStoreName)
               agg.total_linhas++
               agg[cat]++
 
               allVendorLinesToSave.push({
-                vendedor: r.vendedor || 'NÃO INFORMADO',
-                loja: normalizedLoja,
+                vendedor: mItem.vendedor || 'NÃO INFORMADO',
+                loja: mItem.loja || finalStoreName,
                 status: cat,
                 quantidade: 1,
               })
             }
+          }
 
-            resBatchData.push({
+          await insertMovelBatch(dedupedMovel)
+        }
+
+        // 3.2 Residencial
+        if (analyticalData.residencialSheet && analyticalData.residencialSheet.rows.length > 0) {
+          const rawResItems: ResidencialInsertItem[] = []
+          for (const r of analyticalData.residencialSheet.rows) {
+            const rawRowLoja = (r.loja || '').trim() || finalStoreName
+            const resolvedStore = await resolveOrCreateStoreRecord(rawRowLoja)
+            const normalizedLoja = resolvedStore ? resolvedStore.name : rawRowLoja.toUpperCase()
+
+            rawResItems.push({
               arquivo: item.file.name,
               linha: r.linha,
               loja: normalizedLoja,
@@ -565,7 +555,31 @@ export const Importar: React.FC = () => {
               ocorrencias: r.ocorrencias,
             })
           }
-          await insertResidencialBatch(resBatchData)
+
+          // Deduplicar antes de consolidar fpd/ranking para evitar contagem residual duplicada
+          const dedupedRes = deduplicateResidencialBatchItems(rawResItems)
+
+          for (const rItem of dedupedRes) {
+            const rawStatus = rItem.ocorrencias || ''
+            const cat =
+              classifyStatusCell(rawStatus) ||
+              classifyRow([normalizeText(rawStatus)]) ||
+              classifyRow([rawStatus])
+            if (cat) {
+              const agg = await getOrInitStoreAgg(rItem.loja || finalStoreName)
+              agg.total_linhas++
+              agg[cat]++
+
+              allVendorLinesToSave.push({
+                vendedor: rItem.vendedor || 'NÃO INFORMADO',
+                loja: rItem.loja || finalStoreName,
+                status: cat,
+                quantidade: 1,
+              })
+            }
+          }
+
+          await insertResidencialBatch(dedupedRes)
         }
       }
 

@@ -1,6 +1,10 @@
 import pb from '@/lib/pocketbase/client'
 import { buildStoreFilterClause, getStoreVariants } from '@/lib/storeMatchingUtils'
 import { executeWithRateLimitRetry, sleep, isRateLimitError } from '@/lib/pocketbase/rateLimiter'
+import {
+  extractMovelDeduplicationKey,
+  extractResidencialDeduplicationKey,
+} from '@/lib/clientDeduplication'
 import type {
   MovelRecord,
   ResidencialRecord,
@@ -394,34 +398,52 @@ export interface MovelInsertItem {
   data_referencia?: string
 }
 
+interface ExistingRecordManualInfo {
+  id: string
+  arquivo?: string
+  linha?: number
+  ocorrencias?: string
+  data_promessa_de_pagto?: string
+  comentarios?: string
+  dedupKey?: string
+}
+
 /**
- * Fetch existing records for a given filename in a collection to preserve manual fields
- * (ocorrencias, data_promessa_de_pagto, comentarios)
+ * Busca registros existentes no banco para a coleção e datas de referência especificadas,
+ * indexando por:
+ * 1) chave de negócio normalizada (nr_contrato no Residencial, Número no Móvel) por data_referencia
+ * 2) fallback: arquivo + linha (comportamento legado para quando não há chave de negócio)
  */
-async function fetchExistingManualFields(
+async function fetchExistingRecordsForDeduplication(
   collectionName: 'movel' | 'residencial',
-  fileName: string,
-): Promise<
-  Map<
-    number,
-    {
-      ocorrencias?: string
-      data_promessa_de_pagto?: string
-      comentarios?: string
-      id: string
-    }
-  >
-> {
-  const map = new Map<
-    number,
-    {
-      ocorrencias?: string
-      data_promessa_de_pagto?: string
-      comentarios?: string
-      id: string
-    }
-  >()
-  if (!fileName) return map
+  options: {
+    dataReferencias: string[]
+    fileNames: string[]
+  },
+): Promise<{
+  byKeyAndRef: Map<string, ExistingRecordManualInfo>
+  byFileAndLine: Map<string, ExistingRecordManualInfo>
+}> {
+  const byKeyAndRef = new Map<string, ExistingRecordManualInfo>()
+  const byFileAndLine = new Map<string, ExistingRecordManualInfo>()
+
+  const { dataReferencias, fileNames } = options
+  const filterParts: string[] = []
+
+  const validRefs = Array.from(new Set(dataReferencias.map((r) => r.trim()).filter(Boolean)))
+  const validFiles = Array.from(new Set(fileNames.map((f) => f.trim()).filter(Boolean)))
+
+  if (validRefs.length > 0) {
+    const refClauses = validRefs.map((r) => `data_referencia = "${r.replace(/"/g, '\\"')}"`)
+    filterParts.push(`(${refClauses.join(' || ')})`)
+  } else if (validFiles.length > 0) {
+    const fileClauses = validFiles.map((f) => `arquivo = "${f.replace(/"/g, '\\"')}"`)
+    filterParts.push(`(${fileClauses.join(' || ')})`)
+  } else {
+    return { byKeyAndRef, byFileAndLine }
+  }
+
+  const filter = filterParts.join(' && ')
 
   try {
     let page = 1
@@ -431,13 +453,19 @@ async function fetchExistingManualFields(
         () =>
           pb.collection(collectionName).getList<{
             id: string
+            arquivo?: string
             linha?: number
+            dados?: Record<string, unknown>
+            typedFields?: Record<string, string>
+            nr_contrato?: string
             ocorrencias?: string
             data_promessa_de_pagto?: string
             comentarios?: string
+            data_referencia?: string
           }>(page, perPage, {
-            filter: `arquivo = "${fileName.replace(/"/g, '\\"')}"`,
-            fields: 'id,linha,ocorrencias,data_promessa_de_pagto,comentarios',
+            filter,
+            fields:
+              'id,arquivo,linha,dados,nr_contrato,ocorrencias,data_promessa_de_pagto,comentarios,data_referencia',
             requestKey: null,
           }),
         5,
@@ -445,13 +473,48 @@ async function fetchExistingManualFields(
       )
 
       for (const item of res.items) {
-        if (item.linha !== undefined && item.linha !== null) {
-          map.set(item.linha, {
-            id: item.id,
-            ocorrencias: item.ocorrencias || '',
-            data_promessa_de_pagto: item.data_promessa_de_pagto || '',
-            comentarios: item.comentarios || '',
-          })
+        const refKey = item.data_referencia?.trim() || ''
+        const dedupKey =
+          collectionName === 'residencial'
+            ? extractResidencialDeduplicationKey(item)
+            : extractMovelDeduplicationKey(item)
+
+        const manualInfo: ExistingRecordManualInfo = {
+          id: item.id,
+          arquivo: item.arquivo,
+          linha: item.linha,
+          ocorrencias: item.ocorrencias || '',
+          data_promessa_de_pagto: item.data_promessa_de_pagto || '',
+          comentarios: item.comentarios || '',
+          dedupKey,
+        }
+
+        if (dedupKey && refKey) {
+          const mapKey = `${refKey}::${dedupKey}`
+          // Priorizar registro que tenha campos manuais preenchidos se houver mais de um no banco
+          const existing = byKeyAndRef.get(mapKey)
+          if (!existing) {
+            byKeyAndRef.set(mapKey, manualInfo)
+          } else {
+            const hasExistingManual = !!(
+              existing.ocorrencias ||
+              existing.data_promessa_de_pagto ||
+              existing.comentarios
+            )
+            const hasNewManual = !!(
+              manualInfo.ocorrencias ||
+              manualInfo.data_promessa_de_pagto ||
+              manualInfo.comentarios
+            )
+            if (!hasExistingManual && hasNewManual) {
+              byKeyAndRef.set(mapKey, manualInfo)
+            }
+          }
+        }
+
+        if (item.arquivo && item.linha !== undefined && item.linha !== null) {
+          const fileLineKey = `${item.arquivo.trim()}::${item.linha}`
+          byFileAndLine.set(fileLineKey, manualInfo)
         }
       }
 
@@ -464,13 +527,111 @@ async function fetchExistingManualFields(
       err,
     )
   }
-  return map
+
+  return { byKeyAndRef, byFileAndLine }
+}
+
+/**
+ * Deduplica itens do lote em memória (intra-batch deduplication).
+ * Mesma data_referencia + mesma chave de negócio = mantém o mais recente (último) do lote,
+ * preservando eventuais campos manuais já preenchidos.
+ * Itens sem chave de negócio não são colapsados entre si (mantidos como estão).
+ */
+export function deduplicateMovelBatchItems(rows: MovelInsertItem[]): MovelInsertItem[] {
+  if (!rows || rows.length <= 1) return rows || []
+
+  const dedupMap = new Map<string, MovelInsertItem>()
+  const itemsWithoutKey: MovelInsertItem[] = []
+
+  for (const item of rows) {
+    const key = extractMovelDeduplicationKey(item)
+    const ref = item.data_referencia?.trim() || ''
+
+    if (key && ref) {
+      const compositeKey = `${ref}::${key}`
+      const existing = dedupMap.get(compositeKey)
+      if (existing) {
+        // Mesclar preservando ocorrências/promessa/comentários se já preenchidos no anterior
+        const merged: MovelInsertItem = {
+          ...item,
+          ocorrencias: (item.ocorrencias || existing.ocorrencias || '').trim(),
+          data_promessa_de_pagto:
+            item.data_promessa_de_pagto || existing.data_promessa_de_pagto || '',
+          comentarios: item.comentarios || existing.comentarios || '',
+        }
+        dedupMap.set(compositeKey, merged)
+      } else {
+        dedupMap.set(compositeKey, item)
+      }
+    } else {
+      itemsWithoutKey.push(item)
+    }
+  }
+
+  return [...Array.from(dedupMap.values()), ...itemsWithoutKey]
+}
+
+/**
+ * Deduplica itens do lote Residencial em memória (intra-batch deduplication).
+ */
+export function deduplicateResidencialBatchItems(
+  rows: ResidencialInsertItem[],
+): ResidencialInsertItem[] {
+  if (!rows || rows.length <= 1) return rows || []
+
+  const dedupMap = new Map<string, ResidencialInsertItem>()
+  const itemsWithoutKey: ResidencialInsertItem[] = []
+
+  for (const item of rows) {
+    const key = extractResidencialDeduplicationKey(item)
+    const ref = item.data_referencia?.trim() || ''
+
+    if (key && ref) {
+      const compositeKey = `${ref}::${key}`
+      const existing = dedupMap.get(compositeKey)
+      if (existing) {
+        const merged: ResidencialInsertItem = {
+          ...item,
+          ocorrencias: (
+            item.ocorrencias ||
+            item.typedFields?.ocorrencias ||
+            existing.ocorrencias ||
+            existing.typedFields?.ocorrencias ||
+            ''
+          ).trim(),
+          data_promessa_de_pagto:
+            item.data_promessa_de_pagto ||
+            item.typedFields?.data_promessa_de_pagto ||
+            existing.data_promessa_de_pagto ||
+            existing.typedFields?.data_promessa_de_pagto ||
+            '',
+          comentarios:
+            item.comentarios ||
+            item.typedFields?.comentarios ||
+            existing.comentarios ||
+            existing.typedFields?.comentarios ||
+            '',
+        }
+        dedupMap.set(compositeKey, merged)
+      } else {
+        dedupMap.set(compositeKey, item)
+      }
+    } else {
+      itemsWithoutKey.push(item)
+    }
+  }
+
+  return [...Array.from(dedupMap.values()), ...itemsWithoutKey]
 }
 
 /**
  * Insert or upsert rows into collection 'movel' sequentially one by one with a safe pause.
- * Preserves existing 'ocorrencias', 'data_promessa_de_pagto' and 'comentarios' when re-importing the same file+linha.
- * All new records default to 'Não Tratados' for 'ocorrencias'.
+ * Regras anti-duplicidade:
+ * 1. Chave de negócio: Número (primeira coluna do arquivo / campo de dados).
+ * 2. Escopo: data_referencia + chave normalizada.
+ * 3. Se chave encontrada no banco ou intra-lote: UPDATE em vez de CREATE,
+ *    preservando ocorrencias, data_promessa_de_pagto e comentarios.
+ * 4. Chave vazia: fallback para arquivo + linha.
  */
 export async function insertMovelBatch(
   rows: MovelInsertItem[],
@@ -479,39 +640,43 @@ export async function insertMovelBatch(
   if (!rows || rows.length === 0) return 0
   invalidateAnalyticalCache()
 
-  // Pre-load existing manual fields for each distinct file
-  const distinctFiles = Array.from(
-    new Set(rows.map((r) => r.arquivo?.trim()).filter(Boolean)),
+  // 1. Deduplicação intra-lote: mesmo contrato no mesmo lote não gera duas operações
+  const cleanRows = deduplicateMovelBatchItems(rows)
+
+  // 2. Pré-carregar registros existentes no banco para a mesma data_referencia e arquivos
+  const distinctRefs = Array.from(
+    new Set(cleanRows.map((r) => r.data_referencia?.trim()).filter(Boolean)),
   ) as string[]
-  const existingMapByFile = new Map<
-    string,
-    Map<
-      number,
-      {
-        ocorrencias?: string
-        data_promessa_de_pagto?: string
-        comentarios?: string
-        id: string
-      }
-    >
-  >()
+  const distinctFiles = Array.from(
+    new Set(cleanRows.map((r) => r.arquivo?.trim()).filter(Boolean)),
+  ) as string[]
 
-  for (const f of distinctFiles) {
-    const map = await fetchExistingManualFields('movel', f)
-    existingMapByFile.set(f, map)
-  }
+  const { byKeyAndRef, byFileAndLine } = await fetchExistingRecordsForDeduplication('movel', {
+    dataReferencias: distinctRefs,
+    fileNames: distinctFiles,
+  })
 
-  let insertedTotal = 0
+  let processedTotal = 0
   const accumulatedErrors: string[] = []
 
-  for (let idx = 0; idx < rows.length; idx++) {
-    const item = rows[idx]
+  for (let idx = 0; idx < cleanRows.length; idx++) {
+    const item = cleanRows[idx]
     const fileKey = item.arquivo?.trim() || ''
-    const existingMap = existingMapByFile.get(fileKey)
-    const existingRecord = item.linha !== undefined ? existingMap?.get(item.linha) : undefined
+    const refKey = item.data_referencia?.trim() || ''
+    const businessKey = extractMovelDeduplicationKey(item)
+
+    // Localizar registro existente:
+    // (a) por chave de negócio + data_referencia
+    // (b) fallback: arquivo + linha (se não houver chave de negócio)
+    let existingRecord: ExistingRecordManualInfo | undefined
+    if (businessKey && refKey) {
+      existingRecord = byKeyAndRef.get(`${refKey}::${businessKey}`)
+    }
+    if (!existingRecord && fileKey && item.linha !== undefined && item.linha !== null) {
+      existingRecord = byFileAndLine.get(`${fileKey}::${item.linha}`)
+    }
 
     // Preserve manual fields from existing record if not explicitly provided in new item
-    // Faithful occurrence: use item's ocorrencias or existingRecord manual override without artificial default
     const preservedOcorrencias = (existingRecord?.ocorrencias || item.ocorrencias || '').trim()
     const preservedPromessa =
       item.data_promessa_de_pagto || existingRecord?.data_promessa_de_pagto || ''
@@ -527,26 +692,48 @@ export async function insertMovelBatch(
       ocorrencias: preservedOcorrencias,
       data_promessa_de_pagto: preservedPromessa,
       comentarios: preservedComentarios,
-      data_referencia: item.data_referencia?.trim() || '',
+      data_referencia: refKey,
     }
 
     try {
       if (existingRecord) {
         // Update existing record
         await executeWithRetry(
-          () => pb.collection('movel').update(existingRecord.id, payload, { requestKey: null }),
+          () => pb.collection('movel').update(existingRecord!.id, payload, { requestKey: null }),
           6,
           800,
         )
       } else {
         // Create new record
-        await executeWithRetry(
+        const created = await executeWithRetry(
           () => pb.collection('movel').create(payload, { requestKey: null }),
           6,
           800,
         )
+        // Atualizar mapas em memória para caso registros seguintes coincidam
+        if (businessKey && refKey) {
+          byKeyAndRef.set(`${refKey}::${businessKey}`, {
+            id: created.id,
+            arquivo: fileKey,
+            linha: item.linha,
+            ocorrencias: preservedOcorrencias,
+            data_promessa_de_pagto: preservedPromessa,
+            comentarios: preservedComentarios,
+            dedupKey: businessKey,
+          })
+        }
+        if (fileKey && item.linha !== undefined && item.linha !== null) {
+          byFileAndLine.set(`${fileKey}::${item.linha}`, {
+            id: created.id,
+            arquivo: fileKey,
+            linha: item.linha,
+            ocorrencias: preservedOcorrencias,
+            data_promessa_de_pagto: preservedPromessa,
+            comentarios: preservedComentarios,
+          })
+        }
       }
-      insertedTotal++
+      processedTotal++
     } catch (err: unknown) {
       const fileInfo = item.arquivo ? `arquivo '${item.arquivo}'` : 'arquivo desconhecido'
       const lineInfo =
@@ -559,11 +746,11 @@ export async function insertMovelBatch(
     }
 
     if (onProgress) {
-      onProgress(insertedTotal, rows.length)
+      onProgress(processedTotal, cleanRows.length)
     }
 
     // Conservative pause between sequential requests
-    if (idx < rows.length - 1) {
+    if (idx < cleanRows.length - 1) {
       await sleep(SEQUENTIAL_PAUSE_MS)
     }
   }
@@ -580,7 +767,7 @@ export async function insertMovelBatch(
     throw new Error(summary)
   }
 
-  return insertedTotal
+  return processedTotal
 }
 
 export interface ResidencialInsertItem {
@@ -609,36 +796,41 @@ export async function insertResidencialBatch(
   if (!rows || rows.length === 0) return 0
   invalidateAnalyticalCache()
 
-  // Pre-load existing manual fields for each distinct file
-  const distinctFiles = Array.from(
-    new Set(rows.map((r) => r.arquivo?.trim()).filter(Boolean)),
+  // 1. Deduplicação intra-lote: mesmo contrato no mesmo lote não gera duas operações
+  const cleanRows = deduplicateResidencialBatchItems(rows)
+
+  // 2. Pré-carregar registros existentes no banco para a mesma data_referencia e arquivos
+  const distinctRefs = Array.from(
+    new Set(cleanRows.map((r) => r.data_referencia?.trim()).filter(Boolean)),
   ) as string[]
-  const existingMapByFile = new Map<
-    string,
-    Map<
-      number,
-      {
-        ocorrencias?: string
-        data_promessa_de_pagto?: string
-        comentarios?: string
-        id: string
-      }
-    >
-  >()
+  const distinctFiles = Array.from(
+    new Set(cleanRows.map((r) => r.arquivo?.trim()).filter(Boolean)),
+  ) as string[]
 
-  for (const f of distinctFiles) {
-    const map = await fetchExistingManualFields('residencial', f)
-    existingMapByFile.set(f, map)
-  }
+  const { byKeyAndRef, byFileAndLine } = await fetchExistingRecordsForDeduplication('residencial', {
+    dataReferencias: distinctRefs,
+    fileNames: distinctFiles,
+  })
 
-  let insertedTotal = 0
+  let processedTotal = 0
   const accumulatedErrors: string[] = []
 
-  for (let idx = 0; idx < rows.length; idx++) {
-    const item = rows[idx]
+  for (let idx = 0; idx < cleanRows.length; idx++) {
+    const item = cleanRows[idx]
     const fileKey = item.arquivo?.trim() || ''
-    const existingMap = existingMapByFile.get(fileKey)
-    const existingRecord = item.linha !== undefined ? existingMap?.get(item.linha) : undefined
+    const refKey = item.data_referencia?.trim() || ''
+    const businessKey = extractResidencialDeduplicationKey(item)
+
+    // Localizar registro existente:
+    // (a) por chave de negócio + data_referencia
+    // (b) fallback: arquivo + linha (se não houver chave de negócio)
+    let existingRecord: ExistingRecordManualInfo | undefined
+    if (businessKey && refKey) {
+      existingRecord = byKeyAndRef.get(`${refKey}::${businessKey}`)
+    }
+    if (!existingRecord && fileKey && item.linha !== undefined && item.linha !== null) {
+      existingRecord = byFileAndLine.get(`${fileKey}::${item.linha}`)
+    }
 
     // Preserve manual fields if existing. Faithful occurrence: never default to 'Não Tratados'
     const typedOcorrencias = item.typedFields?.ocorrencias || item.ocorrencias
@@ -661,7 +853,7 @@ export async function insertResidencialBatch(
       ocorrencias: preservedOcorrencias,
       data_promessa_de_pagto: preservedPromessa,
       comentarios: preservedComentarios,
-      data_referencia: item.data_referencia?.trim() || '',
+      data_referencia: refKey,
     }
 
     try {
@@ -669,19 +861,41 @@ export async function insertResidencialBatch(
         // Update existing record
         await executeWithRetry(
           () =>
-            pb.collection('residencial').update(existingRecord.id, payload, { requestKey: null }),
+            pb.collection('residencial').update(existingRecord!.id, payload, { requestKey: null }),
           6,
           800,
         )
       } else {
         // Create new record
-        await executeWithRetry(
+        const created = await executeWithRetry(
           () => pb.collection('residencial').create(payload, { requestKey: null }),
           6,
           800,
         )
+        // Atualizar mapas em memória para caso registros seguintes coincidam
+        if (businessKey && refKey) {
+          byKeyAndRef.set(`${refKey}::${businessKey}`, {
+            id: created.id,
+            arquivo: fileKey,
+            linha: item.linha,
+            ocorrencias: preservedOcorrencias,
+            data_promessa_de_pagto: preservedPromessa,
+            comentarios: preservedComentarios,
+            dedupKey: businessKey,
+          })
+        }
+        if (fileKey && item.linha !== undefined && item.linha !== null) {
+          byFileAndLine.set(`${fileKey}::${item.linha}`, {
+            id: created.id,
+            arquivo: fileKey,
+            linha: item.linha,
+            ocorrencias: preservedOcorrencias,
+            data_promessa_de_pagto: preservedPromessa,
+            comentarios: preservedComentarios,
+          })
+        }
       }
-      insertedTotal++
+      processedTotal++
     } catch (err: unknown) {
       const fileInfo = item.arquivo ? `arquivo '${item.arquivo}'` : 'arquivo desconhecido'
       const lineInfo =
@@ -694,11 +908,11 @@ export async function insertResidencialBatch(
     }
 
     if (onProgress) {
-      onProgress(insertedTotal, rows.length)
+      onProgress(processedTotal, cleanRows.length)
     }
 
     // Conservative pause between sequential requests
-    if (idx < rows.length - 1) {
+    if (idx < cleanRows.length - 1) {
       await sleep(SEQUENTIAL_PAUSE_MS)
     }
   }
@@ -715,7 +929,7 @@ export async function insertResidencialBatch(
     throw new Error(summary)
   }
 
-  return insertedTotal
+  return processedTotal
 }
 
 /**
