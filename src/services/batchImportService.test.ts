@@ -609,6 +609,105 @@ describe('batchImportService', () => {
       )
     })
 
+    it('cenário com arquivo misto CELNET NOVA SUIÇA.xlsx e variações de ocorrências (case e status não catalogados): todas as linhas entram no consolidado da loja da linha e somam total_linhas', async () => {
+      const storesForTest: StoreRecord[] = [
+        {
+          id: 'store-fisica-ns',
+          collectionId: 'stores',
+          collectionName: 'stores',
+          name: 'CELNET NOVA SUIÇA',
+          coordenacao: 'COORD 1',
+          supervisao: 'SUPER 1',
+          created: '2026-01-01',
+          updated: '2026-01-01',
+        },
+        {
+          id: 'store-call-ns',
+          collectionId: 'stores',
+          collectionName: 'stores',
+          name: 'CELNET CALL NOVA SUIÇA',
+          coordenacao: 'CALL',
+          supervisao: 'CALL',
+          created: '2026-01-01',
+          updated: '2026-01-01',
+        },
+      ]
+
+      // Header com LOJA, VENDEDOR, CLIENTE, CPF, OCORRÊNCIAS
+      const header = ['LOJA', 'VENDEDOR', 'CLIENTE', 'CPF', 'OCORRÊNCIAS']
+      const rows = [
+        // Loja física: ocorrências variadas em case e pontuação
+        ['CELNET NOVA SUIÇA', 'VENDEDOR 1', 'CLIENTE 1', '111.111.111-11', 'Pendente'],
+        ['CELNET NOVA SUIÇA', 'VENDEDOR 1', 'CLIENTE 2', '222.222.222-22', 'pendente'],
+        ['CELNET NOVA SUIÇA', 'VENDEDOR 2', 'CLIENTE 3', '333.333.333-33', 'Contato Realizado'],
+        ['CELNET NOVA SUIÇA', 'VENDEDOR 2', 'CLIENTE 4', '444.444.444-44', 'FATURA(S) PAGA(S)'],
+        [
+          'CELNET NOVA SUIÇA',
+          'VENDEDOR 3',
+          'CLIENTE 5',
+          '555.555.555-55',
+          'STATUS DESCONHECIDO NOVO',
+        ],
+        // Loja CALL: ocorrências variadas
+        ['CELNET CALL NOVA SUIÇA', 'AGENTE CALL 1', 'CLIENTE 6', '666.666.666-66', 'Pendente'],
+        [
+          'CELNET CALL NOVA SUIÇA',
+          'AGENTE CALL 1',
+          'CLIENTE 7',
+          '777.777.777-77',
+          'CONTATO REALIZADO',
+        ],
+        ['CELNET CALL NOVA SUIÇA', 'AGENTE CALL 2', 'CLIENTE 8', '888.888.888-88', 'Fatura Paga'],
+        [
+          'CELNET CALL NOVA SUIÇA',
+          'AGENTE CALL 2',
+          'CLIENTE 9',
+          '999.999.999-99',
+          'OUTRA OCORRENCIA RARA',
+        ],
+      ]
+
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
+      XLSX.utils.book_append_sheet(wb, ws, 'Móvel')
+
+      const u8 = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+      const file = new File([u8], 'CELNET NOVA SUIÇA.xlsx')
+
+      const parsed = await parseBatchXlsxFile(file, 'movel', storesForTest)
+
+      // Todas as 9 linhas devem ser válidas e contabilizadas (nenhuma expurgada pois todas têm ocorrência preenchida)
+      expect(parsed.totalValidRows).toBe(9)
+      expect(parsed.totalExpurgadasRows).toBe(0)
+      expect(parsed.analyticalRows).toHaveLength(9)
+
+      // Verificar divisão por loja
+      const fisicaSummary = parsed.storeSummaries.find(
+        (s) => s.canonicalStoreName === 'CELNET NOVA SUIÇA',
+      )
+      expect(fisicaSummary).toBeDefined()
+      expect(fisicaSummary?.totalLinhas).toBe(5)
+      expect(fisicaSummary?.pendente).toBe(2) // 'Pendente' e 'pendente'
+      expect(fisicaSummary?.contato_realizado).toBe(1)
+      expect(fisicaSummary?.fatura_paga).toBe(1)
+      expect(fisicaSummary?.nao_tratados).toBe(1) // 'STATUS DESCONHECIDO NOVO' fallback
+
+      const callSummary = parsed.storeSummaries.find(
+        (s) => s.canonicalStoreName === 'CELNET CALL NOVA SUIÇA',
+      )
+      expect(callSummary).toBeDefined()
+      expect(callSummary?.totalLinhas).toBe(4)
+      expect(callSummary?.pendente).toBe(1)
+      expect(callSummary?.contato_realizado).toBe(1)
+      expect(callSummary?.fatura_paga).toBe(1)
+      expect(callSummary?.nao_tratados).toBe(1) // 'OUTRA OCORRENCIA RARA' fallback
+
+      // Soma dos totais de linhas de todas as lojas deve ser exatamente 9
+      const totalSomaLojas = parsed.storeSummaries.reduce((acc, s) => acc + s.totalLinhas, 0)
+      expect(totalSomaLojas).toBe(9)
+      expect(totalSomaLojas).toBe(parsed.totalValidRows)
+    })
+
     it('cenário com arquivo contendo linhas de loja física e linhas de loja CALL/ILHA: deve isolar CALL de loja física e somar totais com consistência', async () => {
       const { saveFpdRecord, saveVendorConsolidationsFromLines } =
         await import('@/services/fpdService')

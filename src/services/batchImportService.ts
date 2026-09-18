@@ -352,10 +352,23 @@ export async function parseBatchXlsxFile(
       }
     }
 
-    // Célula vazia ou sem ocorrência válida -> EXPURGADA (não contabiliza em totalLinhas nem em nenhuma categoria)
+    // Célula vazia ou sem ocorrência válida:
+    // Se a linha tiver dados válidos mas status não reconhecido, usar fallback 'nao_tratados'
+    // Apenas descartar se a célula de status for completamente vazia ou sem valor
+    const hasStatusValue =
+      statusColIndex >= 0 &&
+      statusColIndex < row.length &&
+      row[statusColIndex] !== null &&
+      row[statusColIndex] !== undefined &&
+      String(row[statusColIndex]).trim() !== ''
+
     if (!category) {
-      totalExpurgadasRows++
-      continue
+      if (hasStatusValue) {
+        category = 'nao_tratados'
+      } else {
+        totalExpurgadasRows++
+        continue
+      }
     }
 
     // Extract quantity

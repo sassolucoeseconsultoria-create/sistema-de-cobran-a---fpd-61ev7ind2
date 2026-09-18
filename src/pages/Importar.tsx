@@ -72,6 +72,7 @@ import { FPD_STATUSES, type StoreRecord } from '@/types/fpd'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
+import pb from '@/lib/pocketbase/client'
 import { applyDateMask, isValidDateDDMMAAAA } from '@/lib/clientFormatters'
 import { cn } from '@/lib/utils'
 
@@ -517,19 +518,19 @@ export const Importar: React.FC = () => {
             const cat =
               classifyStatusCell(rawStatus) ||
               classifyRow([normalizeText(rawStatus)]) ||
-              classifyRow([rawStatus])
-            if (cat) {
-              const agg = await getOrInitStoreAgg(mItem.loja || finalStoreName)
-              agg.total_linhas++
-              agg[cat]++
+              classifyRow([rawStatus]) ||
+              'nao_tratados'
 
-              allVendorLinesToSave.push({
-                vendedor: mItem.vendedor || 'NÃO INFORMADO',
-                loja: mItem.loja || finalStoreName,
-                status: cat,
-                quantidade: 1,
-              })
-            }
+            const agg = await getOrInitStoreAgg(mItem.loja || finalStoreName)
+            agg.total_linhas++
+            agg[cat]++
+
+            allVendorLinesToSave.push({
+              vendedor: mItem.vendedor || 'NÃO INFORMADO',
+              loja: mItem.loja || finalStoreName,
+              status: cat,
+              quantidade: 1,
+            })
           }
 
           await insertMovelBatch(dedupedMovel)
@@ -564,19 +565,19 @@ export const Importar: React.FC = () => {
             const cat =
               classifyStatusCell(rawStatus) ||
               classifyRow([normalizeText(rawStatus)]) ||
-              classifyRow([rawStatus])
-            if (cat) {
-              const agg = await getOrInitStoreAgg(rItem.loja || finalStoreName)
-              agg.total_linhas++
-              agg[cat]++
+              classifyRow([rawStatus]) ||
+              'nao_tratados'
 
-              allVendorLinesToSave.push({
-                vendedor: rItem.vendedor || 'NÃO INFORMADO',
-                loja: rItem.loja || finalStoreName,
-                status: cat,
-                quantidade: 1,
-              })
-            }
+            const agg = await getOrInitStoreAgg(rItem.loja || finalStoreName)
+            agg.total_linhas++
+            agg[cat]++
+
+            allVendorLinesToSave.push({
+              vendedor: rItem.vendedor || 'NÃO INFORMADO',
+              loja: rItem.loja || finalStoreName,
+              status: cat,
+              quantidade: 1,
+            })
           }
 
           await insertResidencialBatch(dedupedRes)
@@ -607,7 +608,10 @@ export const Importar: React.FC = () => {
         }
       }
 
-      // 4. Salvar fpd_records para CADA LOJA distinta encontrada nas linhas
+      // 4. Salvar fpd_records para CADA LOJA distinta encontrada nas linhas.
+      // Se houver dados analíticos, recalculamos os totais da loja diretamente
+      // a partir de todos os registros persistidos (Móvel + Residencial) para esta referência,
+      // garantindo que arquivos mistos subsequentes não sobrescrevam nem percam linhas anteriores.
       for (const [, agg] of storeAggMap.entries()) {
         let targetStoreId = agg.storeRecord ? agg.storeRecord.id : ''
         if (!targetStoreId) {
@@ -618,7 +622,7 @@ export const Importar: React.FC = () => {
         }
         if (!targetStoreId) continue
 
-        await saveFpdRecord({
+        let fpdPayload = {
           storeId: targetStoreId,
           referente: refDate,
           total_linhas: agg.total_linhas,
@@ -632,7 +636,65 @@ export const Importar: React.FC = () => {
           contato_realizado: agg.contato_realizado,
           outros: agg.outros,
           accumulate: false,
-        })
+        }
+
+        if (analyticalData) {
+          try {
+            const canonicalStoreName = agg.storeName.toUpperCase()
+            const [storeMovel, storeRes] = await Promise.all([
+              pb.collection('movel').getFullList<{ loja?: string; ocorrencias?: string }>({
+                filter: `data_referencia = "${refDate.replace(/"/g, '\\"')}" && loja = "${canonicalStoreName.replace(/"/g, '\\"')}"`,
+                fields: 'loja,ocorrencias',
+                requestKey: null,
+              }),
+              pb.collection('residencial').getFullList<{ loja?: string; ocorrencias?: string }>({
+                filter: `data_referencia = "${refDate.replace(/"/g, '\\"')}" && loja = "${canonicalStoreName.replace(/"/g, '\\"')}"`,
+                fields: 'loja,ocorrencias',
+                requestKey: null,
+              }),
+            ])
+
+            const allStoreRows = [...storeMovel, ...storeRes]
+            if (allStoreRows.length > 0) {
+              const freshAgg = {
+                total_linhas: allStoreRows.length,
+                fatura_paga: 0,
+                envio_fatura: 0,
+                promessa_pagto: 0,
+                sem_contato: 0,
+                cancelados: 0,
+                pendente: 0,
+                contato_realizado: 0,
+                nao_tratados: 0,
+                outros: 0,
+              }
+
+              for (const row of allStoreRows) {
+                const rawSt = row.ocorrencias || ''
+                const cat =
+                  classifyStatusCell(rawSt) ||
+                  classifyRow([normalizeText(rawSt)]) ||
+                  classifyRow([rawSt]) ||
+                  'nao_tratados'
+                freshAgg[cat]++
+              }
+
+              fpdPayload = {
+                storeId: targetStoreId,
+                referente: refDate,
+                ...freshAgg,
+                accumulate: false,
+              }
+            }
+          } catch (recalcErr) {
+            console.warn(
+              `[Importar] Aviso ao recalcular totais analíticos para loja ${agg.storeName}:`,
+              recalcErr,
+            )
+          }
+        }
+
+        await saveFpdRecord(fpdPayload)
       }
 
       // 5. Salvar vendor_consolidations para cada vendedor/loja
