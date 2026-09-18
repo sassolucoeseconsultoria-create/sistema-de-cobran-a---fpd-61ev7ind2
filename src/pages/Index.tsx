@@ -43,14 +43,22 @@ import {
 } from '@/services/fpdService'
 import { exportConsolidatedToXlsx } from '@/lib/xlsxExport'
 import { FPD_STATUSES, type StoreRecord, type FpdRecord, type ConsolidatedRow } from '@/types/fpd'
+import { buildConsolidatedRow } from '@/lib/consolidatedComparison'
 import { cn } from '@/lib/utils'
 import { StoreAnalyticsDrawer } from '@/components/StoreAnalyticsDrawer'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
+import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
 import { isSessionExpiredError } from '@/lib/pocketbase/client'
 
 export const Index: React.FC = () => {
   const { toast } = useToast()
   const userAccess = useUserStoreAccess()
+  const {
+    allowedReferenceDates: availableReferenceDates,
+    hasMultipleReferences,
+    initialReferenceDate,
+    isDateAllowed,
+  } = useAllowedReferenceDates()
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [records, setRecords] = useState<FpdRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -58,8 +66,38 @@ export const Index: React.FC = () => {
   // Filters
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [selectedReferenceDate, setSelectedReferenceDate] = useState<string>('all')
   const [selectedCoordenacoes, setSelectedCoordenacoes] = useState<string[]>([])
   const [selectedSupervisoes, setSelectedSupervisoes] = useState<string[]>([])
+
+  // Sincronização da data selecionada com as datas autorizadas:
+  // 1. Se só existir 1 referência e estiver 'all', seleciona automaticamente a única disponível.
+  // 2. Se houver 2+ referências e a data selecionada não for permitida, cai para 'all'.
+  // 3. Respeita isDateAllowed para Gerente/Supervisor/Coordenador.
+  useEffect(() => {
+    if (availableReferenceDates.length === 1) {
+      const singleDate = availableReferenceDates[0]
+      if (selectedReferenceDate === 'all' || selectedReferenceDate !== singleDate) {
+        if (selectedReferenceDate !== 'none') {
+          setSelectedReferenceDate(singleDate)
+        }
+      }
+    } else if (availableReferenceDates.length >= 2) {
+      if (
+        selectedReferenceDate !== 'all' &&
+        selectedReferenceDate !== 'none' &&
+        !isDateAllowed(selectedReferenceDate)
+      ) {
+        setSelectedReferenceDate('all')
+      }
+    } else if (
+      selectedReferenceDate !== 'all' &&
+      selectedReferenceDate !== 'none' &&
+      !isDateAllowed(selectedReferenceDate)
+    ) {
+      setSelectedReferenceDate('all')
+    }
+  }, [selectedReferenceDate, availableReferenceDates, isDateAllowed])
 
   // Analytics Drawer / details
   const [selectedRow, setSelectedRow] = useState<ConsolidatedRow | null>(null)
@@ -152,55 +190,12 @@ export const Index: React.FC = () => {
     return userAccess.filterStores(stores)
   }, [stores, userAccess])
 
-  // Map each store to its latest FPD record
+  // Map each store to its consolidated FPD row filtered by reference
   const consolidatedRows: ConsolidatedRow[] = useMemo(() => {
     return accessibleStores.map((store) => {
-      // Find all records for this store, pick the latest
-      const storeRecords = records.filter((r) => r.store === store.id)
-      const latest = storeRecords[0] // records are sorted -importado_em
-
-      if (!latest) {
-        return {
-          storeId: store.id,
-          storeName: store.name,
-          coordenacao: store.coordenacao || '',
-          supervisao: store.supervisao || '',
-          hasData: false,
-          totalLinhas: 0,
-          envioFatura: 0,
-          pendente: 0,
-          faturaPaga: 0,
-          semContato: 0,
-          promessaPagto: 0,
-          cancelados: 0,
-          naoTratados: 0,
-          contatoRealizado: 0,
-          outros: 0,
-        }
-      }
-
-      return {
-        storeId: store.id,
-        storeName: store.name,
-        coordenacao: store.coordenacao || '',
-        supervisao: store.supervisao || '',
-        hasData: true,
-        latestRecordId: latest.id,
-        referente: latest.referente,
-        importadoEm: latest.importado_em || latest.created,
-        totalLinhas: latest.total_linhas || 0,
-        envioFatura: latest.envio_fatura || 0,
-        pendente: latest.pendente || 0,
-        faturaPaga: latest.fatura_paga || 0,
-        semContato: latest.sem_contato || 0,
-        promessaPagto: latest.promessa_pagto || 0,
-        cancelados: latest.cancelados || 0,
-        naoTratados: latest.nao_tratados || 0,
-        contatoRealizado: latest.contato_realizado || 0,
-        outros: latest.outros || 0,
-      }
+      return buildConsolidatedRow(store, records, selectedReferenceDate)
     })
-  }, [accessibleStores, records])
+  }, [accessibleStores, records, selectedReferenceDate])
 
   // Distinct filter options (based on user accessible stores)
   const uniqueCoordenacoes = useMemo(() => {
@@ -285,8 +280,18 @@ export const Index: React.FC = () => {
   const animatedNaoTratados = useCountUp(totals.naoTratados)
   const animatedContatoRealizado = useCountUp(totals.contatoRealizado)
 
-  // Latest Referente date (from accessible stores)
-  const latestReferente = useMemo(() => {
+  // Effective Referente date (selected reference date, or latest if 'all')
+  const effectiveReferente = useMemo(() => {
+    if (
+      selectedReferenceDate &&
+      selectedReferenceDate !== 'all' &&
+      selectedReferenceDate !== 'none'
+    ) {
+      return selectedReferenceDate
+    }
+    if (selectedReferenceDate === 'none') {
+      return 'Sem referência'
+    }
     const accessibleRecordStoreIds = new Set(accessibleStores.map((s) => s.id))
     const withRef = records.find(
       (r) =>
@@ -295,7 +300,7 @@ export const Index: React.FC = () => {
         r.referente.trim() !== '',
     )
     return withRef?.referente || null
-  }, [records, accessibleStores, userAccess.isAdm])
+  }, [records, accessibleStores, userAccess.isAdm, selectedReferenceDate])
 
   // Handle open drawer
   const handleOpenRowDetail = async (row: ConsolidatedRow) => {
@@ -382,7 +387,7 @@ export const Index: React.FC = () => {
       })
       return
     }
-    exportConsolidatedToXlsx(filteredRows, totals, latestReferente || undefined)
+    exportConsolidatedToXlsx(filteredRows, totals, effectiveReferente || undefined)
     toast({
       title: 'Planilha exportada',
       description: 'O arquivo .xlsx foi gerado com sucesso.',
@@ -390,11 +395,15 @@ export const Index: React.FC = () => {
   }
 
   const hasActiveFilters =
-    debouncedSearch !== '' || selectedCoordenacoes.length > 0 || selectedSupervisoes.length > 0
+    debouncedSearch !== '' ||
+    selectedCoordenacoes.length > 0 ||
+    selectedSupervisoes.length > 0 ||
+    selectedReferenceDate !== 'all'
 
   const clearFilters = () => {
     setSearch('')
     setDebouncedSearch('')
+    setSelectedReferenceDate('all')
     setSelectedCoordenacoes([])
     setSelectedSupervisoes([])
   }
@@ -469,7 +478,7 @@ export const Index: React.FC = () => {
             </p>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-base sm:text-lg font-bold text-[#12365A]">
-                {latestReferente ? `Ref: ${latestReferente}` : 'Nenhuma importada'}
+                {effectiveReferente ? `Ref: ${effectiveReferente}` : 'Nenhuma importada'}
               </span>
             </div>
           </div>
@@ -528,6 +537,32 @@ export const Index: React.FC = () => {
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
+            </div>
+
+            {/* Selector: Data de Referência */}
+            <div className="w-full sm:w-auto">
+              <select
+                aria-label="Selecione a referência principal"
+                value={selectedReferenceDate}
+                onChange={(e) => setSelectedReferenceDate(e.target.value)}
+                className={cn(
+                  'h-9 px-3 text-xs font-medium rounded-md border bg-white focus:outline-none focus:border-[#0E9F8A]',
+                  selectedReferenceDate !== 'all'
+                    ? 'border-[#0E9F8A] text-[#0E9F8A] bg-[#0E9F8A]/5 font-semibold'
+                    : 'border-[#E3E9F2] text-[#12365A]',
+                )}
+                title="Selecione a referência principal"
+              >
+                {hasMultipleReferences && (
+                  <option value="all">Todas as referências (Mais recente por loja)</option>
+                )}
+                {availableReferenceDates.map((date) => (
+                  <option key={date} value={date}>
+                    Referência: {date}
+                  </option>
+                ))}
+                <option value="none">Sem referência</option>
+              </select>
             </div>
 
             {/* Filter Coordenação */}
