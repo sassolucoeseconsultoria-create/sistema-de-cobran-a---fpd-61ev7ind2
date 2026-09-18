@@ -23,7 +23,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { isFaturaPagaOcorrencia, sortClientesByOcorrencia } from '@/lib/ocorrenciasSorting'
-import pb from '@/lib/pocketbase/client'
+import pb, { isSessionExpiredError } from '@/lib/pocketbase/client'
 import { OCORRENCIAS_OPTIONS, type MovelRecord, type OcorrenciaType } from '@/types/fpd'
 import {
   applyDateMask,
@@ -261,6 +261,9 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
       })
       setEditValues(initialEdits)
     } catch (err) {
+      if (isSessionExpiredError(err)) {
+        return
+      }
       console.error('Erro ao carregar clientes móvel:', err)
       toast({
         title: 'Erro ao carregar dados',

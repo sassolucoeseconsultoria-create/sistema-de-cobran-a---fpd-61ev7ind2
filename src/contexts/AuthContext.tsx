@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from 'react'
 import type { RecordModel } from 'pocketbase'
-import pb from '@/lib/pocketbase/client'
+import pb, { handleSessionExpired, isSessionExpiredError } from '@/lib/pocketbase/client'
 
 export type UserRole = 'ADM' | 'Coordenador' | 'Supervisor' | 'Gerente'
 
@@ -34,8 +34,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const refreshed = await pb.collection('users').authRefresh()
         setUser(refreshed.record as User | null)
-      } catch (_) {
-        // If token is expired or invalid
+      } catch (err: unknown) {
+        if (isSessionExpiredError(err)) {
+          handleSessionExpired('Sua sessão foi encerrada. Faça login novamente.')
+          setUser(null)
+          setToken(null)
+        }
       }
     }
   }
@@ -51,7 +55,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .then((res) => {
           setUser(res.record as User | null)
         })
-        .catch(() => {})
+        .catch((err: unknown) => {
+          if (isSessionExpiredError(err)) {
+            handleSessionExpired('Sua sessão foi encerrada. Faça login novamente.')
+            setUser(null)
+            setToken(null)
+          }
+        })
         .finally(() => {
           setLoading(false)
         })

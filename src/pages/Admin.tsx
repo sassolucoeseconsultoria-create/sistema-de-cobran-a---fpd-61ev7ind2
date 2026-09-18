@@ -20,7 +20,7 @@ import {
   RefreshCw,
   Check,
 } from 'lucide-react'
-import pb from '@/lib/pocketbase/client'
+import pb, { isSessionExpiredError } from '@/lib/pocketbase/client'
 import { useAuth, type UserRole, type User } from '@/contexts/AuthContext'
 import { FIXED_STORE_NAMES, fixedStoresAsRecords } from '@/services/fixedStores'
 import {
@@ -143,6 +143,9 @@ export const Admin: React.FC = () => {
       })
       setUsers(userList)
     } catch (err: unknown) {
+      if (isSessionExpiredError(err)) {
+        return
+      }
       console.error(err)
       toast({
         title: 'Erro ao carregar dados',
@@ -166,6 +169,9 @@ export const Admin: React.FC = () => {
       setRefDates(dates)
       setRefPermissions(perms)
     } catch (err) {
+      if (isSessionExpiredError(err)) {
+        return
+      }
       console.error('Falha ao carregar datas de referência ou permissões:', err)
       toast({
         title: 'Erro ao carregar datas de referência',

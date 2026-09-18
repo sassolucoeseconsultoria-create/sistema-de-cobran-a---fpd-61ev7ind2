@@ -37,6 +37,7 @@ import {
 } from '@/services/fpdService'
 import type { StoreRecord, FpdRecord } from '@/types/fpd'
 import { cn } from '@/lib/utils'
+import { isSessionExpiredError } from '@/lib/pocketbase/client'
 
 export const Lojas: React.FC = () => {
   const { toast } = useToast()
@@ -77,7 +78,10 @@ export const Lojas: React.FC = () => {
       const [s, r] = await Promise.all([fetchStores(), fetchFpdRecords()])
       setStores(s)
       setRecords(r)
-    } catch {
+    } catch (err: unknown) {
+      if (isSessionExpiredError(err)) {
+        return
+      }
       toast({
         title: 'Erro ao carregar lojas',
         description: 'Não foi possível carregar a lista de lojas.',

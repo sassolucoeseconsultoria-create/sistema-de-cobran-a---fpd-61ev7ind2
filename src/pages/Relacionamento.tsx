@@ -50,6 +50,7 @@ import { cn } from '@/lib/utils'
 import { ClientesMovel } from '@/components/ClientesMovel'
 import { ClientesResidencial } from '@/components/ClientesResidencial'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { isSessionExpiredError } from '@/lib/pocketbase/client'
 
 export const Relacionamento: React.FC = () => {
   const { toast } = useToast()
@@ -215,6 +216,9 @@ export const Relacionamento: React.FC = () => {
       const sortedDates = Array.from(datesSet).sort((a, b) => b.localeCompare(a))
       setRawAvailableDates(sortedDates)
     } catch (err) {
+      if (isSessionExpiredError(err)) {
+        return
+      }
       console.error('Erro ao carregar dados iniciais de inadimplência:', err)
     }
   }, [userAccess.isGerente, userAccess.hasNoStoreAssigned, userAccess.managerStoreId])
@@ -402,6 +406,9 @@ export const Relacionamento: React.FC = () => {
         })
         setTotalMovel(res.totalItems || 0)
       } catch (err) {
+        if (isSessionExpiredError(err)) {
+          return
+        }
         console.error('Erro ao contar clientes móvel:', err)
         setTotalMovel(0)
       }
@@ -457,6 +464,9 @@ export const Relacionamento: React.FC = () => {
         })
         setTotalResidencial(res.totalItems || 0)
       } catch (err) {
+        if (isSessionExpiredError(err)) {
+          return
+        }
         console.error('Erro ao contar clientes residencial:', err)
         setTotalResidencial(0)
       }

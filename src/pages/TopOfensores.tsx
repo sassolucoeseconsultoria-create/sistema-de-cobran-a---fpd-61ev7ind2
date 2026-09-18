@@ -31,6 +31,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
+import { isSessionExpiredError } from '@/lib/pocketbase/client'
 import { isSameStore } from '@/lib/storeMatchingUtils'
 
 export const TopOfensores: React.FC = () => {
@@ -97,6 +98,9 @@ export const TopOfensores: React.FC = () => {
       setRecords(fetchedVendors)
       setStores(fetchedStores)
     } catch (err: unknown) {
+      if (isSessionExpiredError(err)) {
+        return
+      }
       console.error(err)
       toast({
         title: 'Erro ao carregar dados',

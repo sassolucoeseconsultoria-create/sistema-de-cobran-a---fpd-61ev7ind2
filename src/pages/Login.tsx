@@ -1,20 +1,44 @@
-import React, { useState } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
-import { ShieldCheck, Eye, EyeOff, Loader2, ArrowRight, Lock, Mail } from 'lucide-react'
+import {
+  ShieldCheck,
+  Eye,
+  EyeOff,
+  Loader2,
+  ArrowRight,
+  Lock,
+  Mail,
+  AlertTriangle,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { AUTH_REDIRECT_KEY, SESSION_EXPIRED_BANNER_KEY } from '@/lib/pocketbase/client'
 
 export const Login: React.FC = () => {
   const { user, login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [email, setEmail] = useState('mind3adm@gmail.com')
   const [password, setPassword] = useState('Skip@Pass')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [sessionExpiredNotice, setSessionExpiredNotice] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      const notice = window.sessionStorage.getItem(SESSION_EXPIRED_BANNER_KEY)
+      if (notice) {
+        setSessionExpiredNotice(notice)
+        window.sessionStorage.removeItem(SESSION_EXPIRED_BANNER_KEY)
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
 
   // Redirect if already logged in
   if (user) {
@@ -38,7 +62,29 @@ export const Login: React.FC = () => {
     setLoading(true)
     try {
       await login(email, password)
-      navigate('/', { replace: true })
+
+      let targetDestination = '/'
+      try {
+        const storedRedirect = window.sessionStorage.getItem(AUTH_REDIRECT_KEY)
+        if (storedRedirect) {
+          targetDestination = storedRedirect
+          window.sessionStorage.removeItem(AUTH_REDIRECT_KEY)
+        } else if (
+          location.state &&
+          typeof location.state === 'object' &&
+          'from' in location.state &&
+          location.state.from
+        ) {
+          const fromState = location.state.from as { pathname?: string; search?: string }
+          if (fromState.pathname) {
+            targetDestination = fromState.pathname + (fromState.search || '')
+          }
+        }
+      } catch {
+        targetDestination = '/'
+      }
+
+      navigate(targetDestination, { replace: true })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       if (msg.includes('400') || msg.includes('Failed to authenticate')) {
@@ -71,6 +117,13 @@ export const Login: React.FC = () => {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
+            {sessionExpiredNotice && (
+              <div className="p-3.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs font-medium flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>{sessionExpiredNotice}</span>
+              </div>
+            )}
+
             {error && (
               <div className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-medium flex items-start gap-2">
                 <span className="shrink-0 text-sm">⚠️</span>

@@ -51,6 +51,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
+import { isSessionExpiredError } from '@/lib/pocketbase/client'
 
 export const Vendedores: React.FC = () => {
   const { toast } = useToast()
@@ -140,6 +141,9 @@ export const Vendedores: React.FC = () => {
         }
       }
     } catch (err: unknown) {
+      if (isSessionExpiredError(err)) {
+        return
+      }
       console.error(err)
       toast({
         title: 'Erro ao carregar ranking de vendedores',
@@ -408,6 +412,9 @@ export const Vendedores: React.FC = () => {
       })
       setTotalMovel(res.totalItems || 0)
     } catch (err) {
+      if (isSessionExpiredError(err)) {
+        return
+      }
       console.error('Erro ao contar clientes móvel em Vendedores:', err)
       setTotalMovel(0)
     }
@@ -461,6 +468,9 @@ export const Vendedores: React.FC = () => {
       })
       setTotalResidencial(res.totalItems || 0)
     } catch (err) {
+      if (isSessionExpiredError(err)) {
+        return
+      }
       console.error('Erro ao contar clientes residencial em Vendedores:', err)
       setTotalResidencial(0)
     }

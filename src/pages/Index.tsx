@@ -46,6 +46,7 @@ import { FPD_STATUSES, type StoreRecord, type FpdRecord, type ConsolidatedRow } 
 import { cn } from '@/lib/utils'
 import { StoreAnalyticsDrawer } from '@/components/StoreAnalyticsDrawer'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
+import { isSessionExpiredError } from '@/lib/pocketbase/client'
 
 export const Index: React.FC = () => {
   const { toast } = useToast()
@@ -90,6 +91,9 @@ export const Index: React.FC = () => {
       setStores(fetchedStores)
       setRecords(fetchedRecords)
     } catch (err: unknown) {
+      if (isSessionExpiredError(err)) {
+        return
+      }
       console.error(err)
       toast({
         title: 'Erro ao carregar dados',

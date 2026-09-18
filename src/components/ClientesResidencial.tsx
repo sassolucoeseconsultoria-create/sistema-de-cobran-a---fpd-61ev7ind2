@@ -23,7 +23,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { isFaturaPagaOcorrencia, sortClientesByOcorrencia } from '@/lib/ocorrenciasSorting'
-import pb from '@/lib/pocketbase/client'
+import pb, { isSessionExpiredError } from '@/lib/pocketbase/client'
 import { OCORRENCIAS_OPTIONS, type ResidencialRecord, type OcorrenciaType } from '@/types/fpd'
 import {
   applyDateMask,
@@ -261,6 +261,9 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
       })
       setEditValues(initialEdits)
     } catch (err) {
+      if (isSessionExpiredError(err)) {
+        return
+      }
       console.error('Erro ao carregar clientes residencial:', err)
       toast({
         title: 'Erro ao carregar dados',

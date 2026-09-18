@@ -59,6 +59,7 @@ import { cn } from '@/lib/utils'
 import { StoreAnalyticsDrawer } from '@/components/StoreAnalyticsDrawer'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
+import { isSessionExpiredError } from '@/lib/pocketbase/client'
 
 export const Arquivos: React.FC = () => {
   const { toast } = useToast()
@@ -144,6 +145,9 @@ export const Arquivos: React.FC = () => {
       setStores(fetchedStores)
       setRecords(fetchedRecords)
     } catch (err: unknown) {
+      if (isSessionExpiredError(err)) {
+        return
+      }
       console.error(err)
       toast({
         title: 'Erro ao carregar dados',
