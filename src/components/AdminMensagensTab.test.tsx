@@ -29,8 +29,8 @@ describe('AdminMensagensTab - Novas Faixas de Atraso', () => {
       collectionId: 'pbc_mensagens',
       collectionName: 'mensagens',
       ordem: 1,
-      texto: 'Mensagem para faixa >15 dias',
-      faixa_atraso: '>15 dias' as const,
+      texto: 'Mensagem para faixa < 15 dias',
+      faixa_atraso: '< 15 dias' as const,
       created: '2026-09-21',
       updated: '2026-09-21',
     },
@@ -62,7 +62,7 @@ describe('AdminMensagensTab - Novas Faixas de Atraso', () => {
   })
 
   it('as constantes de faixas possuem exatamente os novos valores', () => {
-    expect(FAIXAS_ATRASO_MENSAGEM).toEqual(['>15 dias', '16 a 30 dias', '>30 dias'])
+    expect(FAIXAS_ATRASO_MENSAGEM).toEqual(['< 15 dias', '16 a 30 dias', '>30 dias'])
   })
 
   it('exibe cards de métricas e botões de filtro com as novas faixas', async () => {
@@ -73,17 +73,18 @@ describe('AdminMensagensTab - Novas Faixas de Atraso', () => {
     })
 
     // Badges / cards das faixas
-    expect(screen.getAllByText('>15 dias').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('< 15 dias').length).toBeGreaterThan(0)
     expect(screen.getAllByText('16 a 30 dias').length).toBeGreaterThan(0)
     expect(screen.getAllByText('>30 dias').length).toBeGreaterThan(0)
 
     // Valores antigos não devem aparecer na tela
+    expect(screen.queryByText('>15 dias')).toBeNull()
     expect(screen.queryByText('Menos de 30 dias')).toBeNull()
     expect(screen.queryByText('31 a 60 dias')).toBeNull()
     expect(screen.queryByText('Maior que 90 dias')).toBeNull()
   })
 
-  it('ao abrir o modal de nova mensagem, o valor padrão é ">15 dias" e lista as novas opções no select', async () => {
+  it('ao abrir o modal de nova mensagem, o valor padrão é "< 15 dias" e lista as novas opções no select', async () => {
     const user = userEvent.setup()
     render(<AdminMensagensTab />)
 
@@ -97,9 +98,9 @@ describe('AdminMensagensTab - Novas Faixas de Atraso', () => {
       expect(screen.getByText('Faixa de Atraso:')).toBeDefined()
     })
 
-    // O select exibe o valor padrão ">15 dias"
+    // O select exibe o valor padrão "< 15 dias"
     const triggers = screen.getAllByRole('combobox')
     expect(triggers.length).toBeGreaterThan(0)
-    expect(triggers[0].textContent).toContain('>15 dias')
+    expect(triggers[0].textContent).toContain('< 15 dias')
   })
 })

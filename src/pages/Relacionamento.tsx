@@ -1071,17 +1071,17 @@ export const Relacionamento: React.FC = () => {
 
         {/* 3 Botões por Faixa de Atraso: Amarelo, Laranja, Vermelho */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* AMARELO: >15 dias */}
+          {/* AMARELO: < 15 dias */}
           <Button
             type="button"
             variant="outline"
-            onClick={() => handleOpenFaixaModal('>15 dias')}
+            onClick={() => handleOpenFaixaModal('< 15 dias')}
             className="h-9 px-3.5 text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 hover:border-amber-400 shadow-2xs gap-1.5 transition-all"
             data-testid="btn-faixa-menos-30"
           >
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
             <MessageSquareText className="w-3.5 h-3.5 text-amber-700" />
-            <span>&gt;15 dias</span>
+            <span>&lt; 15 dias</span>
           </Button>
 
           {/* LARANJA: 16 a 30 dias */}
@@ -1429,7 +1429,7 @@ export const Relacionamento: React.FC = () => {
               <span
                 className={cn(
                   'w-3 h-3 rounded-full shrink-0',
-                  modalFaixa === '>15 dias' && 'bg-amber-500',
+                  modalFaixa === '< 15 dias' && 'bg-amber-500',
                   modalFaixa === '16 a 30 dias' && 'bg-orange-500',
                   modalFaixa === '>30 dias' && 'bg-rose-500',
                 )}
@@ -1440,7 +1440,7 @@ export const Relacionamento: React.FC = () => {
                   variant="outline"
                   className={cn(
                     'text-xs font-semibold px-2 py-0.5 border',
-                    modalFaixa === '>15 dias' && 'bg-amber-50 text-amber-800 border-amber-300',
+                    modalFaixa === '< 15 dias' && 'bg-amber-50 text-amber-800 border-amber-300',
                     modalFaixa === '16 a 30 dias' &&
                       'bg-orange-50 text-orange-800 border-orange-300',
                     modalFaixa === '>30 dias' && 'bg-rose-50 text-rose-800 border-rose-300',

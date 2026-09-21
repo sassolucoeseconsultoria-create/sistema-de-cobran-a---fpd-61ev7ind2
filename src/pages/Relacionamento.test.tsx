@@ -36,12 +36,12 @@ vi.mock('@/services/relacionamentoService', () => {
 vi.mock('@/services/mensagensService', () => {
   return {
     fetchMensagensPorFaixa: vi.fn().mockImplementation((faixa) => {
-      if (faixa === '>15 dias') {
+      if (faixa === '< 15 dias') {
         return Promise.resolve([
           {
             id: 'msg-1',
             titulo: 'Lembrete Amigável',
-            faixa_atraso: '>15 dias',
+            faixa_atraso: '< 15 dias',
             texto: 'Olá! Notamos uma pendência recente. Segue o código PIX para regularização.',
             descricao: 'Abordagem inicial',
             ativo: true,
@@ -483,7 +483,7 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
       const btnMaior90 = screen.getByTestId('btn-faixa-maior-90')
 
       expect(btnMenos30).toBeDefined()
-      expect(btnMenos30.textContent).toContain('>15 dias')
+      expect(btnMenos30.textContent).toContain('< 15 dias')
       // Cor AMARELA / amber
       expect(btnMenos30.className).toContain('bg-amber-50')
       expect(btnMenos30.className).toContain('text-amber-800')
@@ -501,7 +501,7 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
       expect(btnMaior90.className).toContain('text-rose-800')
     })
 
-    it('ao clicar no botão amarelo, abre modal com mensagens da faixa ">15 dias" e botão de copiar', async () => {
+    it('ao clicar no botão amarelo, abre modal com mensagens da faixa "< 15 dias" e botão de copiar', async () => {
       const user = userEvent.setup()
       // Mock navigator.clipboard
       const writeTextMock = vi.fn().mockResolvedValue(undefined)
@@ -517,7 +517,7 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
       const btnMenos30 = screen.getByTestId('btn-faixa-menos-30')
       await user.click(btnMenos30)
 
-      expect(fetchMensagensPorFaixa).toHaveBeenCalledWith('>15 dias')
+      expect(fetchMensagensPorFaixa).toHaveBeenCalledWith('< 15 dias')
 
       await waitFor(() => {
         expect(screen.getByText('Lembrete Amigável')).toBeDefined()

@@ -57,7 +57,7 @@ export function AdminMensagensTab() {
     ordem?: number
   }>({
     texto: '',
-    faixa_atraso: '>15 dias',
+    faixa_atraso: '< 15 dias',
   })
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
@@ -121,7 +121,7 @@ export function AdminMensagensTab() {
     setEditingMensagem(null)
     setFormData({
       texto: '',
-      faixa_atraso: '>15 dias',
+      faixa_atraso: '< 15 dias',
       ordem: proximaOrdem,
     })
     setFormErrors({})
@@ -273,10 +273,10 @@ export function AdminMensagensTab() {
 
   const renderFaixaBadge = (faixa: FaixaAtrasoMensagem) => {
     switch (faixa) {
-      case '>15 dias':
+      case '< 15 dias':
         return (
           <Badge className="bg-amber-500 hover:bg-amber-600 text-white border-none text-[11px] font-semibold px-2.5 py-0.5 shadow-xs">
-            &gt;15 dias
+            &lt; 15 dias
           </Badge>
         )
       case '16 a 30 dias':
@@ -302,7 +302,7 @@ export function AdminMensagensTab() {
 
   const countsPorFaixa = useMemo(() => {
     return {
-      mais15: mensagens.filter((m) => m.faixa_atraso === '>15 dias').length,
+      menos15: mensagens.filter((m) => m.faixa_atraso === '< 15 dias').length,
       de16a30: mensagens.filter((m) => m.faixa_atraso === '16 a 30 dias').length,
       mais30: mensagens.filter((m) => m.faixa_atraso === '>30 dias').length,
     }
@@ -367,22 +367,22 @@ export function AdminMensagensTab() {
           </div>
         </div>
 
-        {/* >15 dias */}
+        {/* < 15 dias */}
         <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-amber-500" />
               <p className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">
-                &gt;15 dias
+                &lt; 15 dias
               </p>
             </div>
             <p className="text-xl sm:text-2xl font-black text-amber-600 mt-0.5">
-              {countsPorFaixa.mais15}
+              {countsPorFaixa.menos15}
             </p>
-            <p className="text-[10px] text-[#5B6B82] mt-0.5">&gt;15 dias</p>
+            <p className="text-[10px] text-[#5B6B82] mt-0.5">&lt; 15 dias</p>
           </div>
           <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
-            <span className="font-bold text-xs">&gt;15</span>
+            <span className="font-bold text-xs">&lt;15</span>
           </div>
         </div>
 
@@ -456,15 +456,15 @@ export function AdminMensagensTab() {
               </button>
               <button
                 type="button"
-                onClick={() => setFaixaFilter('>15 dias')}
+                onClick={() => setFaixaFilter('< 15 dias')}
                 className={cn(
                   'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
-                  faixaFilter === '>15 dias'
+                  faixaFilter === '< 15 dias'
                     ? 'bg-amber-500 text-white shadow-xs'
                     : 'text-[#5B6B82] hover:text-[#12233A]',
                 )}
               >
-                &gt;15 dias
+                &lt; 15 dias
               </button>
               <button
                 type="button"
