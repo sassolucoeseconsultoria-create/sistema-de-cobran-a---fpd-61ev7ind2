@@ -635,8 +635,8 @@ export async function saveVendorConsolidationsFromLines(
       continue
     }
 
-    const vendedor = rawVendedor.toUpperCase() || 'NÃO INFORMADO'
-    let resolvedLojaName = rawLoja.toUpperCase()
+    const vendedor = rawVendedor ? rawVendedor.toUpperCase() : 'NÃO INFORMADO'
+    let resolvedLojaName = rawLoja ? rawLoja.toUpperCase() : 'LOJA NÃO IDENTIFICADA'
     let supervisao = ''
 
     if (rawLoja) {
@@ -644,6 +644,14 @@ export async function saveVendorConsolidationsFromLines(
       if (matchedStore) {
         resolvedLojaName = matchedStore.name.toUpperCase()
         supervisao = matchedStore.supervisao || ''
+      }
+    }
+
+    if (!supervisao) {
+      if (resolvedLojaName.includes('GAMA DF')) {
+        supervisao = 'Karen'
+      } else if (resolvedLojaName === 'CELNET ILHA RESIDENCIAL') {
+        supervisao = 'Lucas Diniz'
       }
     }
 

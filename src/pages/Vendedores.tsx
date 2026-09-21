@@ -37,7 +37,12 @@ import {
   clearAllVendorConsolidations,
   fetchStores,
   matchStore,
+  normalizeStoreString,
 } from '@/services/fpdService'
+import {
+  extractMovelDeduplicationKey,
+  extractResidencialDeduplicationKey,
+} from '@/lib/clientDeduplication'
 import { exportVendorsToXlsx } from '@/lib/xlsxExport'
 import { getStoreVariants, buildStoreFilterClause, isSameStore } from '@/lib/storeMatchingUtils'
 import {
@@ -364,7 +369,7 @@ export const Vendedores: React.FC = () => {
     [userAccess, stores, selectedReferenceDate],
   )
 
-  // Recalculate Móvel count
+  // Recalculate Móvel count (deduplicada para paridade exata com Inadimplência e Loja)
   const refreshMovelCount = useCallback(async () => {
     if (userAccess.hasNoStoreAssigned) {
       setTotalMovel(0)
@@ -405,12 +410,31 @@ export const Vendedores: React.FC = () => {
     }
 
     try {
-      const res = await pb.collection('movel').getList(1, 1, {
-        fields: 'id',
+      const rawRecords = await pb.collection('movel').getFullList<{
+        id: string
+        linha?: number
+        dados?: Record<string, unknown>
+      }>({
+        fields: 'id,linha,dados',
         filter,
         requestKey: null,
       })
-      setTotalMovel(res.totalItems || 0)
+
+      // Deduplicar em memória da mesma forma que a tela Inadimplência
+      const seenKeys = new Set<string>()
+      let count = 0
+      for (const r of rawRecords) {
+        const key = extractMovelDeduplicationKey(r)
+        if (!key) {
+          count++
+          continue
+        }
+        if (seenKeys.has(key)) continue
+        seenKeys.add(key)
+        count++
+      }
+
+      setTotalMovel(count)
     } catch (err) {
       if (isSessionExpiredError(err)) {
         return
@@ -420,7 +444,7 @@ export const Vendedores: React.FC = () => {
     }
   }, [userAccess, effectiveStore, managerAssignedStoreName, stores, uniqueLojas, buildCountFilter])
 
-  // Recalculate Residencial count
+  // Recalculate Residencial count (deduplicada para paridade exata com Inadimplência e Loja)
   const refreshResidencialCount = useCallback(async () => {
     if (userAccess.hasNoStoreAssigned) {
       setTotalResidencial(0)
@@ -461,12 +485,31 @@ export const Vendedores: React.FC = () => {
     }
 
     try {
-      const res = await pb.collection('residencial').getList(1, 1, {
-        fields: 'id',
+      const rawRecords = await pb.collection('residencial').getFullList<{
+        id: string
+        nr_contrato?: string
+        dados?: Record<string, unknown>
+      }>({
+        fields: 'id,nr_contrato,dados',
         filter,
         requestKey: null,
       })
-      setTotalResidencial(res.totalItems || 0)
+
+      // Deduplicar em memória da mesma forma que a tela Inadimplência
+      const seenKeys = new Set<string>()
+      let count = 0
+      for (const r of rawRecords) {
+        const key = extractResidencialDeduplicationKey(r)
+        if (!key) {
+          count++
+          continue
+        }
+        if (seenKeys.has(key)) continue
+        seenKeys.add(key)
+        count++
+      }
+
+      setTotalResidencial(count)
     } catch (err) {
       if (isSessionExpiredError(err)) {
         return

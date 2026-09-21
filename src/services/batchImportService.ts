@@ -408,6 +408,9 @@ export async function parseBatchXlsxFile(
     if (!rawVendorName) {
       rawVendorName = 'NÃO INFORMADO'
     }
+    if (normalizeText(rawVendorName) === 'vendedor') {
+      rawVendorName = 'NÃO INFORMADO'
+    }
 
     // Match store canonically
     const matched = matchStore(rawStoreName, registeredStores)
@@ -673,12 +676,105 @@ export async function executeBatchImport(
   // 4. Save vendor consolidations
   onProgress?.('Atualizando ranking de vendedores (vendor_consolidations)...', 70)
   let totalVendorSaved = 0
-  if (parsed.vendorLines && parsed.vendorLines.length > 0) {
-    totalVendorSaved = await saveVendorConsolidationsFromLines(
-      parsed.vendorLines,
-      refDate,
-      currentStoresList,
+  // Recalcular vendor_consolidations para esta referência a partir das linhas analíticas deduplicadas
+  // garantindo paridade 100% estrita entre ranking de vendedores, Painel de Lojas e Inadimplência
+  try {
+    const escapedRef = refDate.replace(/"/g, '\\"')
+    const [allDbMovel, allDbRes] = await Promise.all([
+      pb.collection('movel').getFullList<{
+        id: string
+        loja?: string
+        vendedor?: string
+        ocorrencias?: string
+        dados?: Record<string, unknown>
+      }>({
+        filter: `data_referencia = "${escapedRef}"`,
+        fields: 'id,loja,vendedor,ocorrencias,dados',
+        requestKey: null,
+      }),
+      pb.collection('residencial').getFullList<{
+        id: string
+        loja?: string
+        vendedor?: string
+        ocorrencias?: string
+        nr_contrato?: string
+        dados?: Record<string, unknown>
+        typedFields?: Record<string, string>
+      }>({
+        filter: `data_referencia = "${escapedRef}"`,
+        fields: 'id,loja,vendedor,ocorrencias,nr_contrato,dados,typedFields',
+        requestKey: null,
+      }),
+    ])
+
+    const seenMovelKeys = new Set<string>()
+    const uniqueMovel = allDbMovel.filter((m) => {
+      const key = extractMovelDeduplicationKey(m)
+      if (!key) return true
+      if (seenMovelKeys.has(key)) return false
+      seenMovelKeys.add(key)
+      return true
+    })
+
+    const seenResKeys = new Set<string>()
+    const uniqueRes = allDbRes.filter((r) => {
+      const key = extractResidencialDeduplicationKey(r)
+      if (!key) return true
+      if (seenResKeys.has(key)) return false
+      seenResKeys.add(key)
+      return true
+    })
+
+    const allDedupedLines: ParsedVendorLine[] = [
+      ...uniqueMovel.map((m) => ({
+        loja: m.loja?.trim() || 'LOJA NÃO IDENTIFICADA',
+        vendedor: m.vendedor?.trim() || 'NÃO INFORMADO',
+        status:
+          classifyStatusCell(m.ocorrencias || '') ||
+          classifyRow([normalizeText(m.ocorrencias || '')]) ||
+          'nao_tratados',
+        quantidade: 1,
+      })),
+      ...uniqueRes.map((r) => ({
+        loja: r.loja?.trim() || 'LOJA NÃO IDENTIFICADA',
+        vendedor: r.vendedor?.trim() || 'NÃO INFORMADO',
+        status:
+          classifyStatusCell(r.ocorrencias || '') ||
+          classifyRow([normalizeText(r.ocorrencias || '')]) ||
+          'nao_tratados',
+        quantidade: 1,
+      })),
+    ]
+
+    // Apagar vendor_consolidations antigos desta referência antes de gravar os recalculados
+    const oldVendors = await pb.collection('vendor_consolidations').getFullList<{ id: string }>({
+      filter: `data_referencia = "${escapedRef}"`,
+      fields: 'id',
+      requestKey: null,
+    })
+    for (const ov of oldVendors) {
+      await executeWithRateLimitRetry(() => pb.collection('vendor_consolidations').delete(ov.id))
+    }
+
+    if (allDedupedLines.length > 0) {
+      totalVendorSaved = await saveVendorConsolidationsFromLines(
+        allDedupedLines,
+        refDate,
+        currentStoresList,
+      )
+    }
+  } catch (vendorRecalcErr) {
+    console.warn(
+      '[batchImportService] Aviso ao recalcular vendor_consolidations deduplicados:',
+      vendorRecalcErr,
     )
+    if (parsed.vendorLines && parsed.vendorLines.length > 0) {
+      totalVendorSaved = await saveVendorConsolidationsFromLines(
+        parsed.vendorLines,
+        refDate,
+        currentStoresList,
+      )
+    }
   }
 
   // 5. Consolidar fpd_records por loja RECALCULANDO a partir de todas as linhas analíticas
