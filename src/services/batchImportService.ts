@@ -863,6 +863,8 @@ export async function executeBatchImport(
     }
   }
 
+  // Obter fpd_records já existentes para esta referência a fim de zerar lojas que não tenham mais clientes
+  // ou atualizar pontualmente sem inconsistência
   const allStoresToConsolidate = Array.from(storeAggMap.values())
   for (let idx = 0; idx < allStoresToConsolidate.length; idx++) {
     const sAgg = allStoresToConsolidate[idx]

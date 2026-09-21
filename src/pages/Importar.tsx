@@ -74,6 +74,10 @@ import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
 import pb from '@/lib/pocketbase/client'
 import { applyDateMask, isValidDateDDMMAAAA } from '@/lib/clientFormatters'
+import {
+  extractMovelDeduplicationKey,
+  extractResidencialDeduplicationKey,
+} from '@/lib/clientDeduplication'
 import { cn } from '@/lib/utils'
 
 interface FileQueueItem {
@@ -641,20 +645,55 @@ export const Importar: React.FC = () => {
         if (analyticalData) {
           try {
             const canonicalStoreName = agg.storeName.toUpperCase()
+            const escapedRef = refDate.replace(/"/g, '\\"')
+            const escapedStore = canonicalStoreName.replace(/"/g, '\\"')
             const [storeMovel, storeRes] = await Promise.all([
-              pb.collection('movel').getFullList<{ loja?: string; ocorrencias?: string }>({
-                filter: `data_referencia = "${refDate.replace(/"/g, '\\"')}" && loja = "${canonicalStoreName.replace(/"/g, '\\"')}"`,
-                fields: 'loja,ocorrencias',
+              pb.collection('movel').getFullList<{
+                id: string
+                loja?: string
+                ocorrencias?: string
+                dados?: Record<string, unknown>
+              }>({
+                filter: `data_referencia = "${escapedRef}" && loja = "${escapedStore}"`,
+                fields: 'id,loja,ocorrencias,dados',
+                batch: 2000,
                 requestKey: null,
               }),
-              pb.collection('residencial').getFullList<{ loja?: string; ocorrencias?: string }>({
-                filter: `data_referencia = "${refDate.replace(/"/g, '\\"')}" && loja = "${canonicalStoreName.replace(/"/g, '\\"')}"`,
-                fields: 'loja,ocorrencias',
+              pb.collection('residencial').getFullList<{
+                id: string
+                loja?: string
+                ocorrencias?: string
+                nr_contrato?: string
+                dados?: Record<string, unknown>
+                typedFields?: Record<string, string>
+              }>({
+                filter: `data_referencia = "${escapedRef}" && loja = "${escapedStore}"`,
+                fields: 'id,loja,ocorrencias,nr_contrato,dados,typedFields',
+                batch: 2000,
                 requestKey: null,
               }),
             ])
 
-            const allStoreRows = [...storeMovel, ...storeRes]
+            // Deduplicação canônica
+            const seenMovelKeys = new Set<string>()
+            const dedupedMovel = storeMovel.filter((m) => {
+              const key = extractMovelDeduplicationKey(m)
+              if (!key) return true
+              if (seenMovelKeys.has(key)) return false
+              seenMovelKeys.add(key)
+              return true
+            })
+
+            const seenResKeys = new Set<string>()
+            const dedupedRes = storeRes.filter((r) => {
+              const key = extractResidencialDeduplicationKey(r)
+              if (!key) return true
+              if (seenResKeys.has(key)) return false
+              seenResKeys.add(key)
+              return true
+            })
+
+            const allStoreRows = [...dedupedMovel, ...dedupedRes]
             if (allStoreRows.length > 0) {
               const freshAgg = {
                 total_linhas: allStoreRows.length,
