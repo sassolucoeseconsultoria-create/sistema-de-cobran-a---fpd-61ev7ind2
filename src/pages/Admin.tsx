@@ -1204,7 +1204,11 @@ export const Admin: React.FC = () => {
                               checked={isCoordenadorActive}
                               disabled={isSavingCoordenador}
                               onCheckedChange={() =>
-                                handleToggleRefPermission(dateStr, 'coordenador', isCoordenadorActive)
+                                handleToggleRefPermission(
+                                  dateStr,
+                                  'coordenador',
+                                  isCoordenadorActive,
+                                )
                               }
                               className="data-[state=checked]:bg-[#0284C7]"
                             />
@@ -1235,555 +1239,573 @@ export const Admin: React.FC = () => {
       {/* Conteúdo da Aba de Usuários e Perfis */}
       {adminTab === 'usuarios' && (
         <>
-      {/* Cards no topo: Total de usuários, ADMs, Coordenadores, Supervisores, Gerentes */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-        {/* Total Usuários */}
-        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between col-span-2 sm:col-span-1">
-          <div>
-            <p className="text-[11px] font-semibold text-[#5B6B82] uppercase tracking-wider">
-              Total Usuários
-            </p>
-            <p className="text-xl sm:text-2xl font-black text-[#12233A] mt-0.5">{stats.total}</p>
-            <p className="text-[10px] text-[#8A97AC] mt-0.5">Acessos cadastrados</p>
-          </div>
-          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#F0F5FC] border border-[#E3E9F2] flex items-center justify-center text-[#12365A] shrink-0">
-            <Users className="w-5 h-5 text-[#12365A]" />
-          </div>
-        </div>
-
-        {/* ADMs */}
-        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#12365A]" />
-              <p className="text-[11px] font-semibold text-[#12365A] uppercase tracking-wider">
-                ADMs
-              </p>
-            </div>
-            <p className="text-xl sm:text-2xl font-black text-[#12365A] mt-0.5">{stats.adms}</p>
-            <p className="text-[10px] text-[#5B6B82] mt-0.5">Acesso total</p>
-          </div>
-          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#12365A]/10 border border-[#12365A]/20 flex items-center justify-center text-[#12365A] shrink-0">
-            <Shield className="w-5 h-5 text-[#12365A]" />
-          </div>
-        </div>
-
-        {/* Coordenadores */}
-        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#0284C7]" />
-              <p className="text-[11px] font-semibold text-[#0284C7] uppercase tracking-wider">
-                Coordenadores
-              </p>
-            </div>
-            <p className="text-xl sm:text-2xl font-black text-[#0284C7] mt-0.5">
-              {stats.coordenadores}
-            </p>
-            <p className="text-[10px] text-[#5B6B82] mt-0.5">Múltiplas lojas</p>
-          </div>
-          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-sky-50 border border-sky-200 flex items-center justify-center text-[#0284C7] shrink-0">
-            <UserCog className="w-5 h-5 text-[#0284C7]" />
-          </div>
-        </div>
-
-        {/* Supervisores */}
-        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#0D9488]" />
-              <p className="text-[11px] font-semibold text-[#0D9488] uppercase tracking-wider">
-                Supervisores
-              </p>
-            </div>
-            <p className="text-xl sm:text-2xl font-black text-[#0D9488] mt-0.5">
-              {stats.supervisores}
-            </p>
-            <p className="text-[10px] text-[#5B6B82] mt-0.5">Múltiplas lojas</p>
-          </div>
-          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center text-[#0D9488] shrink-0">
-            <UserCheck className="w-5 h-5 text-[#0D9488]" />
-          </div>
-        </div>
-
-        {/* Gerentes */}
-        <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#EA580C]" />
-              <p className="text-[11px] font-semibold text-[#EA580C] uppercase tracking-wider">
-                Gerentes
-              </p>
-            </div>
-            <p className="text-xl sm:text-2xl font-black text-[#EA580C] mt-0.5">{stats.gerentes}</p>
-            <p className="text-[10px] text-[#5B6B82] mt-0.5">1 loja única</p>
-          </div>
-          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-[#EA580C] shrink-0">
-            <Store className="w-5 h-5 text-[#EA580C]" />
-          </div>
-        </div>
-      </div>
-
-      {/* Seção: Datas de Referência (Configuração de Visibilidade por Perfil) */}
-      <div className="bg-white rounded-xl border border-[#E3E9F2] shadow-xs overflow-hidden">
-        <div className="p-5 border-b border-[#E3E9F2] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-[#F8FAFC] to-white">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#12365A]/10 flex items-center justify-center text-[#12365A] shrink-0 border border-[#12365A]/15">
-              <Shield className="w-5 h-5 text-[#12365A]" />
-            </div>
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#12365A]/5 text-[#12365A] text-[10px] font-bold uppercase tracking-wider mb-1">
-                <span>Controle de Apresentação</span>
+          {/* Cards no topo: Total de usuários, ADMs, Coordenadores, Supervisores, Gerentes */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+            {/* Total Usuários */}
+            <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between col-span-2 sm:col-span-1">
+              <div>
+                <p className="text-[11px] font-semibold text-[#5B6B82] uppercase tracking-wider">
+                  Total Usuários
+                </p>
+                <p className="text-xl sm:text-2xl font-black text-[#12233A] mt-0.5">
+                  {stats.total}
+                </p>
+                <p className="text-[10px] text-[#8A97AC] mt-0.5">Acessos cadastrados</p>
               </div>
-              <h3 className="text-base font-bold text-[#12365A]">Datas de Referência</h3>
-              <p className="text-xs text-[#5B6B82]">
-                Habilite ou desabilite quais datas de referência são apresentadas aos perfis de
-                Gerente, Supervisão e Coordenação. O perfil <strong>ADM</strong> tem acesso
-                irrestrito a todas as referências.
-              </p>
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#F0F5FC] border border-[#E3E9F2] flex items-center justify-center text-[#12365A] shrink-0">
+                <Users className="w-5 h-5 text-[#12365A]" />
+              </div>
+            </div>
+
+            {/* ADMs */}
+            <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#12365A]" />
+                  <p className="text-[11px] font-semibold text-[#12365A] uppercase tracking-wider">
+                    ADMs
+                  </p>
+                </div>
+                <p className="text-xl sm:text-2xl font-black text-[#12365A] mt-0.5">{stats.adms}</p>
+                <p className="text-[10px] text-[#5B6B82] mt-0.5">Acesso total</p>
+              </div>
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#12365A]/10 border border-[#12365A]/20 flex items-center justify-center text-[#12365A] shrink-0">
+                <Shield className="w-5 h-5 text-[#12365A]" />
+              </div>
+            </div>
+
+            {/* Coordenadores */}
+            <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#0284C7]" />
+                  <p className="text-[11px] font-semibold text-[#0284C7] uppercase tracking-wider">
+                    Coordenadores
+                  </p>
+                </div>
+                <p className="text-xl sm:text-2xl font-black text-[#0284C7] mt-0.5">
+                  {stats.coordenadores}
+                </p>
+                <p className="text-[10px] text-[#5B6B82] mt-0.5">Múltiplas lojas</p>
+              </div>
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-sky-50 border border-sky-200 flex items-center justify-center text-[#0284C7] shrink-0">
+                <UserCog className="w-5 h-5 text-[#0284C7]" />
+              </div>
+            </div>
+
+            {/* Supervisores */}
+            <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#0D9488]" />
+                  <p className="text-[11px] font-semibold text-[#0D9488] uppercase tracking-wider">
+                    Supervisores
+                  </p>
+                </div>
+                <p className="text-xl sm:text-2xl font-black text-[#0D9488] mt-0.5">
+                  {stats.supervisores}
+                </p>
+                <p className="text-[10px] text-[#5B6B82] mt-0.5">Múltiplas lojas</p>
+              </div>
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center text-[#0D9488] shrink-0">
+                <UserCheck className="w-5 h-5 text-[#0D9488]" />
+              </div>
+            </div>
+
+            {/* Gerentes */}
+            <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#EA580C]" />
+                  <p className="text-[11px] font-semibold text-[#EA580C] uppercase tracking-wider">
+                    Gerentes
+                  </p>
+                </div>
+                <p className="text-xl sm:text-2xl font-black text-[#EA580C] mt-0.5">
+                  {stats.gerentes}
+                </p>
+                <p className="text-[10px] text-[#5B6B82] mt-0.5">1 loja única</p>
+              </div>
+              <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-[#EA580C] shrink-0">
+                <Store className="w-5 h-5 text-[#EA580C]" />
+              </div>
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={loadReferenceDatesData}
-            disabled={loadingRefDates}
-            className="h-8 text-xs border-[#E3E9F2] text-[#5B6B82] hover:text-[#12365A] hover:bg-[#F8FAFC] gap-1.5 self-start sm:self-auto shrink-0"
-            title="Atualizar datas de referência"
-          >
-            <RefreshCw className={cn('w-3.5 h-3.5', loadingRefDates && 'animate-spin')} />
-            <span>Atualizar Datas</span>
-          </Button>
-        </div>
 
-        {loadingRefDates ? (
-          <div className="p-8 text-center text-[#5B6B82] flex flex-col items-center justify-center gap-2">
-            <div className="w-6 h-6 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs">Carregando datas de referência...</span>
-          </div>
-        ) : refDates.length === 0 ? (
-          <div className="p-8 text-center text-[#5B6B82] flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
-            <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
-            <p className="font-semibold text-[#12365A] text-sm">
-              Nenhuma Data de Referência encontrada
-            </p>
-            <p className="text-xs text-[#5B6B82]">
-              Importe planilhas na tela de importação para registrar novas datas de referência no
-              sistema.
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead className="bg-[#12365A] text-white font-semibold uppercase tracking-wider text-[11px]">
-                <tr>
-                  <th className="px-4 py-3 min-w-[160px]">DATA DE REFERÊNCIA</th>
-                  <th className="px-4 py-3 text-center min-w-[130px]">
-                    <div className="flex items-center justify-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-[#12365A] border border-white" />
-                      <span>ADM</span>
-                    </div>
-                  </th>
-                  <th className="px-4 py-3 text-center min-w-[140px]">
-                    <div className="flex items-center justify-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-[#EA580C]" />
-                      <span>GERENTE</span>
-                    </div>
-                  </th>
-                  <th className="px-4 py-3 text-center min-w-[140px]">
-                    <div className="flex items-center justify-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-[#0D9488]" />
-                      <span>SUPERVISÃO</span>
-                    </div>
-                  </th>
-                  <th className="px-4 py-3 text-center min-w-[140px]">
-                    <div className="flex items-center justify-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-[#0284C7]" />
-                      <span>COORDENAÇÃO</span>
-                    </div>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#E3E9F2]">
-                {refDates.map((dateStr, idx) => {
-                  const perm = refPermissions.find((p) => p.referente?.trim() === dateStr.trim())
-                  const isGerenteActive = perm ? perm.gerente !== false : true
-                  const isSupervisorActive = perm ? perm.supervisor !== false : true
-                  const isCoordenadorActive = perm ? perm.coordenador !== false : true
+          {/* Seção: Datas de Referência (Configuração de Visibilidade por Perfil) */}
+          <div className="bg-white rounded-xl border border-[#E3E9F2] shadow-xs overflow-hidden">
+            <div className="p-5 border-b border-[#E3E9F2] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-[#F8FAFC] to-white">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#12365A]/10 flex items-center justify-center text-[#12365A] shrink-0 border border-[#12365A]/15">
+                  <Shield className="w-5 h-5 text-[#12365A]" />
+                </div>
+                <div>
+                  <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#12365A]/5 text-[#12365A] text-[10px] font-bold uppercase tracking-wider mb-1">
+                    <span>Controle de Apresentação</span>
+                  </div>
+                  <h3 className="text-base font-bold text-[#12365A]">Datas de Referência</h3>
+                  <p className="text-xs text-[#5B6B82]">
+                    Habilite ou desabilite quais datas de referência são apresentadas aos perfis de
+                    Gerente, Supervisão e Coordenação. O perfil <strong>ADM</strong> tem acesso
+                    irrestrito a todas as referências.
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadReferenceDatesData}
+                disabled={loadingRefDates}
+                className="h-8 text-xs border-[#E3E9F2] text-[#5B6B82] hover:text-[#12365A] hover:bg-[#F8FAFC] gap-1.5 self-start sm:self-auto shrink-0"
+                title="Atualizar datas de referência"
+              >
+                <RefreshCw className={cn('w-3.5 h-3.5', loadingRefDates && 'animate-spin')} />
+                <span>Atualizar Datas</span>
+              </Button>
+            </div>
 
-                  const isSavingGerente = savingRefDate === `${dateStr}-gerente`
-                  const isSavingSupervisor = savingRefDate === `${dateStr}-supervisor`
-                  const isSavingCoordenador = savingRefDate === `${dateStr}-coordenador`
-
-                  return (
-                    <tr
-                      key={dateStr}
-                      className={cn(
-                        'hover:bg-[#F0F5FC] transition-colors',
-                        idx % 2 === 1 ? 'bg-[#FAFCFF]' : 'bg-white',
-                      )}
-                    >
-                      {/* Data de Referência */}
-                      <td className="px-4 py-3.5 font-bold text-[#12365A] font-mono text-xs">
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            variant="outline"
-                            className="bg-blue-50/70 text-[#12365A] border-blue-200 font-mono text-xs px-2.5 py-0.5"
-                          >
-                            {dateStr}
-                          </Badge>
+            {loadingRefDates ? (
+              <div className="p-8 text-center text-[#5B6B82] flex flex-col items-center justify-center gap-2">
+                <div className="w-6 h-6 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs">Carregando datas de referência...</span>
+              </div>
+            ) : refDates.length === 0 ? (
+              <div className="p-8 text-center text-[#5B6B82] flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
+                <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
+                <p className="font-semibold text-[#12365A] text-sm">
+                  Nenhuma Data de Referência encontrada
+                </p>
+                <p className="text-xs text-[#5B6B82]">
+                  Importe planilhas na tela de importação para registrar novas datas de referência
+                  no sistema.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="bg-[#12365A] text-white font-semibold uppercase tracking-wider text-[11px]">
+                    <tr>
+                      <th className="px-4 py-3 min-w-[160px]">DATA DE REFERÊNCIA</th>
+                      <th className="px-4 py-3 text-center min-w-[130px]">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-[#12365A] border border-white" />
+                          <span>ADM</span>
                         </div>
-                      </td>
-
-                      {/* ADM - Sempre ativo / incondicional */}
-                      <td className="px-4 py-3.5 text-center">
-                        <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold">
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>Sempre Habilitado</span>
+                      </th>
+                      <th className="px-4 py-3 text-center min-w-[140px]">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-[#EA580C]" />
+                          <span>GERENTE</span>
                         </div>
-                      </td>
-
-                      {/* Gerente Toggle */}
-                      <td className="px-4 py-3.5 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <Switch
-                            aria-label={`Habilitar ${dateStr} para Gerente`}
-                            checked={isGerenteActive}
-                            disabled={isSavingGerente}
-                            onCheckedChange={() =>
-                              handleToggleRefPermission(dateStr, 'gerente', isGerenteActive)
-                            }
-                            className="data-[state=checked]:bg-[#EA580C]"
-                          />
-                          <span
-                            className={cn(
-                              'text-[11px] font-semibold w-16 text-left',
-                              isGerenteActive ? 'text-[#EA580C]' : 'text-slate-400',
-                            )}
-                          >
-                            {isSavingGerente
-                              ? 'Salvando...'
-                              : isGerenteActive
-                                ? 'Habilitado'
-                                : 'Desativado'}
-                          </span>
+                      </th>
+                      <th className="px-4 py-3 text-center min-w-[140px]">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-[#0D9488]" />
+                          <span>SUPERVISÃO</span>
                         </div>
-                      </td>
-
-                      {/* Supervisor Toggle */}
-                      <td className="px-4 py-3.5 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <Switch
-                            aria-label={`Habilitar ${dateStr} para Supervisão`}
-                            checked={isSupervisorActive}
-                            disabled={isSavingSupervisor}
-                            onCheckedChange={() =>
-                              handleToggleRefPermission(dateStr, 'supervisor', isSupervisorActive)
-                            }
-                            className="data-[state=checked]:bg-[#0D9488]"
-                          />
-                          <span
-                            className={cn(
-                              'text-[11px] font-semibold w-16 text-left',
-                              isSupervisorActive ? 'text-[#0D9488]' : 'text-slate-400',
-                            )}
-                          >
-                            {isSavingSupervisor
-                              ? 'Salvando...'
-                              : isSupervisorActive
-                                ? 'Habilitado'
-                                : 'Desativado'}
-                          </span>
+                      </th>
+                      <th className="px-4 py-3 text-center min-w-[140px]">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-[#0284C7]" />
+                          <span>COORDENAÇÃO</span>
                         </div>
-                      </td>
-
-                      {/* Coordenador Toggle */}
-                      <td className="px-4 py-3.5 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <Switch
-                            aria-label={`Habilitar ${dateStr} para Coordenação`}
-                            checked={isCoordenadorActive}
-                            disabled={isSavingCoordenador}
-                            onCheckedChange={() =>
-                              handleToggleRefPermission(dateStr, 'coordenador', isCoordenadorActive)
-                            }
-                            className="data-[state=checked]:bg-[#0284C7]"
-                          />
-                          <span
-                            className={cn(
-                              'text-[11px] font-semibold w-16 text-left',
-                              isCoordenadorActive ? 'text-[#0284C7]' : 'text-slate-400',
-                            )}
-                          >
-                            {isSavingCoordenador
-                              ? 'Salvando...'
-                              : isCoordenadorActive
-                                ? 'Habilitado'
-                                : 'Desativado'}
-                          </span>
-                        </div>
-                      </td>
+                      </th>
                     </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                  </thead>
+                  <tbody className="divide-y divide-[#E3E9F2]">
+                    {refDates.map((dateStr, idx) => {
+                      const perm = refPermissions.find(
+                        (p) => p.referente?.trim() === dateStr.trim(),
+                      )
+                      const isGerenteActive = perm ? perm.gerente !== false : true
+                      const isSupervisorActive = perm ? perm.supervisor !== false : true
+                      const isCoordenadorActive = perm ? perm.coordenador !== false : true
 
-      {/* Users Table Card */}
-      <div className="bg-white rounded-xl border border-[#E3E9F2] shadow-xs overflow-hidden">
-        {/* Filters and search bar */}
-        <div className="p-4 border-b border-[#E3E9F2] flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="relative w-full sm:w-80">
-            <Search className="w-4 h-4 text-[#8A97AC] absolute left-3 top-1/2 -translate-y-1/2" />
-            <Input
-              placeholder="Buscar por nome, e-mail, telefone ou loja..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-9 text-xs bg-[#F8FAFC] border-[#E3E9F2]"
-            />
-          </div>
+                      const isSavingGerente = savingRefDate === `${dateStr}-gerente`
+                      const isSavingSupervisor = savingRefDate === `${dateStr}-supervisor`
+                      const isSavingCoordenador = savingRefDate === `${dateStr}-coordenador`
 
-          <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-            <span className="text-xs font-semibold text-[#5B6B82] uppercase">Perfil:</span>
-            <div className="inline-flex rounded-lg border border-[#E3E9F2] p-0.5 bg-[#F8FAFC] flex-wrap gap-0.5">
-              <button
-                onClick={() => setRoleFilter('ALL')}
-                className={cn(
-                  'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
-                  roleFilter === 'ALL'
-                    ? 'bg-[#12365A] text-white shadow-xs'
-                    : 'text-[#5B6B82] hover:text-[#12233A]',
-                )}
-              >
-                Todos ({users.length})
-              </button>
-              <button
-                onClick={() => setRoleFilter('ADM')}
-                className={cn(
-                  'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
-                  roleFilter === 'ADM'
-                    ? 'bg-[#12365A] text-white shadow-xs'
-                    : 'text-[#5B6B82] hover:text-[#12233A]',
-                )}
-              >
-                ADM
-              </button>
-              <button
-                onClick={() => setRoleFilter('Coordenador')}
-                className={cn(
-                  'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
-                  roleFilter === 'Coordenador'
-                    ? 'bg-[#0284C7] text-white shadow-xs'
-                    : 'text-[#5B6B82] hover:text-[#12233A]',
-                )}
-              >
-                Coordenador
-              </button>
-              <button
-                onClick={() => setRoleFilter('Supervisor')}
-                className={cn(
-                  'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
-                  roleFilter === 'Supervisor'
-                    ? 'bg-[#0D9488] text-white shadow-xs'
-                    : 'text-[#5B6B82] hover:text-[#12233A]',
-                )}
-              >
-                Supervisor
-              </button>
-              <button
-                onClick={() => setRoleFilter('Gerente')}
-                className={cn(
-                  'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
-                  roleFilter === 'Gerente'
-                    ? 'bg-[#EA580C] text-white shadow-xs'
-                    : 'text-[#5B6B82] hover:text-[#12233A]',
-                )}
-              >
-                Gerente
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead className="bg-[#12365A] text-white font-semibold uppercase tracking-wider text-[11px]">
-              <tr>
-                <th className="px-4 py-3.5 min-w-[200px]">NOME COMPLETO</th>
-                <th className="px-4 py-3.5 min-w-[200px]">E-MAIL</th>
-                <th className="px-4 py-3.5 min-w-[130px]">FONE</th>
-                <th className="px-4 py-3.5 min-w-[120px]">PERFIL</th>
-                <th className="px-4 py-3.5 min-w-[240px]">LOJAS VINCULADAS</th>
-                <th className="px-4 py-3.5 text-right min-w-[90px]">AÇÕES</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#E3E9F2]">
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-[#5B6B82]">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <div className="w-6 h-6 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
-                      <span>Carregando usuários...</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : filteredUsers.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-[#5B6B82]">
-                    <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
-                      <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
-                      <p className="font-semibold text-[#12365A]">Nenhum usuário encontrado</p>
-                      <p className="text-xs text-[#5B6B82]">
-                        {search || roleFilter !== 'ALL'
-                          ? 'Tente ajustar os filtros ou a busca digitada.'
-                          : 'Clique em "Cadastrar Usuário" para adicionar o primeiro acesso.'}
-                      </p>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                filteredUsers.map((u, idx) => {
-                  const isCurrent = u.id === currentUser?.id
-                  const userLojas = Array.isArray(u.lojas) ? u.lojas : []
-                  const userRole = normalizeRole(u.role)
-
-                  return (
-                    <tr
-                      key={u.id}
-                      className={cn(
-                        'hover:bg-[#F0F5FC] transition-colors',
-                        idx % 2 === 1 ? 'bg-[#FAFCFF]' : 'bg-white',
-                      )}
-                    >
-                      {/* NOME COMPLETO */}
-                      <td className="px-4 py-3.5 font-medium text-[#12365A]">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-full bg-[#12365A]/10 text-[#12365A] font-bold text-xs flex items-center justify-center shrink-0">
-                            {(u.name?.charAt(0) || u.email?.charAt(0) || 'U').toUpperCase()}
-                          </div>
-                          <div className="min-w-0">
-                            <span className="font-bold text-[#12365A] block truncate">
-                              {u.name || 'Sem nome cadastrado'}
-                            </span>
-                            {isCurrent && (
-                              <span className="text-[10px] text-[#0E9F8A] font-semibold">
-                                (Você)
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      {/* E-MAIL */}
-                      <td className="px-4 py-3.5 text-[#5B6B82] font-mono text-[11px]">
-                        <div className="flex items-center gap-1.5">
-                          <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span className="truncate">{u.email}</span>
-                        </div>
-                      </td>
-
-                      {/* FONE */}
-                      <td className="px-4 py-3.5 text-[#5B6B82]">
-                        {u.fone ? (
-                          <div className="flex items-center gap-1.5">
-                            <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                            <span>{u.fone}</span>
-                          </div>
-                        ) : (
-                          <span className="text-slate-300 italic">—</span>
-                        )}
-                      </td>
-
-                      {/* PERFIL (BADGE) */}
-                      <td className="px-4 py-3.5">{renderRoleBadge(u.role)}</td>
-
-                      {/* LOJAS VINCULADAS */}
-                      <td className="px-4 py-3.5">
-                        {userRole === 'ADM' ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-[#5B6B82]">
-                            <Shield className="w-3 h-3 text-[#12365A]" />
-                            Todas as lojas (Acesso Total)
-                          </span>
-                        ) : userLojas.length === 0 ? (
-                          <span className="text-slate-400 text-[11px] italic">
-                            Nenhuma loja vinculada
-                          </span>
-                        ) : (
-                          <div className="flex flex-wrap gap-1 max-w-sm">
-                            {userLojas.slice(0, 3).map((storeId) => {
-                              const store = storeMap.get(storeId)
-                              return (
-                                <Badge
-                                  key={storeId}
-                                  variant="outline"
-                                  className="text-[10px] font-semibold py-0.5 px-2 bg-blue-50/60 text-[#12365A] border-blue-200 truncate max-w-[160px]"
-                                  title={store?.name || storeId}
-                                >
-                                  <Store className="w-2.5 h-2.5 mr-1 text-[#0E9F8A] shrink-0" />
-                                  <span className="truncate">{store ? store.name : storeId}</span>
-                                </Badge>
-                              )
-                            })}
-                            {userLojas.length > 3 && (
+                      return (
+                        <tr
+                          key={dateStr}
+                          className={cn(
+                            'hover:bg-[#F0F5FC] transition-colors',
+                            idx % 2 === 1 ? 'bg-[#FAFCFF]' : 'bg-white',
+                          )}
+                        >
+                          {/* Data de Referência */}
+                          <td className="px-4 py-3.5 font-bold text-[#12365A] font-mono text-xs">
+                            <div className="flex items-center gap-2">
                               <Badge
                                 variant="outline"
-                                className="text-[10px] font-bold py-0.5 px-1.5 bg-slate-100 text-[#5B6B82] border-slate-200"
-                                title={userLojas
-                                  .slice(3)
-                                  .map((id) => storeMap.get(id)?.name || id)
-                                  .join(', ')}
+                                className="bg-blue-50/70 text-[#12365A] border-blue-200 font-mono text-xs px-2.5 py-0.5"
                               >
-                                +{userLojas.length - 3}
+                                {dateStr}
                               </Badge>
-                            )}
-                          </div>
-                        )}
-                      </td>
+                            </div>
+                          </td>
 
-                      {/* AÇÕES */}
-                      <td className="px-4 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleOpenEdit(u)}
-                            className="h-8 w-8 p-0 text-slate-500 hover:text-[#12365A] hover:bg-slate-100"
-                            title="Editar usuário"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
+                          {/* ADM - Sempre ativo / incondicional */}
+                          <td className="px-4 py-3.5 text-center">
+                            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold">
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Sempre Habilitado</span>
+                            </div>
+                          </td>
 
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setUserToDelete(u)}
-                            disabled={isCurrent}
-                            className={cn(
-                              'h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50',
-                              isCurrent && 'opacity-30 cursor-not-allowed',
-                            )}
-                            title={
-                              isCurrent
-                                ? 'Não é possível excluir seu próprio usuário'
-                                : 'Excluir usuário'
-                            }
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {/* Gerente Toggle */}
+                          <td className="px-4 py-3.5 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <Switch
+                                aria-label={`Habilitar ${dateStr} para Gerente`}
+                                checked={isGerenteActive}
+                                disabled={isSavingGerente}
+                                onCheckedChange={() =>
+                                  handleToggleRefPermission(dateStr, 'gerente', isGerenteActive)
+                                }
+                                className="data-[state=checked]:bg-[#EA580C]"
+                              />
+                              <span
+                                className={cn(
+                                  'text-[11px] font-semibold w-16 text-left',
+                                  isGerenteActive ? 'text-[#EA580C]' : 'text-slate-400',
+                                )}
+                              >
+                                {isSavingGerente
+                                  ? 'Salvando...'
+                                  : isGerenteActive
+                                    ? 'Habilitado'
+                                    : 'Desativado'}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Supervisor Toggle */}
+                          <td className="px-4 py-3.5 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <Switch
+                                aria-label={`Habilitar ${dateStr} para Supervisão`}
+                                checked={isSupervisorActive}
+                                disabled={isSavingSupervisor}
+                                onCheckedChange={() =>
+                                  handleToggleRefPermission(
+                                    dateStr,
+                                    'supervisor',
+                                    isSupervisorActive,
+                                  )
+                                }
+                                className="data-[state=checked]:bg-[#0D9488]"
+                              />
+                              <span
+                                className={cn(
+                                  'text-[11px] font-semibold w-16 text-left',
+                                  isSupervisorActive ? 'text-[#0D9488]' : 'text-slate-400',
+                                )}
+                              >
+                                {isSavingSupervisor
+                                  ? 'Salvando...'
+                                  : isSupervisorActive
+                                    ? 'Habilitado'
+                                    : 'Desativado'}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Coordenador Toggle */}
+                          <td className="px-4 py-3.5 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <Switch
+                                aria-label={`Habilitar ${dateStr} para Coordenação`}
+                                checked={isCoordenadorActive}
+                                disabled={isSavingCoordenador}
+                                onCheckedChange={() =>
+                                  handleToggleRefPermission(
+                                    dateStr,
+                                    'coordenador',
+                                    isCoordenadorActive,
+                                  )
+                                }
+                                className="data-[state=checked]:bg-[#0284C7]"
+                              />
+                              <span
+                                className={cn(
+                                  'text-[11px] font-semibold w-16 text-left',
+                                  isCoordenadorActive ? 'text-[#0284C7]' : 'text-slate-400',
+                                )}
+                              >
+                                {isSavingCoordenador
+                                  ? 'Salvando...'
+                                  : isCoordenadorActive
+                                    ? 'Habilitado'
+                                    : 'Desativado'}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Users Table Card */}
+          <div className="bg-white rounded-xl border border-[#E3E9F2] shadow-xs overflow-hidden">
+            {/* Filters and search bar */}
+            <div className="p-4 border-b border-[#E3E9F2] flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 text-[#8A97AC] absolute left-3 top-1/2 -translate-y-1/2" />
+                <Input
+                  placeholder="Buscar por nome, e-mail, telefone ou loja..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9 h-9 text-xs bg-[#F8FAFC] border-[#E3E9F2]"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+                <span className="text-xs font-semibold text-[#5B6B82] uppercase">Perfil:</span>
+                <div className="inline-flex rounded-lg border border-[#E3E9F2] p-0.5 bg-[#F8FAFC] flex-wrap gap-0.5">
+                  <button
+                    onClick={() => setRoleFilter('ALL')}
+                    className={cn(
+                      'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+                      roleFilter === 'ALL'
+                        ? 'bg-[#12365A] text-white shadow-xs'
+                        : 'text-[#5B6B82] hover:text-[#12233A]',
+                    )}
+                  >
+                    Todos ({users.length})
+                  </button>
+                  <button
+                    onClick={() => setRoleFilter('ADM')}
+                    className={cn(
+                      'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+                      roleFilter === 'ADM'
+                        ? 'bg-[#12365A] text-white shadow-xs'
+                        : 'text-[#5B6B82] hover:text-[#12233A]',
+                    )}
+                  >
+                    ADM
+                  </button>
+                  <button
+                    onClick={() => setRoleFilter('Coordenador')}
+                    className={cn(
+                      'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+                      roleFilter === 'Coordenador'
+                        ? 'bg-[#0284C7] text-white shadow-xs'
+                        : 'text-[#5B6B82] hover:text-[#12233A]',
+                    )}
+                  >
+                    Coordenador
+                  </button>
+                  <button
+                    onClick={() => setRoleFilter('Supervisor')}
+                    className={cn(
+                      'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+                      roleFilter === 'Supervisor'
+                        ? 'bg-[#0D9488] text-white shadow-xs'
+                        : 'text-[#5B6B82] hover:text-[#12233A]',
+                    )}
+                  >
+                    Supervisor
+                  </button>
+                  <button
+                    onClick={() => setRoleFilter('Gerente')}
+                    className={cn(
+                      'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
+                      roleFilter === 'Gerente'
+                        ? 'bg-[#EA580C] text-white shadow-xs'
+                        : 'text-[#5B6B82] hover:text-[#12233A]',
+                    )}
+                  >
+                    Gerente
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead className="bg-[#12365A] text-white font-semibold uppercase tracking-wider text-[11px]">
+                  <tr>
+                    <th className="px-4 py-3.5 min-w-[200px]">NOME COMPLETO</th>
+                    <th className="px-4 py-3.5 min-w-[200px]">E-MAIL</th>
+                    <th className="px-4 py-3.5 min-w-[130px]">FONE</th>
+                    <th className="px-4 py-3.5 min-w-[120px]">PERFIL</th>
+                    <th className="px-4 py-3.5 min-w-[240px]">LOJAS VINCULADAS</th>
+                    <th className="px-4 py-3.5 text-right min-w-[90px]">AÇÕES</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E3E9F2]">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-[#5B6B82]">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <div className="w-6 h-6 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
+                          <span>Carregando usuários...</span>
                         </div>
                       </td>
                     </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  ) : filteredUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-[#5B6B82]">
+                        <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
+                          <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
+                          <p className="font-semibold text-[#12365A]">Nenhum usuário encontrado</p>
+                          <p className="text-xs text-[#5B6B82]">
+                            {search || roleFilter !== 'ALL'
+                              ? 'Tente ajustar os filtros ou a busca digitada.'
+                              : 'Clique em "Cadastrar Usuário" para adicionar o primeiro acesso.'}
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredUsers.map((u, idx) => {
+                      const isCurrent = u.id === currentUser?.id
+                      const userLojas = Array.isArray(u.lojas) ? u.lojas : []
+                      const userRole = normalizeRole(u.role)
+
+                      return (
+                        <tr
+                          key={u.id}
+                          className={cn(
+                            'hover:bg-[#F0F5FC] transition-colors',
+                            idx % 2 === 1 ? 'bg-[#FAFCFF]' : 'bg-white',
+                          )}
+                        >
+                          {/* NOME COMPLETO */}
+                          <td className="px-4 py-3.5 font-medium text-[#12365A]">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-7 h-7 rounded-full bg-[#12365A]/10 text-[#12365A] font-bold text-xs flex items-center justify-center shrink-0">
+                                {(u.name?.charAt(0) || u.email?.charAt(0) || 'U').toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="font-bold text-[#12365A] block truncate">
+                                  {u.name || 'Sem nome cadastrado'}
+                                </span>
+                                {isCurrent && (
+                                  <span className="text-[10px] text-[#0E9F8A] font-semibold">
+                                    (Você)
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* E-MAIL */}
+                          <td className="px-4 py-3.5 text-[#5B6B82] font-mono text-[11px]">
+                            <div className="flex items-center gap-1.5">
+                              <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                              <span className="truncate">{u.email}</span>
+                            </div>
+                          </td>
+
+                          {/* FONE */}
+                          <td className="px-4 py-3.5 text-[#5B6B82]">
+                            {u.fone ? (
+                              <div className="flex items-center gap-1.5">
+                                <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                <span>{u.fone}</span>
+                              </div>
+                            ) : (
+                              <span className="text-slate-300 italic">—</span>
+                            )}
+                          </td>
+
+                          {/* PERFIL (BADGE) */}
+                          <td className="px-4 py-3.5">{renderRoleBadge(u.role)}</td>
+
+                          {/* LOJAS VINCULADAS */}
+                          <td className="px-4 py-3.5">
+                            {userRole === 'ADM' ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-[#5B6B82]">
+                                <Shield className="w-3 h-3 text-[#12365A]" />
+                                Todas as lojas (Acesso Total)
+                              </span>
+                            ) : userLojas.length === 0 ? (
+                              <span className="text-slate-400 text-[11px] italic">
+                                Nenhuma loja vinculada
+                              </span>
+                            ) : (
+                              <div className="flex flex-wrap gap-1 max-w-sm">
+                                {userLojas.slice(0, 3).map((storeId) => {
+                                  const store = storeMap.get(storeId)
+                                  return (
+                                    <Badge
+                                      key={storeId}
+                                      variant="outline"
+                                      className="text-[10px] font-semibold py-0.5 px-2 bg-blue-50/60 text-[#12365A] border-blue-200 truncate max-w-[160px]"
+                                      title={store?.name || storeId}
+                                    >
+                                      <Store className="w-2.5 h-2.5 mr-1 text-[#0E9F8A] shrink-0" />
+                                      <span className="truncate">
+                                        {store ? store.name : storeId}
+                                      </span>
+                                    </Badge>
+                                  )
+                                })}
+                                {userLojas.length > 3 && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] font-bold py-0.5 px-1.5 bg-slate-100 text-[#5B6B82] border-slate-200"
+                                    title={userLojas
+                                      .slice(3)
+                                      .map((id) => storeMap.get(id)?.name || id)
+                                      .join(', ')}
+                                  >
+                                    +{userLojas.length - 3}
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* AÇÕES */}
+                          <td className="px-4 py-3.5 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenEdit(u)}
+                                className="h-8 w-8 p-0 text-slate-500 hover:text-[#12365A] hover:bg-slate-100"
+                                title="Editar usuário"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setUserToDelete(u)}
+                                disabled={isCurrent}
+                                className={cn(
+                                  'h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50',
+                                  isCurrent && 'opacity-30 cursor-not-allowed',
+                                )}
+                                title={
+                                  isCurrent
+                                    ? 'Não é possível excluir seu próprio usuário'
+                                    : 'Excluir usuário'
+                                }
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Modal: Cadastro / Edição de Usuário */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>

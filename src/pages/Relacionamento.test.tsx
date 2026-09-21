@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { Relacionamento } from './Relacionamento'
 import * as AuthContext from '@/contexts/AuthContext'
 import pb from '@/lib/pocketbase/client'
+import { fetchMensagensPorFaixa } from '@/services/mensagensService'
 
 // Mock pocketbase client
 vi.mock('@/lib/pocketbase/client', () => {
@@ -27,6 +28,46 @@ vi.mock('@/services/relacionamentoService', () => {
       success: true,
       movelCount: 10,
       residencialCount: 5,
+    }),
+  }
+})
+
+// Mock mensagensService
+vi.mock('@/services/mensagensService', () => {
+  return {
+    fetchMensagensPorFaixa: vi.fn().mockImplementation((faixa) => {
+      if (faixa === 'Menos de 30 dias') {
+        return Promise.resolve([
+          {
+            id: 'msg-1',
+            titulo: 'Lembrete Amigável',
+            faixa_atraso: 'Menos de 30 dias',
+            texto: 'Olá! Notamos uma pendência recente. Segue o código PIX para regularização.',
+            descricao: 'Abordagem inicial',
+            ativo: true,
+            ordem: 1,
+            created: '2025-01-01',
+            updated: '2025-01-01',
+          },
+        ])
+      }
+      if (faixa === '31 a 60 dias') {
+        return Promise.resolve([
+          {
+            id: 'msg-2',
+            titulo: 'Aviso de Bloqueio Parcial',
+            faixa_atraso: '31 a 60 dias',
+            texto: 'Prezado cliente, sua fatura está vencida há mais de 30 dias. Evite bloqueio.',
+            descricao: 'Aviso 31-60d',
+            ativo: true,
+            ordem: 1,
+            created: '2025-01-01',
+            updated: '2025-01-01',
+          },
+        ])
+      }
+      // Maior que 90 dias: retorna vazio para testar empty state
+      return Promise.resolve([])
     }),
   }
 })
@@ -431,5 +472,86 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
     // Não deve exibir registros de nenhuma loja
     expect(screen.queryByText('Cliente Teste Aguas')).toBeNull()
     expect(screen.queryByText('Cliente Planaltina')).toBeNull()
+  })
+
+  describe('Botões de Faixas de Atraso e Modal de Mensagens', () => {
+    it('exibe os 3 botões com as cores/classes e textos corretos no topo da inadimplência', async () => {
+      render(<Relacionamento />)
+
+      const btnMenos30 = screen.getByTestId('btn-faixa-menos-30')
+      const btn31a60 = screen.getByTestId('btn-faixa-31-60')
+      const btnMaior90 = screen.getByTestId('btn-faixa-maior-90')
+
+      expect(btnMenos30).toBeDefined()
+      expect(btnMenos30.textContent).toContain('Menos de 30 dias')
+      // Cor AMARELA / amber
+      expect(btnMenos30.className).toContain('bg-amber-50')
+      expect(btnMenos30.className).toContain('text-amber-800')
+
+      expect(btn31a60).toBeDefined()
+      expect(btn31a60.textContent).toContain('31 a 60 dias')
+      // Cor LARANJA / orange
+      expect(btn31a60.className).toContain('bg-orange-50')
+      expect(btn31a60.className).toContain('text-orange-800')
+
+      expect(btnMaior90).toBeDefined()
+      expect(btnMaior90.textContent).toContain('Maior que 90 dias')
+      // Cor VERMELHA / rose
+      expect(btnMaior90.className).toContain('bg-rose-50')
+      expect(btnMaior90.className).toContain('text-rose-800')
+    })
+
+    it('ao clicar no botão amarelo, abre modal com mensagens da faixa "Menos de 30 dias" e botão de copiar', async () => {
+      const user = userEvent.setup()
+      // Mock navigator.clipboard
+      const writeTextMock = vi.fn().mockResolvedValue(undefined)
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: writeTextMock,
+        },
+      })
+      Object.defineProperty(window, 'isSecureContext', { value: true, writable: true })
+
+      render(<Relacionamento />)
+
+      const btnMenos30 = screen.getByTestId('btn-faixa-menos-30')
+      await user.click(btnMenos30)
+
+      expect(fetchMensagensPorFaixa).toHaveBeenCalledWith('Menos de 30 dias')
+
+      await waitFor(() => {
+        expect(screen.getByText('Lembrete Amigável')).toBeDefined()
+        expect(screen.getByText(/Segue o código PIX para regularização/i)).toBeDefined()
+      })
+
+      // Botão Copiar texto
+      const copyBtn = screen.getByTestId('btn-copy-msg-1')
+      expect(copyBtn).toBeDefined()
+      await user.click(copyBtn)
+
+      expect(writeTextMock).toHaveBeenCalledWith(
+        'Olá! Notamos uma pendência recente. Segue o código PIX para regularização.',
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Copiado!')).toBeDefined()
+      })
+    })
+
+    it('ao clicar na faixa sem mensagens, exibe o estado vazio amigável', async () => {
+      const user = userEvent.setup()
+      render(<Relacionamento />)
+
+      const btnMaior90 = screen.getByTestId('btn-faixa-maior-90')
+      await user.click(btnMaior90)
+
+      expect(fetchMensagensPorFaixa).toHaveBeenCalledWith('Maior que 90 dias')
+
+      await waitFor(() => {
+        expect(
+          screen.getByText('Nenhuma mensagem cadastrada para esta faixa de atraso'),
+        ).toBeDefined()
+      })
+    })
   })
 })

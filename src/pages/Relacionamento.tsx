@@ -10,6 +10,8 @@ import {
   Calendar,
   Info,
   Lock,
+  MessageSquareText,
+  Copy,
 } from 'lucide-react'
 import {
   Select,
@@ -54,6 +56,8 @@ import { ClientesMovel } from '@/components/ClientesMovel'
 import { ClientesResidencial } from '@/components/ClientesResidencial'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { isSessionExpiredError } from '@/lib/pocketbase/client'
+import { fetchMensagensPorFaixa } from '@/services/mensagensService'
+import type { MensagemClienteRecord, FaixaAtrasoMensagem } from '@/types/fpd'
 
 export const Relacionamento: React.FC = () => {
   const { toast } = useToast()
@@ -92,6 +96,85 @@ export const Relacionamento: React.FC = () => {
   const [isImporting, setIsImporting] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
   const [importStatusMessage, setImportStatusMessage] = useState('')
+
+  // Modal Mensagens por Faixa de Atraso
+  const [modalFaixa, setModalFaixa] = useState<FaixaAtrasoMensagem | null>(null)
+  const [modalMensagens, setModalMensagens] = useState<MensagemClienteRecord[]>([])
+  const [loadingMensagens, setLoadingMensagens] = useState(false)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  const handleOpenFaixaModal = useCallback(
+    async (faixa: FaixaAtrasoMensagem) => {
+      setModalFaixa(faixa)
+      setLoadingMensagens(true)
+      try {
+        const items = await fetchMensagensPorFaixa(faixa)
+        setModalMensagens(items)
+      } catch (err) {
+        if (!isSessionExpiredError(err)) {
+          console.error('Erro ao buscar mensagens da faixa:', err)
+          toast({
+            title: 'Erro ao carregar mensagens',
+            description: 'Não foi possível carregar as mensagens desta faixa de atraso.',
+            variant: 'destructive',
+          })
+        }
+        setModalMensagens([])
+      } finally {
+        setLoadingMensagens(false)
+      }
+    },
+    [toast],
+  )
+
+  const handleCopyMensagem = useCallback(
+    async (msg: MensagemClienteRecord) => {
+      const text = msg.texto || ''
+      let copied = false
+
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(text)
+          copied = true
+        } catch {
+          copied = false
+        }
+      }
+
+      if (!copied) {
+        try {
+          const textArea = document.createElement('textarea')
+          textArea.value = text
+          textArea.style.position = 'fixed'
+          textArea.style.left = '-999999px'
+          textArea.style.top = '-999999px'
+          document.body.appendChild(textArea)
+          textArea.focus()
+          textArea.select()
+          copied = document.execCommand('copy')
+          document.body.removeChild(textArea)
+        } catch {
+          copied = false
+        }
+      }
+
+      if (copied) {
+        setCopiedId(msg.id)
+        setTimeout(() => setCopiedId(null), 2000)
+        toast({
+          title: 'Mensagem copiada!',
+          description: 'O texto foi copiado para a área de transferência.',
+        })
+      } else {
+        toast({
+          title: 'Não foi possível copiar',
+          description: 'Selecione e copie o texto manualmente.',
+          variant: 'destructive',
+        })
+      }
+    },
+    [toast],
+  )
 
   // Flag to temporarily disable realtime updates during bulk operations
   const isImportingRef = useRef(false)
@@ -941,8 +1024,9 @@ export const Relacionamento: React.FC = () => {
           </p>
         </div>
       </div>
-      {/* Toggle between Móvel and Residencial */}
-      <div className="flex items-center justify-between border-b border-[#E3E9F2] pb-3">
+      {/* Metric Cards & Delay Range Messages Actions */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-[#E3E9F2] pb-3">
+        {/* Toggle between Móvel and Residencial */}
         <div className="flex items-center gap-1.5 p-1 bg-[#E8EEF5] rounded-xl w-fit">
           <button
             type="button"
@@ -983,6 +1067,48 @@ export const Relacionamento: React.FC = () => {
               {totalResidencial.toLocaleString('pt-BR')}
             </Badge>
           </button>
+        </div>
+
+        {/* 3 Botões por Faixa de Atraso: Amarelo, Laranja, Vermelho */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* AMARELO: Menos de 30 dias */}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => handleOpenFaixaModal('Menos de 30 dias')}
+            className="h-9 px-3.5 text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 hover:border-amber-400 shadow-2xs gap-1.5 transition-all"
+            data-testid="btn-faixa-menos-30"
+          >
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+            <MessageSquareText className="w-3.5 h-3.5 text-amber-700" />
+            <span>Menos de 30 dias</span>
+          </Button>
+
+          {/* LARANJA: 31 a 60 dias */}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => handleOpenFaixaModal('31 a 60 dias')}
+            className="h-9 px-3.5 text-xs font-bold bg-orange-50 hover:bg-orange-100 text-orange-800 border-orange-300 hover:border-orange-400 shadow-2xs gap-1.5 transition-all"
+            data-testid="btn-faixa-31-60"
+          >
+            <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0" />
+            <MessageSquareText className="w-3.5 h-3.5 text-orange-700" />
+            <span>31 a 60 dias</span>
+          </Button>
+
+          {/* VERMELHO: Maior que 90 dias */}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => handleOpenFaixaModal('Maior que 90 dias')}
+            className="h-9 px-3.5 text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-300 hover:border-rose-400 shadow-2xs gap-1.5 transition-all"
+            data-testid="btn-faixa-maior-90"
+          >
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
+            <MessageSquareText className="w-3.5 h-3.5 text-rose-700" />
+            <span>Maior que 90 dias</span>
+          </Button>
         </div>
       </div>
 
@@ -1282,6 +1408,147 @@ export const Relacionamento: React.FC = () => {
                   ? 'Importando...'
                   : `Confirmar e Importar ${importSummary.total.toLocaleString('pt-BR')} Linhas`}
               </span>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Mensagens da Faixa de Atraso */}
+      <Dialog
+        open={modalFaixa !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setModalFaixa(null)
+            setModalMensagens([])
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl bg-white max-h-[85vh] flex flex-col p-6">
+          <DialogHeader className="shrink-0 pb-2 border-b border-[#E3E9F2]">
+            <div className="flex items-center gap-2">
+              <span
+                className={cn(
+                  'w-3 h-3 rounded-full shrink-0',
+                  modalFaixa === 'Menos de 30 dias' && 'bg-amber-500',
+                  modalFaixa === '31 a 60 dias' && 'bg-orange-500',
+                  modalFaixa === 'Maior que 90 dias' && 'bg-rose-500',
+                )}
+              />
+              <DialogTitle className="text-base sm:text-lg font-bold text-[#12365A] flex items-center gap-2">
+                <span>Mensagens para Clientes</span>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    'text-xs font-semibold px-2 py-0.5 border',
+                    modalFaixa === 'Menos de 30 dias' &&
+                      'bg-amber-50 text-amber-800 border-amber-300',
+                    modalFaixa === '31 a 60 dias' &&
+                      'bg-orange-50 text-orange-800 border-orange-300',
+                    modalFaixa === 'Maior que 90 dias' &&
+                      'bg-rose-50 text-rose-800 border-rose-300',
+                  )}
+                >
+                  {modalFaixa}
+                </Badge>
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-[#5B6B82]">
+              Consulte e copie os modelos de mensagens cadastrados para abordagem nesta faixa de
+              atraso.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Modal Body */}
+          <div className="flex-1 overflow-y-auto py-4 space-y-3 min-h-[140px]">
+            {loadingMensagens ? (
+              <div className="py-12 flex flex-col items-center justify-center text-center space-y-2">
+                <RefreshCw className="w-7 h-7 text-[#0E9F8A] animate-spin" />
+                <span className="text-xs text-[#5B6B82]">Carregando mensagens da faixa...</span>
+              </div>
+            ) : modalMensagens.length === 0 ? (
+              <div
+                data-testid="mensagens-empty-state"
+                className="py-12 px-4 flex flex-col items-center justify-center text-center space-y-2 bg-[#F8FAFC] border border-dashed border-[#D5E2F1] rounded-xl"
+              >
+                <MessageSquareText className="w-10 h-10 text-[#8A97AC]" />
+                <p className="font-semibold text-sm text-[#12365A]">
+                  Nenhuma mensagem cadastrada para esta faixa de atraso
+                </p>
+                <p className="text-xs text-[#5B6B82] max-w-md">
+                  Para cadastrar novos modelos de mensagem para a faixa "{modalFaixa}", acesse a aba{' '}
+                  <strong>Mensagens</strong> no módulo <strong>Administração</strong>.
+                </p>
+              </div>
+            ) : (
+              modalMensagens.map((msg, index) => {
+                const tituloDisplay =
+                  typeof msg.titulo === 'string' && msg.titulo.trim()
+                    ? msg.titulo
+                    : `Modelo ${msg.ordem ? `#${msg.ordem}` : index + 1}`
+                const descricaoDisplay =
+                  typeof msg.descricao === 'string' && msg.descricao.trim() ? msg.descricao : null
+
+                return (
+                  <div
+                    key={msg.id}
+                    data-testid={`mensagem-card-${msg.id}`}
+                    className="p-4 rounded-xl border border-[#E3E9F2] bg-[#F8FAFC] hover:bg-white hover:border-[#CBD5E1] transition-all space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-[#12365A]">{tituloDisplay}</span>
+                          {descricaoDisplay && (
+                            <span className="text-[11px] text-[#5B6B82]">({descricaoDisplay})</span>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => handleCopyMensagem(msg)}
+                        className={cn(
+                          'h-8 px-3 text-xs font-semibold gap-1.5 shrink-0 transition-all shadow-2xs',
+                          copiedId === msg.id
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                            : 'bg-[#12365A] hover:bg-[#0d2742] text-white',
+                        )}
+                        data-testid={`btn-copy-${msg.id}`}
+                      >
+                        {copiedId === msg.id ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-white" />
+                            <span>Copiado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Copiar texto</span>
+                          </>
+                        )}
+                      </Button>
+                    </div>
+
+                    <div className="p-3 bg-white border border-[#E3E9F2] rounded-lg text-xs text-slate-700 whitespace-pre-wrap font-sans leading-relaxed select-text">
+                      {msg.texto}
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+
+          <DialogFooter className="shrink-0 pt-3 border-t border-[#E3E9F2]">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setModalFaixa(null)
+                setModalMensagens([])
+              }}
+              className="text-xs"
+            >
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>
