@@ -57,7 +57,7 @@ export function AdminMensagensTab() {
     ordem?: number
   }>({
     texto: '',
-    faixa_atraso: 'Menos de 30 dias',
+    faixa_atraso: '>15 dias',
   })
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
@@ -121,7 +121,7 @@ export function AdminMensagensTab() {
     setEditingMensagem(null)
     setFormData({
       texto: '',
-      faixa_atraso: 'Menos de 30 dias',
+      faixa_atraso: '>15 dias',
       ordem: proximaOrdem,
     })
     setFormErrors({})
@@ -273,22 +273,22 @@ export function AdminMensagensTab() {
 
   const renderFaixaBadge = (faixa: FaixaAtrasoMensagem) => {
     switch (faixa) {
-      case 'Menos de 30 dias':
+      case '>15 dias':
         return (
           <Badge className="bg-amber-500 hover:bg-amber-600 text-white border-none text-[11px] font-semibold px-2.5 py-0.5 shadow-xs">
-            Menos de 30 dias
+            &gt;15 dias
           </Badge>
         )
-      case '31 a 60 dias':
+      case '16 a 30 dias':
         return (
           <Badge className="bg-orange-500 hover:bg-orange-600 text-white border-none text-[11px] font-semibold px-2.5 py-0.5 shadow-xs">
-            31 a 60 dias
+            16 a 30 dias
           </Badge>
         )
-      case 'Maior que 90 dias':
+      case '>30 dias':
         return (
           <Badge className="bg-rose-600 hover:bg-rose-700 text-white border-none text-[11px] font-semibold px-2.5 py-0.5 shadow-xs">
-            Maior que 90 dias
+            &gt;30 dias
           </Badge>
         )
       default:
@@ -302,9 +302,9 @@ export function AdminMensagensTab() {
 
   const countsPorFaixa = useMemo(() => {
     return {
-      menos30: mensagens.filter((m) => m.faixa_atraso === 'Menos de 30 dias').length,
-      de31a60: mensagens.filter((m) => m.faixa_atraso === '31 a 60 dias').length,
-      maior90: mensagens.filter((m) => m.faixa_atraso === 'Maior que 90 dias').length,
+      mais15: mensagens.filter((m) => m.faixa_atraso === '>15 dias').length,
+      de16a30: mensagens.filter((m) => m.faixa_atraso === '16 a 30 dias').length,
+      mais30: mensagens.filter((m) => m.faixa_atraso === '>30 dias').length,
     }
   }, [mensagens])
 
@@ -367,60 +367,60 @@ export function AdminMensagensTab() {
           </div>
         </div>
 
-        {/* Menos de 30 dias */}
+        {/* >15 dias */}
         <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-amber-500" />
               <p className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">
-                &lt; 30 dias
+                &gt;15 dias
               </p>
             </div>
             <p className="text-xl sm:text-2xl font-black text-amber-600 mt-0.5">
-              {countsPorFaixa.menos30}
+              {countsPorFaixa.mais15}
             </p>
-            <p className="text-[10px] text-[#5B6B82] mt-0.5">Menos de 30 dias</p>
+            <p className="text-[10px] text-[#5B6B82] mt-0.5">&gt;15 dias</p>
           </div>
           <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
-            <span className="font-bold text-xs">M30</span>
+            <span className="font-bold text-xs">&gt;15</span>
           </div>
         </div>
 
-        {/* 31 a 60 dias */}
+        {/* 16 a 30 dias */}
         <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-orange-500" />
               <p className="text-[11px] font-semibold text-orange-700 uppercase tracking-wider">
-                31 a 60 dias
+                16 a 30 dias
               </p>
             </div>
             <p className="text-xl sm:text-2xl font-black text-orange-600 mt-0.5">
-              {countsPorFaixa.de31a60}
+              {countsPorFaixa.de16a30}
             </p>
             <p className="text-[10px] text-[#5B6B82] mt-0.5">Faixa intermediária</p>
           </div>
           <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center text-orange-600 shrink-0">
-            <span className="font-bold text-xs">31-60</span>
+            <span className="font-bold text-xs">16-30</span>
           </div>
         </div>
 
-        {/* Maior que 90 dias */}
+        {/* >30 dias */}
         <div className="bg-white rounded-xl p-3.5 sm:p-4 border border-[#E3E9F2] shadow-xs flex items-center justify-between">
           <div>
             <div className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-rose-600" />
               <p className="text-[11px] font-semibold text-rose-700 uppercase tracking-wider">
-                &gt; 90 dias
+                &gt;30 dias
               </p>
             </div>
             <p className="text-xl sm:text-2xl font-black text-rose-600 mt-0.5">
-              {countsPorFaixa.maior90}
+              {countsPorFaixa.mais30}
             </p>
             <p className="text-[10px] text-[#5B6B82] mt-0.5">Atraso crítico</p>
           </div>
           <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shrink-0">
-            <span className="font-bold text-xs">&gt;90</span>
+            <span className="font-bold text-xs">&gt;30</span>
           </div>
         </div>
       </div>
@@ -456,39 +456,39 @@ export function AdminMensagensTab() {
               </button>
               <button
                 type="button"
-                onClick={() => setFaixaFilter('Menos de 30 dias')}
+                onClick={() => setFaixaFilter('>15 dias')}
                 className={cn(
                   'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
-                  faixaFilter === 'Menos de 30 dias'
+                  faixaFilter === '>15 dias'
                     ? 'bg-amber-500 text-white shadow-xs'
                     : 'text-[#5B6B82] hover:text-[#12233A]',
                 )}
               >
-                Menos de 30 dias
+                &gt;15 dias
               </button>
               <button
                 type="button"
-                onClick={() => setFaixaFilter('31 a 60 dias')}
+                onClick={() => setFaixaFilter('16 a 30 dias')}
                 className={cn(
                   'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
-                  faixaFilter === '31 a 60 dias'
+                  faixaFilter === '16 a 30 dias'
                     ? 'bg-orange-500 text-white shadow-xs'
                     : 'text-[#5B6B82] hover:text-[#12233A]',
                 )}
               >
-                31 a 60 dias
+                16 a 30 dias
               </button>
               <button
                 type="button"
-                onClick={() => setFaixaFilter('Maior que 90 dias')}
+                onClick={() => setFaixaFilter('>30 dias')}
                 className={cn(
                   'px-2.5 py-1 rounded-md text-xs font-medium transition-all',
-                  faixaFilter === 'Maior que 90 dias'
+                  faixaFilter === '>30 dias'
                     ? 'bg-rose-600 text-white shadow-xs'
                     : 'text-[#5B6B82] hover:text-[#12233A]',
                 )}
               >
-                Maior que 90 dias
+                &gt;30 dias
               </button>
             </div>
           </div>

@@ -1071,43 +1071,43 @@ export const Relacionamento: React.FC = () => {
 
         {/* 3 Botões por Faixa de Atraso: Amarelo, Laranja, Vermelho */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* AMARELO: Menos de 30 dias */}
+          {/* AMARELO: >15 dias */}
           <Button
             type="button"
             variant="outline"
-            onClick={() => handleOpenFaixaModal('Menos de 30 dias')}
+            onClick={() => handleOpenFaixaModal('>15 dias')}
             className="h-9 px-3.5 text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 hover:border-amber-400 shadow-2xs gap-1.5 transition-all"
             data-testid="btn-faixa-menos-30"
           >
             <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
             <MessageSquareText className="w-3.5 h-3.5 text-amber-700" />
-            <span>Menos de 30 dias</span>
+            <span>&gt;15 dias</span>
           </Button>
 
-          {/* LARANJA: 31 a 60 dias */}
+          {/* LARANJA: 16 a 30 dias */}
           <Button
             type="button"
             variant="outline"
-            onClick={() => handleOpenFaixaModal('31 a 60 dias')}
+            onClick={() => handleOpenFaixaModal('16 a 30 dias')}
             className="h-9 px-3.5 text-xs font-bold bg-orange-50 hover:bg-orange-100 text-orange-800 border-orange-300 hover:border-orange-400 shadow-2xs gap-1.5 transition-all"
             data-testid="btn-faixa-31-60"
           >
             <span className="w-2.5 h-2.5 rounded-full bg-orange-500 shrink-0" />
             <MessageSquareText className="w-3.5 h-3.5 text-orange-700" />
-            <span>31 a 60 dias</span>
+            <span>16 a 30 dias</span>
           </Button>
 
-          {/* VERMELHO: Maior que 90 dias */}
+          {/* VERMELHO: >30 dias */}
           <Button
             type="button"
             variant="outline"
-            onClick={() => handleOpenFaixaModal('Maior que 90 dias')}
+            onClick={() => handleOpenFaixaModal('>30 dias')}
             className="h-9 px-3.5 text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-300 hover:border-rose-400 shadow-2xs gap-1.5 transition-all"
             data-testid="btn-faixa-maior-90"
           >
             <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0" />
             <MessageSquareText className="w-3.5 h-3.5 text-rose-700" />
-            <span>Maior que 90 dias</span>
+            <span>&gt;30 dias</span>
           </Button>
         </div>
       </div>
@@ -1429,9 +1429,9 @@ export const Relacionamento: React.FC = () => {
               <span
                 className={cn(
                   'w-3 h-3 rounded-full shrink-0',
-                  modalFaixa === 'Menos de 30 dias' && 'bg-amber-500',
-                  modalFaixa === '31 a 60 dias' && 'bg-orange-500',
-                  modalFaixa === 'Maior que 90 dias' && 'bg-rose-500',
+                  modalFaixa === '>15 dias' && 'bg-amber-500',
+                  modalFaixa === '16 a 30 dias' && 'bg-orange-500',
+                  modalFaixa === '>30 dias' && 'bg-rose-500',
                 )}
               />
               <DialogTitle className="text-base sm:text-lg font-bold text-[#12365A] flex items-center gap-2">
@@ -1440,12 +1440,10 @@ export const Relacionamento: React.FC = () => {
                   variant="outline"
                   className={cn(
                     'text-xs font-semibold px-2 py-0.5 border',
-                    modalFaixa === 'Menos de 30 dias' &&
-                      'bg-amber-50 text-amber-800 border-amber-300',
-                    modalFaixa === '31 a 60 dias' &&
+                    modalFaixa === '>15 dias' && 'bg-amber-50 text-amber-800 border-amber-300',
+                    modalFaixa === '16 a 30 dias' &&
                       'bg-orange-50 text-orange-800 border-orange-300',
-                    modalFaixa === 'Maior que 90 dias' &&
-                      'bg-rose-50 text-rose-800 border-rose-300',
+                    modalFaixa === '>30 dias' && 'bg-rose-50 text-rose-800 border-rose-300',
                   )}
                 >
                   {modalFaixa}
