@@ -545,7 +545,7 @@ describe('useUserStoreAccess', () => {
     expect(result.current.isStoreNameAllowed('CELNET CALL JK', realStores)).toBe(false)
   })
 
-  it('Caso Concreto: Supervisora Karen DEVE ter acesso às lojas CALL e às suas lojas vinculadas', () => {
+  it('Caso Concreto: Supervisora Karen DEVE ter acesso às lojas CALL, GAMA DF e às suas lojas vinculadas', () => {
     const realStores: StoreRecord[] = [
       {
         id: 'st_call_arniqueiras',
@@ -598,9 +598,19 @@ describe('useUserStoreAccess', () => {
         updated: '',
       },
       {
+        id: '9bg4enlqaqqw3z8',
+        name: 'CELNET ILHA RESIDENCIAL GAMA DF',
+        coordenacao: 'Karen',
+        supervisao: 'Karen',
+        collectionId: 'stores',
+        collectionName: 'stores',
+        created: '',
+        updated: '',
+      },
+      {
         id: 'st_ilha_res',
         name: 'CELNET ILHA RESIDENCIAL',
-        coordenacao: '',
+        coordenacao: 'Lucas Diniz',
         supervisao: 'Lucas Diniz',
         collectionId: 'stores',
         collectionName: 'stores',
@@ -609,7 +619,7 @@ describe('useUserStoreAccess', () => {
       },
     ] as StoreRecord[]
 
-    // Usuária Karen
+    // Usuária Karen (com lojas CALL, Nova Suíça e GAMA DF)
     vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
       user: {
         id: 'y6n77x6pnudiuv6',
@@ -618,7 +628,14 @@ describe('useUserStoreAccess', () => {
         email: 'karennatashacelnet@gmail.com',
         name: 'Karen Natasha do nascimento dias',
         role: 'Supervisor',
-        lojas: ['st_call_arniqueiras', 'st_call_jk', 'st_call_ns', 'st_call_up', 'st_nova_suica'],
+        lojas: [
+          'st_call_arniqueiras',
+          'st_call_jk',
+          'st_call_ns',
+          'st_call_up',
+          'st_nova_suica',
+          '9bg4enlqaqqw3z8',
+        ],
         created: '2025-01-01',
         updated: '2025-01-01',
       },
@@ -637,17 +654,21 @@ describe('useUserStoreAccess', () => {
     expect(result.current.isStoreNameAllowed('CELNET CALL ARNIQUEIRAS', realStores)).toBe(true)
     expect(result.current.isStoreNameAllowed('CELNET CALL UP', realStores)).toBe(true)
     expect(result.current.isStoreNameAllowed('CELNET NOVA SUIÇA', realStores)).toBe(true)
+    // Karen DEVE ver CELNET ILHA RESIDENCIAL GAMA DF
+    expect(result.current.isStoreNameAllowed('CELNET ILHA RESIDENCIAL GAMA DF', realStores)).toBe(
+      true,
+    )
 
     // Karen NÃO DEVE ver CELNET ILHA RESIDENCIAL (loja de Lucas Diniz)
     expect(result.current.isStoreNameAllowed('CELNET ILHA RESIDENCIAL', realStores)).toBe(false)
   })
 
-  it('Caso Concreto: Supervisor Lucas Diniz DEVE ter acesso a CELNET ILHA RESIDENCIAL e NÃO às lojas CALL', () => {
+  it('Caso Concreto: Supervisor Lucas Diniz DEVE ter acesso a CELNET ILHA RESIDENCIAL e NÃO às lojas CALL ou GAMA DF', () => {
     const realStores: StoreRecord[] = [
       {
         id: 'st_ilha_res',
         name: 'CELNET ILHA RESIDENCIAL',
-        coordenacao: '',
+        coordenacao: 'Lucas Diniz',
         supervisao: 'Lucas Diniz',
         collectionId: 'stores',
         collectionName: 'stores',
@@ -657,8 +678,8 @@ describe('useUserStoreAccess', () => {
       {
         id: 'st_ilha_gama',
         name: 'CELNET ILHA RESIDENCIAL GAMA DF',
-        coordenacao: '',
-        supervisao: '',
+        coordenacao: 'Karen',
+        supervisao: 'Karen',
         collectionId: 'stores',
         collectionName: 'stores',
         created: '',
