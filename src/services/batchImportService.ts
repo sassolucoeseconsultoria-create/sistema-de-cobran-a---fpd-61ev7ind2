@@ -673,92 +673,157 @@ export async function executeBatchImport(
     })
   }
 
-  // 4. Save vendor consolidations
-  onProgress?.('Atualizando ranking de vendedores (vendor_consolidations)...', 70)
+  // 4. Leitura COMPLETA de todas as linhas da referência no banco com getFullList (paginação total, batch 2000)
+  // Deduplicação pelas chaves canônicas do sistema e agrupamento em memória por loja e vendedor.
+  onProgress?.('Lendo todas as linhas da referência para consolidação completa...', 70)
+
+  const escapedRef = refDate.replace(/"/g, '\\"')
+  const [allDbMovel, allDbRes] = await Promise.all([
+    pb.collection('movel').getFullList<{
+      id: string
+      loja?: string
+      vendedor?: string
+      ocorrencias?: string
+      dados?: Record<string, unknown>
+    }>({
+      filter: `data_referencia = "${escapedRef}"`,
+      fields: 'id,loja,vendedor,ocorrencias,dados',
+      batch: 2000,
+      requestKey: null,
+    }),
+    pb.collection('residencial').getFullList<{
+      id: string
+      loja?: string
+      vendedor?: string
+      ocorrencias?: string
+      nr_contrato?: string
+      dados?: Record<string, unknown>
+      typedFields?: Record<string, string>
+    }>({
+      filter: `data_referencia = "${escapedRef}"`,
+      fields: 'id,loja,vendedor,ocorrencias,nr_contrato,dados,typedFields',
+      batch: 2000,
+      requestKey: null,
+    }),
+  ])
+
+  // Deduplicação canônica
+  const seenMovelKeys = new Set<string>()
+  const uniqueMovel = allDbMovel.filter((m) => {
+    const key = extractMovelDeduplicationKey(m)
+    if (!key) return true
+    if (seenMovelKeys.has(key)) return false
+    seenMovelKeys.add(key)
+    return true
+  })
+
+  const seenResKeys = new Set<string>()
+  const uniqueRes = allDbRes.filter((r) => {
+    const key = extractResidencialDeduplicationKey(r)
+    if (!key) return true
+    if (seenResKeys.has(key)) return false
+    seenResKeys.add(key)
+    return true
+  })
+
+  // Agrupamento em memória de TODAS as lojas presentes na referência
+  type AggStoreData = {
+    canonicalLojaName: string
+    storeId: string
+    total_linhas: number
+    fatura_paga: number
+    envio_fatura: number
+    promessa_pagto: number
+    sem_contato: number
+    cancelados: number
+    pendente: number
+    contato_realizado: number
+    nao_tratados: number
+    outros: number
+  }
+
+  const storeAggMap = new Map<string, AggStoreData>()
+  const allDedupedVendorLines: ParsedVendorLine[] = []
+
+  const processUnifiedRow = (row: { loja?: string; vendedor?: string; ocorrencias?: string }) => {
+    const rawLoja = (row.loja || '').trim() || 'LOJA NÃO IDENTIFICADA'
+    const rawVendedor = (row.vendedor || '').trim() || 'NÃO INFORMADO'
+    const normVendedor = normalizeText(rawVendedor)
+    const normLoja = normalizeText(rawLoja)
+
+    if (
+      (normVendedor === 'vendedor' && normLoja === 'loja') ||
+      (normVendedor === 'vendedor' && !rawLoja) ||
+      (normVendedor === 'vendedor' && normLoja === 'vendedor')
+    ) {
+      return
+    }
+
+    const matchedStore = matchStore(rawLoja, currentStoresList)
+    const canonicalName = matchedStore ? matchedStore.name.toUpperCase() : rawLoja.toUpperCase()
+    let storeId = matchedStore ? matchedStore.id : storeIdMap.get(canonicalName) || ''
+
+    const rawSt = row.ocorrencias || ''
+    const cat =
+      classifyStatusCell(rawSt) ||
+      classifyRow([normalizeText(rawSt)]) ||
+      classifyRow([rawSt]) ||
+      'nao_tratados'
+
+    let sAgg = storeAggMap.get(canonicalName)
+    if (!sAgg) {
+      sAgg = {
+        canonicalLojaName: canonicalName,
+        storeId,
+        total_linhas: 0,
+        fatura_paga: 0,
+        envio_fatura: 0,
+        promessa_pagto: 0,
+        sem_contato: 0,
+        cancelados: 0,
+        pendente: 0,
+        contato_realizado: 0,
+        nao_tratados: 0,
+        outros: 0,
+      }
+      storeAggMap.set(canonicalName, sAgg)
+    }
+
+    sAgg.total_linhas++
+    sAgg[cat]++
+
+    allDedupedVendorLines.push({
+      loja: canonicalName,
+      vendedor: rawVendedor === 'VENDEDOR' ? 'NÃO INFORMADO' : rawVendedor,
+      status: cat,
+      quantidade: 1,
+    })
+  }
+
+  for (const m of uniqueMovel) {
+    processUnifiedRow(m)
+  }
+  for (const r of uniqueRes) {
+    processUnifiedRow(r)
+  }
+
+  // 5. Gravar vendor_consolidations para a referência
+  onProgress?.('Atualizando ranking de vendedores (vendor_consolidations)...', 78)
   let totalVendorSaved = 0
-  // Recalcular vendor_consolidations para esta referência a partir das linhas analíticas deduplicadas
-  // garantindo paridade 100% estrita entre ranking de vendedores, Painel de Lojas e Inadimplência
   try {
-    const escapedRef = refDate.replace(/"/g, '\\"')
-    const [allDbMovel, allDbRes] = await Promise.all([
-      pb.collection('movel').getFullList<{
-        id: string
-        loja?: string
-        vendedor?: string
-        ocorrencias?: string
-        dados?: Record<string, unknown>
-      }>({
-        filter: `data_referencia = "${escapedRef}"`,
-        fields: 'id,loja,vendedor,ocorrencias,dados',
-        requestKey: null,
-      }),
-      pb.collection('residencial').getFullList<{
-        id: string
-        loja?: string
-        vendedor?: string
-        ocorrencias?: string
-        nr_contrato?: string
-        dados?: Record<string, unknown>
-        typedFields?: Record<string, string>
-      }>({
-        filter: `data_referencia = "${escapedRef}"`,
-        fields: 'id,loja,vendedor,ocorrencias,nr_contrato,dados,typedFields',
-        requestKey: null,
-      }),
-    ])
-
-    const seenMovelKeys = new Set<string>()
-    const uniqueMovel = allDbMovel.filter((m) => {
-      const key = extractMovelDeduplicationKey(m)
-      if (!key) return true
-      if (seenMovelKeys.has(key)) return false
-      seenMovelKeys.add(key)
-      return true
-    })
-
-    const seenResKeys = new Set<string>()
-    const uniqueRes = allDbRes.filter((r) => {
-      const key = extractResidencialDeduplicationKey(r)
-      if (!key) return true
-      if (seenResKeys.has(key)) return false
-      seenResKeys.add(key)
-      return true
-    })
-
-    const allDedupedLines: ParsedVendorLine[] = [
-      ...uniqueMovel.map((m) => ({
-        loja: m.loja?.trim() || 'LOJA NÃO IDENTIFICADA',
-        vendedor: m.vendedor?.trim() || 'NÃO INFORMADO',
-        status:
-          classifyStatusCell(m.ocorrencias || '') ||
-          classifyRow([normalizeText(m.ocorrencias || '')]) ||
-          'nao_tratados',
-        quantidade: 1,
-      })),
-      ...uniqueRes.map((r) => ({
-        loja: r.loja?.trim() || 'LOJA NÃO IDENTIFICADA',
-        vendedor: r.vendedor?.trim() || 'NÃO INFORMADO',
-        status:
-          classifyStatusCell(r.ocorrencias || '') ||
-          classifyRow([normalizeText(r.ocorrencias || '')]) ||
-          'nao_tratados',
-        quantidade: 1,
-      })),
-    ]
-
-    // Apagar vendor_consolidations antigos desta referência antes de gravar os recalculados
     const oldVendors = await pb.collection('vendor_consolidations').getFullList<{ id: string }>({
       filter: `data_referencia = "${escapedRef}"`,
       fields: 'id',
+      batch: 2000,
       requestKey: null,
     })
     for (const ov of oldVendors) {
       await executeWithRateLimitRetry(() => pb.collection('vendor_consolidations').delete(ov.id))
     }
 
-    if (allDedupedLines.length > 0) {
+    if (allDedupedVendorLines.length > 0) {
       totalVendorSaved = await saveVendorConsolidationsFromLines(
-        allDedupedLines,
+        allDedupedVendorLines,
         refDate,
         currentStoresList,
       )
@@ -768,141 +833,67 @@ export async function executeBatchImport(
       '[batchImportService] Aviso ao recalcular vendor_consolidations deduplicados:',
       vendorRecalcErr,
     )
-    if (parsed.vendorLines && parsed.vendorLines.length > 0) {
-      totalVendorSaved = await saveVendorConsolidationsFromLines(
-        parsed.vendorLines,
-        refDate,
-        currentStoresList,
-      )
+  }
+
+  // 6. Gravar fpd_records para TODAS as lojas presentes na data_referencia
+  onProgress?.('Consolidando totais de todas as lojas da referência (fpd_records)...', 85)
+  let totalFpdUpdated = 0
+
+  // Se houver lojas novas que não possuam storeId, criar ou resolver
+  for (const [canonicalName, sAgg] of storeAggMap.entries()) {
+    if (!sAgg.storeId) {
+      let matched = matchStore(canonicalName, currentStoresList)
+      if (!matched) {
+        try {
+          const created = await executeWithRateLimitRetry(() =>
+            createStore({ name: canonicalName.trim().toUpperCase() }),
+          )
+          matched = created
+          currentStoresList.push(created)
+        } catch {
+          const live = await fetchStores()
+          currentStoresList = live.length > 0 ? live : currentStoresList
+          matched = matchStore(canonicalName, currentStoresList) || undefined
+        }
+      }
+      if (matched) {
+        sAgg.storeId = matched.id
+        storeIdMap.set(canonicalName, matched.id)
+      }
     }
   }
 
-  // 5. Consolidar fpd_records por loja RECALCULANDO a partir de todas as linhas analíticas
-  // deduplicadas no banco (Móvel + Residencial) para esta referência e loja.
-  // Isso elimina o acúmulo aditivo inflacionado em reimportações ou arquivos cumulativos,
-  // garantindo que fpd_records reflita exatamente o total de clientes analíticos únicos.
-  onProgress?.('Consolidando totais analíticos deduplicados por loja (fpd_records)...', 80)
-  let totalFpdUpdated = 0
+  const allStoresToConsolidate = Array.from(storeAggMap.values())
+  for (let idx = 0; idx < allStoresToConsolidate.length; idx++) {
+    const sAgg = allStoresToConsolidate[idx]
+    if (!sAgg.storeId) continue
 
-  for (let idx = 0; idx < parsed.storeSummaries.length; idx++) {
-    const s = parsed.storeSummaries[idx]
-    const storeId = storeIdMap.get(s.canonicalStoreName.trim().toUpperCase()) || ''
-    if (!storeId) continue
-
-    let fpdPayload = {
-      storeId,
+    const fpdPayload = {
+      storeId: sAgg.storeId,
       referente: refDate,
-      total_linhas: s.totalLinhas,
-      envio_fatura: s.envio_fatura,
-      pendente: s.pendente,
-      fatura_paga: s.fatura_paga,
-      sem_contato: s.sem_contato,
-      promessa_pagto: s.promessa_pagto,
-      cancelados: s.cancelados,
-      nao_tratados: s.nao_tratados,
-      contato_realizado: s.contato_realizado,
-      outros: 0,
+      total_linhas: sAgg.total_linhas,
+      fatura_paga: sAgg.fatura_paga,
+      envio_fatura: sAgg.envio_fatura,
+      promessa_pagto: sAgg.promessa_pagto,
+      sem_contato: sAgg.sem_contato,
+      cancelados: sAgg.cancelados,
+      pendente: sAgg.pendente,
+      contato_realizado: sAgg.contato_realizado,
+      nao_tratados: sAgg.nao_tratados,
+      outros: sAgg.outros,
       accumulate: false,
-    }
-
-    try {
-      const canonicalStoreName = s.canonicalStoreName.trim().toUpperCase()
-      const escapedRef = refDate.replace(/"/g, '\\"')
-      const escapedLoja = canonicalStoreName.replace(/"/g, '\\"')
-
-      const [storeMovel, storeRes] = await Promise.all([
-        pb.collection('movel').getFullList<{
-          id: string
-          loja?: string
-          ocorrencias?: string
-          dados?: Record<string, unknown>
-        }>({
-          filter: `data_referencia = "${escapedRef}" && loja = "${escapedLoja}"`,
-          fields: 'id,loja,ocorrencias,dados',
-          requestKey: null,
-        }),
-        pb.collection('residencial').getFullList<{
-          id: string
-          loja?: string
-          ocorrencias?: string
-          nr_contrato?: string
-          dados?: Record<string, unknown>
-          typedFields?: Record<string, string>
-        }>({
-          filter: `data_referencia = "${escapedRef}" && loja = "${escapedLoja}"`,
-          fields: 'id,loja,ocorrencias,nr_contrato,dados,typedFields',
-          requestKey: null,
-        }),
-      ])
-
-      // Deduplicar linhas da loja em memória com as mesmas regras estritas da tela de Inadimplência
-      const seenMovelKeys = new Set<string>()
-      const uniqueStoreMovel = storeMovel.filter((m) => {
-        const key = extractMovelDeduplicationKey(m)
-        if (!key) return true
-        if (seenMovelKeys.has(key)) return false
-        seenMovelKeys.add(key)
-        return true
-      })
-
-      const seenResKeys = new Set<string>()
-      const uniqueStoreRes = storeRes.filter((r) => {
-        const key = extractResidencialDeduplicationKey(r)
-        if (!key) return true
-        if (seenResKeys.has(key)) return false
-        seenResKeys.add(key)
-        return true
-      })
-
-      const allStoreRows = [...uniqueStoreMovel, ...uniqueStoreRes]
-      if (allStoreRows.length > 0) {
-        const freshAgg = {
-          total_linhas: allStoreRows.length,
-          fatura_paga: 0,
-          envio_fatura: 0,
-          promessa_pagto: 0,
-          sem_contato: 0,
-          cancelados: 0,
-          pendente: 0,
-          contato_realizado: 0,
-          nao_tratados: 0,
-          outros: 0,
-        }
-
-        for (const row of allStoreRows) {
-          const rawSt = row.ocorrencias || ''
-          const cat =
-            classifyStatusCell(rawSt) ||
-            classifyRow([normalizeText(rawSt)]) ||
-            classifyRow([rawSt]) ||
-            'nao_tratados'
-          freshAgg[cat]++
-        }
-
-        fpdPayload = {
-          storeId,
-          referente: refDate,
-          ...freshAgg,
-          accumulate: false,
-        }
-      }
-    } catch (recalcErr) {
-      console.warn(
-        `[batchImportService] Erro ao recalcular totais analíticos para loja ${s.canonicalStoreName}:`,
-        recalcErr,
-      )
     }
 
     await executeWithRateLimitRetry(() => saveFpdRecord(fpdPayload))
     totalFpdUpdated++
 
-    if (idx < parsed.storeSummaries.length - 1) {
+    if (idx < allStoresToConsolidate.length - 1) {
       await sleep(100)
     }
 
-    const pct = 80 + Math.round(((idx + 1) / parsed.storeSummaries.length) * 18)
+    const pct = 85 + Math.round(((idx + 1) / allStoresToConsolidate.length) * 14)
     onProgress?.(
-      `Consolidando loja ${idx + 1}/${parsed.storeSummaries.length}: ${s.canonicalStoreName}`,
+      `Consolidando loja ${idx + 1}/${allStoresToConsolidate.length}: ${sAgg.canonicalLojaName}`,
       pct,
     )
   }
@@ -910,7 +901,7 @@ export async function executeBatchImport(
   onProgress?.('Importação em lote concluída!', 100)
 
   return {
-    storesCount: parsed.storeSummaries.length,
+    storesCount: allStoresToConsolidate.length,
     totalFpdUpdated,
     totalVendorSaved,
     totalAnalyticalInserted,
