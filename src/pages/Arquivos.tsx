@@ -250,9 +250,12 @@ export const Arquivos: React.FC = () => {
     return list.sort((a, b) => a.localeCompare(b))
   }, [accessibleStores])
 
-  // Filtered rows (single reference)
+  // Filtered rows (single reference): oculta lojas sem dados (hasData === false ou totalLinhas === 0)
   const filteredRows = useMemo(() => {
     return consolidatedRows.filter((row) => {
+      // Ocultar linhas de lojas sem dados para a referência ativa (ou em nenhuma referência quando 'all')
+      if (!row.hasData || row.totalLinhas === 0) return false
+
       if (debouncedSearch) {
         const q = debouncedSearch.toLowerCase()
         const matchName = row.storeName.toLowerCase().includes(q)
@@ -273,10 +276,16 @@ export const Arquivos: React.FC = () => {
     })
   }, [consolidatedRows, debouncedSearch, selectedCoordenacoes, selectedSupervisoes])
 
-  // Filtered comparison rows
+  // Filtered comparison rows: oculta lojas sem dados em ambas as referências
   const filteredComparisonRows = useMemo(() => {
     if (!isComparisonActive) return []
     return comparisonRows.filter((row) => {
+      // Ocultar se não possui dados em nenhuma das referências comparadas
+      const hasAnyData =
+        (row.hasDataPrimary && row.primary.totalLinhas > 0) ||
+        (row.hasDataCompared && row.compared.totalLinhas > 0)
+      if (!hasAnyData) return false
+
       if (debouncedSearch) {
         const q = debouncedSearch.toLowerCase()
         const matchName = row.storeName.toLowerCase().includes(q)
@@ -1388,11 +1397,6 @@ export const Arquivos: React.FC = () => {
                             <span className="truncate group-hover:text-[#0E9F8A] transition-colors">
                               {row.storeName}
                             </span>
-                            {!row.hasData && (
-                              <span className="text-[10px] font-normal px-1.5 py-0.2 rounded bg-slate-100 text-slate-500 shrink-0">
-                                Sem dados
-                              </span>
-                            )}
                           </div>
                           <button
                             type="button"
