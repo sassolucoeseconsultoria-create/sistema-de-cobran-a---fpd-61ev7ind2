@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-21T13:41:58.716Z",
+  "generatedAt": "2026-09-21T16:25:58.901Z",
   "collections": [
     {
       "name": "users",
@@ -1161,6 +1161,56 @@
       ],
       "indexes": [
         "CREATE UNIQUE INDEX idx_ref_date_permissions_referente ON reference_date_permissions (referente)"
+      ]
+    },
+    {
+      "name": "mensagens",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.role = 'ADM'",
+        "update": "@request.auth.role = 'ADM'",
+        "delete": "@request.auth.role = 'ADM'"
+      },
+      "fields": [
+        {
+          "name": "ordem",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "texto",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "faixa_atraso",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["Menos de 30 dias", "31 a 60 dias", "Maior que 90 dias"]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_mensagens_ordem ON mensagens (ordem)",
+        "CREATE INDEX idx_mensagens_faixa ON mensagens (faixa_atraso)"
       ]
     }
   ]

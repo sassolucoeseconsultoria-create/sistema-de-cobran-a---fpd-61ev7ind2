@@ -385,3 +385,23 @@ export interface ReferenceDatePermissionRecord {
   updated: string
   [key: string]: unknown
 }
+
+export type FaixaAtrasoMensagem = 'Menos de 30 dias' | '31 a 60 dias' | 'Maior que 90 dias'
+
+export const FAIXAS_ATRASO_MENSAGEM: readonly FaixaAtrasoMensagem[] = [
+  'Menos de 30 dias',
+  '31 a 60 dias',
+  'Maior que 90 dias',
+] as const
+
+export interface MensagemClienteRecord {
+  id: string
+  collectionId: string
+  collectionName: string
+  ordem: number
+  texto: string
+  faixa_atraso: FaixaAtrasoMensagem
+  created: string
+  updated: string
+  [key: string]: unknown
+}
