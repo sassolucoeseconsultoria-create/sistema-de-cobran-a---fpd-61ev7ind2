@@ -42,11 +42,29 @@ export function buildConsolidatedRow(
   store: StoreRecord,
   records: FpdRecord[],
   referenceFilter: string,
+  allowedDatesOrCheck?: string[] | ((dateStr: string | null | undefined) => boolean),
 ): ConsolidatedRow {
   const normalizedFilter = (referenceFilter || '').trim()
+
+  const isAllowed = (dateStr: string | null | undefined): boolean => {
+    if (!allowedDatesOrCheck) return true
+    if (typeof allowedDatesOrCheck === 'function') {
+      return allowedDatesOrCheck(dateStr)
+    }
+    if (Array.isArray(allowedDatesOrCheck)) {
+      const norm = (dateStr || '').trim()
+      if (!norm) return true
+      return allowedDatesOrCheck.some((d) => (d || '').trim() === norm)
+    }
+    return true
+  }
+
   const storeRecords = records.filter((r) => {
     if (r.store !== store.id) return false
-    if (normalizedFilter === 'all') return true
+    if (normalizedFilter === 'all') {
+      // Quando 'all', considerar apenas registros com data autorizada para o perfil
+      return isAllowed(r.referente)
+    }
     if (normalizedFilter === 'none') {
       return !r.referente || r.referente.trim() === ''
     }
@@ -105,10 +123,11 @@ export function buildComparisonRows(
   records: FpdRecord[],
   primaryDate: string,
   comparedDate: string,
+  allowedDatesOrCheck?: string[] | ((dateStr: string | null | undefined) => boolean),
 ): ConsolidatedComparisonRow[] {
   return stores.map((store) => {
-    const primary = buildConsolidatedRow(store, records, primaryDate)
-    const compared = buildConsolidatedRow(store, records, comparedDate)
+    const primary = buildConsolidatedRow(store, records, primaryDate, allowedDatesOrCheck)
+    const compared = buildConsolidatedRow(store, records, comparedDate, allowedDatesOrCheck)
 
     const hasDataPrimary = primary.hasData
     const hasDataCompared = compared.hasData

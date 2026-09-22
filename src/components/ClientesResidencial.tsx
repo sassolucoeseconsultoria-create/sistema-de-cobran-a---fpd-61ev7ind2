@@ -38,6 +38,7 @@ import { getStoreVariants, buildStoreFilterClause, isSameStore } from '@/lib/sto
 
 import type { StoreRecord } from '@/types/fpd'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
+import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
 
 interface ClientesResidencialProps {
   availableLojas: string[]
@@ -55,6 +56,7 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
   onLojaChange,
 }) => {
   const { toast } = useToast()
+  const { allowedReferenceDates, isDateAllowed } = useAllowedReferenceDates()
 
   const [records, setRecords] = useState<ResidencialRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -202,12 +204,30 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
         )
       }
 
+      if (dataReferencia === 'NONE') {
+        setRecords([])
+        setTotalItems(0)
+        setTotalPages(1)
+        return
+      }
+
       if (dataReferencia && dataReferencia !== 'TODAS') {
         const escapedRef = dataReferencia.replace(/"/g, '\\"')
         // Fallback for legacy records with empty or unset data_referencia
         filterParts.push(
           `(data_referencia = "${escapedRef}" || data_referencia = "" || data_referencia = null)`,
         )
+      } else if (dataReferencia === 'TODAS' && !userAccess.isAdm) {
+        if (allowedReferenceDates.length === 0) {
+          setRecords([])
+          setTotalItems(0)
+          setTotalPages(1)
+          return
+        }
+        const refClauses = allowedReferenceDates.map(
+          (d) => `data_referencia = "${d.trim().replace(/"/g, '\\"')}"`,
+        )
+        filterParts.push(`(${refClauses.join(' || ')})`)
       }
 
       const filterStr = filterParts.length > 0 ? filterParts.join(' && ') : undefined
@@ -221,7 +241,11 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
       // Se não é ADM, reter apenas os registros das lojas permitidas
       let filteredItems = userAccess.isAdm
         ? res.items
-        : res.items.filter((item) => userAccess.isStoreNameAllowed(item.loja, stores))
+        : res.items.filter((item) => {
+            if (!userAccess.isStoreNameAllowed(item.loja, stores)) return false
+            if (dataReferencia === 'TODAS' && !isDateAllowed(item.data_referencia)) return false
+            return true
+          })
 
       // Salvaguarda exclusiva para quando uma loja ESPECÍFICA está selecionada
       if (selectedLoja && selectedLoja !== 'TODAS') {
@@ -282,6 +306,8 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
     stores,
     userAccess,
     dataReferencia,
+    allowedReferenceDates,
+    isDateAllowed,
     toast,
   ])
 

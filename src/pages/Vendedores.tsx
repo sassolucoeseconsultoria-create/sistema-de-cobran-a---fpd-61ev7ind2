@@ -76,14 +76,22 @@ export const Vendedores: React.FC = () => {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selectedReferenceDate, setSelectedReferenceDate] = useState<string>('all')
 
-  // Se só existir 1 referência, auto-seleciona a única disponível; se houver 2+ e data inválida, volta para 'all'
+  // Sincronização da data selecionada com as datas autorizadas:
+  // - 0 permitidas -> fallback para 'none'
+  // - 1 permitida -> auto-seleção dela (sem opção 'all')
+  // - 2+ permitidas -> se a selecionada não for permitida nem 'none', cai para 'all'
   useEffect(() => {
-    if (availableReferenceDates.length === 1) {
+    if (availableReferenceDates.length === 0) {
+      if (selectedReferenceDate !== 'none') {
+        setSelectedReferenceDate('none')
+      }
+    } else if (availableReferenceDates.length === 1) {
       const singleDate = availableReferenceDates[0]
-      if (selectedReferenceDate === 'all' || selectedReferenceDate !== singleDate) {
-        if (selectedReferenceDate !== 'none') {
-          setSelectedReferenceDate(singleDate)
-        }
+      if (
+        selectedReferenceDate === 'all' ||
+        (selectedReferenceDate !== singleDate && selectedReferenceDate !== 'none')
+      ) {
+        setSelectedReferenceDate(singleDate)
       }
     } else if (availableReferenceDates.length >= 2) {
       if (
@@ -93,12 +101,6 @@ export const Vendedores: React.FC = () => {
       ) {
         setSelectedReferenceDate('all')
       }
-    } else if (
-      selectedReferenceDate !== 'all' &&
-      selectedReferenceDate !== 'none' &&
-      !isDateAllowed(selectedReferenceDate)
-    ) {
-      setSelectedReferenceDate('all')
     }
   }, [selectedReferenceDate, availableReferenceDates, isDateAllowed])
   const [selectedLoja, setSelectedLoja] = useState<string>(() => {
@@ -353,14 +355,23 @@ export const Vendedores: React.FC = () => {
       }
       // Se userAccess.isAdm e loja === 'all' / 'TODAS', não adiciona cláusula de loja => soma todas as lojas da base
 
-      if (selectedReferenceDate && selectedReferenceDate !== 'all') {
-        if (selectedReferenceDate === 'none') {
-          filterParts.push(`(data_referencia = "" || data_referencia = null)`)
-        } else {
-          const escapedRef = selectedReferenceDate.replace(/"/g, '\\"')
-          filterParts.push(
-            `(data_referencia = "${escapedRef}" || data_referencia = "" || data_referencia = null)`,
+      if (selectedReferenceDate === 'none') {
+        filterParts.push(`(data_referencia = "" || data_referencia = null)`)
+      } else if (selectedReferenceDate && selectedReferenceDate !== 'all') {
+        const escapedRef = selectedReferenceDate.replace(/"/g, '\\"')
+        filterParts.push(
+          `(data_referencia = "${escapedRef}" || data_referencia = "" || data_referencia = null)`,
+        )
+      } else if (selectedReferenceDate === 'all') {
+        // Se 'all', restringir apenas às referências autorizadas para o perfil
+        if (!userAccess.isAdm) {
+          if (availableReferenceDates.length === 0) {
+            return '__NO_ACCESS__'
+          }
+          const refClauses = availableReferenceDates.map(
+            (d) => `data_referencia = "${d.trim().replace(/"/g, '\\"')}"`,
           )
+          filterParts.push(`(${refClauses.join(' || ')})`)
         }
       }
 
@@ -555,12 +566,15 @@ export const Vendedores: React.FC = () => {
       }
 
       // Filter Reference Date
-      if (selectedReferenceDate !== 'all') {
-        if (selectedReferenceDate === 'none') {
-          if (row.dataReferencia && row.dataReferencia.trim() !== '') return false
-        } else {
-          const normRef = selectedReferenceDate.trim()
-          if ((row.dataReferencia || '').trim() !== normRef) return false
+      if (selectedReferenceDate === 'none') {
+        if (row.dataReferencia && row.dataReferencia.trim() !== '') return false
+      } else if (selectedReferenceDate !== 'all') {
+        const normRef = selectedReferenceDate.trim()
+        if ((row.dataReferencia || '').trim() !== normRef) return false
+      } else {
+        // Se 'all', apenas referências permitidas (ADM vê tudo)
+        if (!isDateAllowed(row.dataReferencia)) {
+          return false
         }
       }
 
@@ -643,14 +657,16 @@ export const Vendedores: React.FC = () => {
       selectedReferenceDate !== 'all' &&
       selectedReferenceDate !== 'none'
     ) {
-      return selectedReferenceDate
+      return isDateAllowed(selectedReferenceDate) ? selectedReferenceDate : null
     }
     if (selectedReferenceDate === 'none') {
       return 'Sem referência'
     }
-    const withRef = vendorRows.find((r) => r.dataReferencia && r.dataReferencia.trim() !== '')
+    const withRef = vendorRows.find(
+      (r) => r.dataReferencia && r.dataReferencia.trim() !== '' && isDateAllowed(r.dataReferencia),
+    )
     return withRef?.dataReferencia || null
-  }, [vendorRows, selectedReferenceDate])
+  }, [vendorRows, selectedReferenceDate, isDateAllowed])
 
   // Clear data
   const handleClearAll = async () => {
@@ -915,6 +931,7 @@ export const Vendedores: React.FC = () => {
             {/* Filter: Data de Referência */}
             <div className="w-full sm:w-auto">
               <select
+                aria-label="Filtrar por data de referência"
                 value={selectedReferenceDate}
                 onChange={(e) => setSelectedReferenceDate(e.target.value)}
                 className={cn(
@@ -923,6 +940,7 @@ export const Vendedores: React.FC = () => {
                     ? 'border-[#0E9F8A] text-[#0E9F8A] bg-[#0E9F8A]/5 font-semibold'
                     : 'border-[#E3E9F2] text-[#12365A]',
                 )}
+                title="Filtrar por data de referência"
               >
                 {hasMultipleReferences && <option value="all">Todas as referências</option>}
                 {availableReferenceDates.map((date) => (
@@ -930,7 +948,11 @@ export const Vendedores: React.FC = () => {
                     Referência: {date}
                   </option>
                 ))}
-                <option value="none">Sem referência</option>
+                <option value="none">
+                  {availableReferenceDates.length === 0
+                    ? 'Nenhuma referência disponível'
+                    : 'Sem referência'}
+                </option>
               </select>
             </div>
 
@@ -1066,14 +1088,18 @@ export const Vendedores: React.FC = () => {
                       <p className="font-medium text-[#12365A]">
                         {userAccess.hasNoStoreAssigned
                           ? 'Nenhuma loja vinculada ao seu usuário'
-                          : 'Nenhum vendedor encontrado'}
+                          : availableReferenceDates.length === 0
+                            ? 'Nenhuma referência disponível para o seu perfil'
+                            : 'Nenhum vendedor encontrado'}
                       </p>
                       <p className="text-xs text-[#5B6B82]">
                         {userAccess.hasNoStoreAssigned
-                          ? 'Solicite ao Administrador que vincule uma ou mais lojas ao seu perfil para visualizar os dados de vendedores.'
-                          : vendorRows.length === 0
-                            ? 'Importe arquivos .xlsx na aba Importar para gerar automaticamente o ranking de vendedores.'
-                            : 'Tente ajustar os termos de busca ou o filtro de loja.'}
+                          ? 'Solicite ao Administrador que vincule uma ou mais lojas ao seu perfil para visualizar os vendedores.'
+                          : availableReferenceDates.length === 0
+                            ? 'As datas de referência cadastradas estão desabilitadas para o seu perfil. Entre em contato com o Administrador.'
+                            : records.length === 0
+                              ? 'Importe arquivos analíticos na aba Importar para gerar os dados dos vendedores.'
+                              : 'Tente ajustar os filtros de busca ou loja acima.'}
                       </p>
                     </div>
                   </td>

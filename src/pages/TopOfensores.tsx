@@ -52,14 +52,22 @@ export const TopOfensores: React.FC = () => {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selectedReferenceDate, setSelectedReferenceDate] = useState<string>('all')
 
-  // Se só existir 1 referência, auto-seleciona a única disponível; se houver 2+ e data inválida, volta para 'all'
+  // Sincronização da data selecionada com as datas autorizadas:
+  // - 0 permitidas -> fallback para 'none'
+  // - 1 permitida -> auto-seleção dela (sem opção 'all')
+  // - 2+ permitidas -> se a selecionada não for permitida nem 'none', cai para 'all'
   useEffect(() => {
-    if (availableReferenceDates.length === 1) {
+    if (availableReferenceDates.length === 0) {
+      if (selectedReferenceDate !== 'none') {
+        setSelectedReferenceDate('none')
+      }
+    } else if (availableReferenceDates.length === 1) {
       const singleDate = availableReferenceDates[0]
-      if (selectedReferenceDate === 'all' || selectedReferenceDate !== singleDate) {
-        if (selectedReferenceDate !== 'none') {
-          setSelectedReferenceDate(singleDate)
-        }
+      if (
+        selectedReferenceDate === 'all' ||
+        (selectedReferenceDate !== singleDate && selectedReferenceDate !== 'none')
+      ) {
+        setSelectedReferenceDate(singleDate)
       }
     } else if (availableReferenceDates.length >= 2) {
       if (
@@ -69,12 +77,6 @@ export const TopOfensores: React.FC = () => {
       ) {
         setSelectedReferenceDate('all')
       }
-    } else if (
-      selectedReferenceDate !== 'all' &&
-      selectedReferenceDate !== 'none' &&
-      !isDateAllowed(selectedReferenceDate)
-    ) {
-      setSelectedReferenceDate('all')
     }
   }, [selectedReferenceDate, availableReferenceDates, isDateAllowed])
   const [selectedLoja, setSelectedLoja] = useState<string>('all')
@@ -269,13 +271,14 @@ export const TopOfensores: React.FC = () => {
     let rows = [...allVendorRows]
 
     // Apply reference date filter
-    if (selectedReferenceDate !== 'all') {
-      if (selectedReferenceDate === 'none') {
-        rows = rows.filter((r) => !r.dataReferencia || r.dataReferencia.trim() === '')
-      } else {
-        const normRef = selectedReferenceDate.trim()
-        rows = rows.filter((r) => (r.dataReferencia || '').trim() === normRef)
-      }
+    if (selectedReferenceDate === 'none') {
+      rows = rows.filter((r) => !r.dataReferencia || r.dataReferencia.trim() === '')
+    } else if (selectedReferenceDate !== 'all') {
+      const normRef = selectedReferenceDate.trim()
+      rows = rows.filter((r) => (r.dataReferencia || '').trim() === normRef)
+    } else {
+      // Se 'all', apenas referências permitidas (ADM vê tudo)
+      rows = rows.filter((r) => isDateAllowed(r.dataReferencia))
     }
 
     // Apply store filter first if selected and not 'all'
@@ -368,14 +371,16 @@ export const TopOfensores: React.FC = () => {
       selectedReferenceDate !== 'all' &&
       selectedReferenceDate !== 'none'
     ) {
-      return selectedReferenceDate
+      return isDateAllowed(selectedReferenceDate) ? selectedReferenceDate : null
     }
     if (selectedReferenceDate === 'none') {
       return 'Sem referência'
     }
-    const withRef = allVendorRows.find((r) => r.dataReferencia && r.dataReferencia.trim() !== '')
+    const withRef = allVendorRows.find(
+      (r) => r.dataReferencia && r.dataReferencia.trim() !== '' && isDateAllowed(r.dataReferencia),
+    )
     return withRef?.dataReferencia || null
-  }, [allVendorRows, selectedReferenceDate])
+  }, [allVendorRows, selectedReferenceDate, isDateAllowed])
 
   // Export to Excel - exports only the sliced items (filteredAndSorted)
   const handleExportXlsx = () => {
@@ -616,6 +621,7 @@ export const TopOfensores: React.FC = () => {
             {/* Filter: Data de Referência */}
             <div className="w-full sm:w-auto">
               <select
+                aria-label="Filtrar por data de referência"
                 value={selectedReferenceDate}
                 onChange={(e) => setSelectedReferenceDate(e.target.value)}
                 className={cn(
@@ -624,6 +630,7 @@ export const TopOfensores: React.FC = () => {
                     ? 'border-[#0E9F8A] text-[#0E9F8A] bg-[#0E9F8A]/5 font-semibold'
                     : 'border-[#E3E9F2] text-[#12365A]',
                 )}
+                title="Filtrar por data de referência"
               >
                 {hasMultipleReferences && <option value="all">Todas as referências</option>}
                 {availableReferenceDates.map((date) => (
@@ -631,7 +638,11 @@ export const TopOfensores: React.FC = () => {
                     Referência: {date}
                   </option>
                 ))}
-                <option value="none">Sem referência</option>
+                <option value="none">
+                  {availableReferenceDates.length === 0
+                    ? 'Nenhuma referência disponível'
+                    : 'Sem referência'}
+                </option>
               </select>
             </div>
 
@@ -772,15 +783,19 @@ export const TopOfensores: React.FC = () => {
                         <span>
                           {userAccess.hasNoStoreAssigned
                             ? 'Nenhuma loja vinculada ao seu usuário'
-                            : 'Nenhum ofensor encontrado'}
+                            : availableReferenceDates.length === 0
+                              ? 'Nenhuma referência disponível para o seu perfil'
+                              : 'Nenhum ofensor encontrado'}
                         </span>
                       </p>
                       <p className="text-xs text-[#5B6B82]">
                         {userAccess.hasNoStoreAssigned
                           ? 'Solicite ao Administrador que vincule uma ou mais lojas ao seu perfil para visualizar os dados de ofensores.'
-                          : allVendorRows.length === 0
-                            ? 'Importe arquivos .xlsx na aba Importar para gerar o ranking dos principais ofensores.'
-                            : 'Tente ajustar os termos de busca ou o filtro de loja.'}
+                          : availableReferenceDates.length === 0
+                            ? 'As datas de referência cadastradas estão desabilitadas para o seu perfil. Entre em contato com o Administrador.'
+                            : allVendorRows.length === 0
+                              ? 'Importe arquivos .xlsx na aba Importar para gerar o ranking dos principais ofensores.'
+                              : 'Tente ajustar os termos de busca ou o filtro de loja.'}
                       </p>
                     </div>
                   </td>

@@ -180,6 +180,71 @@ export const Relacionamento: React.FC = () => {
   const isImportingRef = useRef(false)
   isImportingRef.current = isImporting
 
+  // Load distinct store names, registered stores, and reference dates
+  const loadInitialData = useCallback(async () => {
+    try {
+      const [lojas, registeredStores, distinctMovelDates, distinctResDates] = await Promise.all([
+        fetchDistinctAnalyticalLojas(),
+        fetchStores().catch(() => []),
+        pb
+          .collection('movel')
+          .getFullList<{ data_referencia?: string }>({
+            fields: 'data_referencia',
+            filter: 'data_referencia != "" && data_referencia != null',
+            requestKey: null,
+          })
+          .catch(() => []),
+        pb
+          .collection('residencial')
+          .getFullList<{ data_referencia?: string }>({
+            fields: 'data_referencia',
+            filter: 'data_referencia != "" && data_referencia != null',
+            requestKey: null,
+          })
+          .catch(() => []),
+      ])
+
+      const set = new Set<string>(Array.isArray(lojas) ? lojas : [])
+      setRawAvailableLojas(Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR')))
+      setStores(registeredStores)
+
+      // Se for Gerente, já resolver e travar o selectedLoja imediatamente na loja vinculada
+      if (userAccess.isGerente && !userAccess.hasNoStoreAssigned) {
+        if (userAccess.managerStoreId) {
+          const matchedStore = registeredStores.find((s) => s.id === userAccess.managerStoreId)
+          if (matchedStore?.name?.trim()) {
+            setSelectedLoja(matchedStore.name.trim())
+          }
+        }
+      }
+
+      const datesSet = new Set<string>()
+      distinctMovelDates.forEach((r) => {
+        if (r.data_referencia && r.data_referencia.trim()) datesSet.add(r.data_referencia.trim())
+      })
+      distinctResDates.forEach((r) => {
+        if (r.data_referencia && r.data_referencia.trim()) datesSet.add(r.data_referencia.trim())
+      })
+      const sortedDates = Array.from(datesSet).sort((a, b) => b.localeCompare(a))
+      setRawAvailableDates(sortedDates)
+    } catch (err) {
+      if (isSessionExpiredError(err)) {
+        return
+      }
+      console.error('Erro ao carregar dados iniciais de inadimplência:', err)
+    }
+  }, [userAccess.isGerente, userAccess.hasNoStoreAssigned, userAccess.managerStoreId])
+
+  // Initial load once on mount
+  useEffect(() => {
+    loadInitialData()
+  }, [loadInitialData])
+
+  // Filtrar availableDates pelas permissões do perfil do usuário logado
+  const availableDates = useMemo(() => {
+    return rawAvailableDates.filter((d) => isDateAllowed(d))
+  }, [rawAvailableDates, isDateAllowed])
+
   // Build PB filter string for counting a collection based on store, profile and reference date
   const buildCountFilter = useCallback(
     (loja: string, allowedLojas: string[]) => {
@@ -248,95 +313,51 @@ export const Relacionamento: React.FC = () => {
         filterParts.push(
           `(data_referencia = "${escapedRef}" || data_referencia = "" || data_referencia = null)`,
         )
+      } else if (selectedDataReferencia === 'TODAS') {
+        // Quando TODAS, se não for ADM restringir às referências permitidas do usuário
+        if (!userAccess.isAdm) {
+          if (availableDates.length === 0) {
+            return '__NO_ACCESS__'
+          }
+          const refClauses = availableDates.map(
+            (d) => `data_referencia = "${d.trim().replace(/"/g, '\\"')}"`,
+          )
+          filterParts.push(`(${refClauses.join(' || ')})`)
+        }
       }
 
       return filterParts.length > 0 ? filterParts.join(' && ') : undefined
     },
-    [userAccess, stores, selectedDataReferencia],
+    [userAccess, stores, selectedDataReferencia, availableDates],
   )
-
-  // Load distinct store names, registered stores, and reference dates
-  const loadInitialData = useCallback(async () => {
-    try {
-      const [lojas, registeredStores, distinctMovelDates, distinctResDates] = await Promise.all([
-        fetchDistinctAnalyticalLojas(),
-        fetchStores().catch(() => []),
-        pb
-          .collection('movel')
-          .getFullList<{ data_referencia?: string }>({
-            fields: 'data_referencia',
-            filter: 'data_referencia != "" && data_referencia != null',
-            requestKey: null,
-          })
-          .catch(() => []),
-        pb
-          .collection('residencial')
-          .getFullList<{ data_referencia?: string }>({
-            fields: 'data_referencia',
-            filter: 'data_referencia != "" && data_referencia != null',
-            requestKey: null,
-          })
-          .catch(() => []),
-      ])
-
-      const set = new Set<string>(Array.isArray(lojas) ? lojas : [])
-      setRawAvailableLojas(Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR')))
-      setStores(registeredStores)
-
-      // Se for Gerente, já resolver e travar o selectedLoja imediatamente na loja vinculada
-      if (userAccess.isGerente && !userAccess.hasNoStoreAssigned) {
-        if (userAccess.managerStoreId) {
-          const matchedStore = registeredStores.find((s) => s.id === userAccess.managerStoreId)
-          if (matchedStore?.name?.trim()) {
-            setSelectedLoja(matchedStore.name.trim())
-          }
-        }
-      }
-
-      const datesSet = new Set<string>()
-      distinctMovelDates.forEach((r) => {
-        if (r.data_referencia && r.data_referencia.trim()) datesSet.add(r.data_referencia.trim())
-      })
-      distinctResDates.forEach((r) => {
-        if (r.data_referencia && r.data_referencia.trim()) datesSet.add(r.data_referencia.trim())
-      })
-      const sortedDates = Array.from(datesSet).sort((a, b) => b.localeCompare(a))
-      setRawAvailableDates(sortedDates)
-    } catch (err) {
-      if (isSessionExpiredError(err)) {
-        return
-      }
-      console.error('Erro ao carregar dados iniciais de inadimplência:', err)
-    }
-  }, [userAccess.isGerente, userAccess.hasNoStoreAssigned, userAccess.managerStoreId])
-
-  // Initial load once on mount
-  useEffect(() => {
-    loadInitialData()
-  }, [loadInitialData])
-
-  // Filtrar availableDates pelas permissões do perfil do usuário logado
-  const availableDates = useMemo(() => {
-    return rawAvailableDates.filter((d) => isDateAllowed(d))
-  }, [rawAvailableDates, isDateAllowed])
 
   const hasMultipleReferences = availableDates.length >= 2
 
   // Fallback e sincronização de data de referência:
-  // Se houver apenas 1 data disponível e o estado for TODAS ou inválido, seleciona a data única automaticamente.
-  // Se houver 2+ e a data atual for desabilitada, volta para 'TODAS'.
+  // - 0 permitidas -> 'none' (ou vazio)
+  // - 1 permitida -> auto-seleção dela (sem opção TODAS)
+  // - 2+ permitidas -> se a selecionada não for permitida, cai para TODAS
   useEffect(() => {
-    if (availableDates.length === 1) {
+    if (availableDates.length === 0) {
+      if (selectedDataReferencia !== 'NONE') {
+        setSelectedDataReferencia('NONE')
+      }
+    } else if (availableDates.length === 1) {
       const singleDate = availableDates[0]
-      if (selectedDataReferencia === 'TODAS' || selectedDataReferencia !== singleDate) {
+      if (
+        selectedDataReferencia === 'TODAS' ||
+        selectedDataReferencia === 'NONE' ||
+        selectedDataReferencia !== singleDate
+      ) {
         setSelectedDataReferencia(singleDate)
       }
     } else if (availableDates.length >= 2) {
-      if (selectedDataReferencia !== 'TODAS' && !isDateAllowed(selectedDataReferencia)) {
+      if (
+        (selectedDataReferencia !== 'TODAS' && !isDateAllowed(selectedDataReferencia)) ||
+        selectedDataReferencia === 'NONE'
+      ) {
         setSelectedDataReferencia('TODAS')
       }
-    } else if (selectedDataReferencia !== 'TODAS' && !isDateAllowed(selectedDataReferencia)) {
-      setSelectedDataReferencia('TODAS')
     }
   }, [selectedDataReferencia, availableDates, isDateAllowed])
 
@@ -900,7 +921,7 @@ export const Relacionamento: React.FC = () => {
         {/* Counter Badge & Import Button */}
         <div className="flex flex-wrap items-center gap-3 shrink-0">
           {/* Active Reference Date selector */}
-          {availableDates.length > 0 && (
+          {availableDates.length > 0 ? (
             <div className="flex items-center gap-1.5 bg-[#F8FAFC] border border-[#E3E9F2] rounded-lg px-2.5 py-1">
               <Calendar className="w-3.5 h-3.5 text-[#0E9F8A]" />
               <span className="text-[10px] font-bold uppercase tracking-wider text-[#5B6B82]">
@@ -928,8 +949,15 @@ export const Relacionamento: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
+          ) : (
+            <div className="flex items-center gap-1.5 bg-slate-100 border border-[#E3E9F2] rounded-lg px-2.5 py-1 text-xs text-[#5B6B82]">
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#5B6B82]">
+                Ref:
+              </span>
+              <span className="font-semibold text-slate-500">Nenhuma disponível</span>
+            </div>
           )}
-
           <div className="px-3 py-1.5 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] text-right shadow-2xs">
             <span className="text-[9px] uppercase font-bold tracking-wider text-[#5B6B82] block">
               Total de Clientes

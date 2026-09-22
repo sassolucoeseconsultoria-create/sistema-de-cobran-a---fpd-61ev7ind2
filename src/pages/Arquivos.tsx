@@ -81,16 +81,21 @@ export const Arquivos: React.FC = () => {
   const [comparisonReferenceDate, setComparisonReferenceDate] = useState<string>('')
 
   // Efeito para sincronizar a data selecionada:
-  // 1. Se só existir 1 referência e estiver 'all', seleciona automaticamente a única disponível.
-  // 2. Se a referência selecionada não for permitida para o perfil, faz fallback para 'all' (ou para a única data se length === 1).
-  // 3. Se estava numa data única porque só existia 1, mas voltaram a existir 2+ referências e ela não é mais permitida, volta para 'all'.
+  // - 0 permitidas -> fallback para 'none'
+  // - 1 permitida -> auto-seleção dela (sem opção 'all')
+  // - 2+ permitidas -> se a selecionada não for permitida nem 'none', cai para 'all'
   useEffect(() => {
-    if (availableReferenceDates.length === 1) {
+    if (availableReferenceDates.length === 0) {
+      if (selectedReferenceDate !== 'none') {
+        setSelectedReferenceDate('none')
+      }
+    } else if (availableReferenceDates.length === 1) {
       const singleDate = availableReferenceDates[0]
-      if (selectedReferenceDate === 'all' || selectedReferenceDate !== singleDate) {
-        if (selectedReferenceDate !== 'none') {
-          setSelectedReferenceDate(singleDate)
-        }
+      if (
+        selectedReferenceDate === 'all' ||
+        (selectedReferenceDate !== singleDate && selectedReferenceDate !== 'none')
+      ) {
+        setSelectedReferenceDate(singleDate)
       }
     } else if (availableReferenceDates.length >= 2) {
       if (
@@ -100,12 +105,6 @@ export const Arquivos: React.FC = () => {
       ) {
         setSelectedReferenceDate('all')
       }
-    } else if (
-      selectedReferenceDate !== 'all' &&
-      selectedReferenceDate !== 'none' &&
-      !isDateAllowed(selectedReferenceDate)
-    ) {
-      setSelectedReferenceDate('all')
     }
 
     if (comparisonReferenceDate && !isDateAllowed(comparisonReferenceDate)) {
@@ -214,9 +213,9 @@ export const Arquivos: React.FC = () => {
   // Map each store to its consolidated FPD row
   const consolidatedRows: ConsolidatedRow[] = useMemo(() => {
     return accessibleStores.map((store) => {
-      return buildConsolidatedRow(store, records, selectedReferenceDate)
+      return buildConsolidatedRow(store, records, selectedReferenceDate, isDateAllowed)
     })
-  }, [accessibleStores, records, selectedReferenceDate])
+  }, [accessibleStores, records, selectedReferenceDate, isDateAllowed])
 
   // Map each store to comparison rows when comparison is active
   const comparisonRows: ConsolidatedComparisonRow[] = useMemo(() => {
@@ -226,6 +225,7 @@ export const Arquivos: React.FC = () => {
       records,
       selectedReferenceDate,
       comparisonReferenceDate,
+      isDateAllowed,
     )
   }, [
     accessibleStores,
@@ -233,6 +233,7 @@ export const Arquivos: React.FC = () => {
     selectedReferenceDate,
     comparisonReferenceDate,
     isComparisonActive,
+    isDateAllowed,
   ])
 
   // Distinct filter options
@@ -416,7 +417,7 @@ export const Arquivos: React.FC = () => {
       selectedReferenceDate !== 'all' &&
       selectedReferenceDate !== 'none'
     ) {
-      return selectedReferenceDate
+      return isDateAllowed(selectedReferenceDate) ? selectedReferenceDate : null
     }
     if (selectedReferenceDate === 'none') {
       return 'Sem referência'
@@ -426,10 +427,11 @@ export const Arquivos: React.FC = () => {
       (r) =>
         (userAccess.isAdm || accessibleRecordStoreIds.has(r.store)) &&
         r.referente &&
-        r.referente.trim() !== '',
+        r.referente.trim() !== '' &&
+        isDateAllowed(r.referente),
     )
     return withRef?.referente || null
-  }, [records, accessibleStores, userAccess.isAdm, selectedReferenceDate])
+  }, [records, accessibleStores, userAccess.isAdm, selectedReferenceDate, isDateAllowed])
 
   // Handle open drawer
   const handleOpenRowDetail = async (row: ConsolidatedRow) => {
@@ -658,7 +660,11 @@ export const Arquivos: React.FC = () => {
             </p>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-base sm:text-lg font-bold text-[#12365A]">
-                {effectiveReferente ? `Ref: ${effectiveReferente}` : 'Nenhuma importada'}
+                {effectiveReferente
+                  ? `Ref: ${effectiveReferente}`
+                  : availableReferenceDates.length === 0
+                    ? 'Nenhuma referência disponível'
+                    : 'Nenhuma importada'}
               </span>
             </div>
           </div>
@@ -845,6 +851,7 @@ export const Arquivos: React.FC = () => {
             {/* Selector: Data de Referência */}
             <div className="w-full sm:w-auto">
               <select
+                aria-label="Selecione a referência principal"
                 value={selectedReferenceDate}
                 onChange={(e) => setSelectedReferenceDate(e.target.value)}
                 className={cn(
@@ -863,7 +870,11 @@ export const Arquivos: React.FC = () => {
                     Referência: {date}
                   </option>
                 ))}
-                <option value="none">Sem referência</option>
+                <option value="none">
+                  {availableReferenceDates.length === 0
+                    ? 'Nenhuma referência disponível'
+                    : 'Sem referência'}
+                </option>
               </select>
             </div>
 
@@ -1359,14 +1370,18 @@ export const Arquivos: React.FC = () => {
                       <p className="font-semibold text-[#12365A]">
                         {userAccess.hasNoStoreAssigned
                           ? 'Nenhuma loja vinculada ao seu usuário'
-                          : 'Nenhuma loja encontrada'}
+                          : availableReferenceDates.length === 0
+                            ? 'Nenhuma referência disponível para o seu perfil'
+                            : 'Nenhuma loja encontrada'}
                       </p>
                       <p className="text-xs text-[#5B6B82]">
                         {userAccess.hasNoStoreAssigned
                           ? 'Solicite ao Administrador que vincule uma ou mais lojas ao seu perfil para visualizar os dados.'
-                          : stores.length === 0
-                            ? 'Importe arquivos na aba Importar para gerar os dados do Painel de Lojas.'
-                            : 'Tente ajustar os filtros de busca acima.'}
+                          : availableReferenceDates.length === 0
+                            ? 'As datas de referência cadastradas estão desabilitadas para o seu perfil. Entre em contato com o Administrador.'
+                            : stores.length === 0
+                              ? 'Importe arquivos na aba Importar para gerar os dados do Painel de Lojas.'
+                              : 'Tente ajustar os filtros de busca acima.'}
                       </p>
                     </div>
                   </td>

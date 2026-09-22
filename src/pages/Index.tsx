@@ -71,16 +71,21 @@ export const Index: React.FC = () => {
   const [selectedSupervisoes, setSelectedSupervisoes] = useState<string[]>([])
 
   // Sincronização da data selecionada com as datas autorizadas:
-  // 1. Se só existir 1 referência e estiver 'all', seleciona automaticamente a única disponível.
-  // 2. Se houver 2+ referências e a data selecionada não for permitida, cai para 'all'.
-  // 3. Respeita isDateAllowed para Gerente/Supervisor/Coordenador.
+  // - 0 permitidas -> fallback para 'none'
+  // - 1 permitida -> auto-seleção dela (sem opção 'all')
+  // - 2+ permitidas -> se a selecionada não for permitida nem 'none', cai para 'all'
   useEffect(() => {
-    if (availableReferenceDates.length === 1) {
+    if (availableReferenceDates.length === 0) {
+      if (selectedReferenceDate !== 'none') {
+        setSelectedReferenceDate('none')
+      }
+    } else if (availableReferenceDates.length === 1) {
       const singleDate = availableReferenceDates[0]
-      if (selectedReferenceDate === 'all' || selectedReferenceDate !== singleDate) {
-        if (selectedReferenceDate !== 'none') {
-          setSelectedReferenceDate(singleDate)
-        }
+      if (
+        selectedReferenceDate === 'all' ||
+        (selectedReferenceDate !== singleDate && selectedReferenceDate !== 'none')
+      ) {
+        setSelectedReferenceDate(singleDate)
       }
     } else if (availableReferenceDates.length >= 2) {
       if (
@@ -90,12 +95,6 @@ export const Index: React.FC = () => {
       ) {
         setSelectedReferenceDate('all')
       }
-    } else if (
-      selectedReferenceDate !== 'all' &&
-      selectedReferenceDate !== 'none' &&
-      !isDateAllowed(selectedReferenceDate)
-    ) {
-      setSelectedReferenceDate('all')
     }
   }, [selectedReferenceDate, availableReferenceDates, isDateAllowed])
 
@@ -193,9 +192,9 @@ export const Index: React.FC = () => {
   // Map each store to its consolidated FPD row filtered by reference
   const consolidatedRows: ConsolidatedRow[] = useMemo(() => {
     return accessibleStores.map((store) => {
-      return buildConsolidatedRow(store, records, selectedReferenceDate)
+      return buildConsolidatedRow(store, records, selectedReferenceDate, isDateAllowed)
     })
-  }, [accessibleStores, records, selectedReferenceDate])
+  }, [accessibleStores, records, selectedReferenceDate, isDateAllowed])
 
   // Distinct filter options (based on user accessible stores)
   const uniqueCoordenacoes = useMemo(() => {
@@ -287,7 +286,7 @@ export const Index: React.FC = () => {
       selectedReferenceDate !== 'all' &&
       selectedReferenceDate !== 'none'
     ) {
-      return selectedReferenceDate
+      return isDateAllowed(selectedReferenceDate) ? selectedReferenceDate : null
     }
     if (selectedReferenceDate === 'none') {
       return 'Sem referência'
@@ -297,10 +296,11 @@ export const Index: React.FC = () => {
       (r) =>
         (userAccess.isAdm || accessibleRecordStoreIds.has(r.store)) &&
         r.referente &&
-        r.referente.trim() !== '',
+        r.referente.trim() !== '' &&
+        isDateAllowed(r.referente),
     )
     return withRef?.referente || null
-  }, [records, accessibleStores, userAccess.isAdm, selectedReferenceDate])
+  }, [records, accessibleStores, userAccess.isAdm, selectedReferenceDate, isDateAllowed])
 
   // Handle open drawer
   const handleOpenRowDetail = async (row: ConsolidatedRow) => {
@@ -478,7 +478,11 @@ export const Index: React.FC = () => {
             </p>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-base sm:text-lg font-bold text-[#12365A]">
-                {effectiveReferente ? `Ref: ${effectiveReferente}` : 'Nenhuma importada'}
+                {effectiveReferente
+                  ? `Ref: ${effectiveReferente}`
+                  : availableReferenceDates.length === 0
+                    ? 'Nenhuma referência disponível'
+                    : 'Nenhuma importada'}
               </span>
             </div>
           </div>
@@ -561,7 +565,11 @@ export const Index: React.FC = () => {
                     Referência: {date}
                   </option>
                 ))}
-                <option value="none">Sem referência</option>
+                <option value="none">
+                  {availableReferenceDates.length === 0
+                    ? 'Nenhuma referência disponível'
+                    : 'Sem referência'}
+                </option>
               </select>
             </div>
 
@@ -796,14 +804,18 @@ export const Index: React.FC = () => {
                       <p className="font-semibold text-[#12365A]">
                         {userAccess.hasNoStoreAssigned
                           ? 'Nenhuma loja vinculada ao seu usuário'
-                          : 'Nenhuma loja encontrada'}
+                          : availableReferenceDates.length === 0
+                            ? 'Nenhuma referência disponível para o seu perfil'
+                            : 'Nenhuma loja encontrada'}
                       </p>
                       <p className="text-xs text-[#5B6B82]">
                         {userAccess.hasNoStoreAssigned
                           ? 'Solicite ao Administrador que vincule uma ou mais lojas ao seu perfil para visualizar os dados.'
-                          : stores.length === 0
-                            ? 'Importe arquivos na aba Importar para gerar o consolidado automaticamente.'
-                            : 'Tente ajustar os filtros de busca acima.'}
+                          : availableReferenceDates.length === 0
+                            ? 'As datas de referência cadastradas estão desabilitadas para o seu perfil. Entre em contato com o Administrador.'
+                            : stores.length === 0
+                              ? 'Importe arquivos na aba Importar para gerar o consolidado automaticamente.'
+                              : 'Tente ajustar os filtros de busca acima.'}
                       </p>
                     </div>
                   </td>{' '}

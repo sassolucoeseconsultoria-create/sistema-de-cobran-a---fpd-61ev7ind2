@@ -272,4 +272,27 @@ describe('Consolidated Comparison Logic', () => {
     expect(row.totalLinhas).toBe(50)
     expect(row.faturaPaga).toBe(20)
   })
+
+  it('buildConsolidatedRow with filter "all" respects allowed dates filter', () => {
+    const store = mockStores[0]
+    // mockRecords has rec-1a (26/08/2026) and rec-1b (15/08/2026) for store-1.
+    // If 26/08/2026 is disabled (allowed: only 15/08/2026), 'all' must pick 15/08/2026.
+    const rowOnly15 = buildConsolidatedRow(store, mockRecords, 'all', ['15/08/2026'])
+    expect(rowOnly15.hasData).toBe(true)
+    expect(rowOnly15.referente).toBe('15/08/2026')
+    expect(rowOnly15.totalLinhas).toBe(45)
+
+    // If both allowed, it picks the first/latest (26/08/2026)
+    const rowAllAllowed = buildConsolidatedRow(store, mockRecords, 'all', [
+      '26/08/2026',
+      '15/08/2026',
+    ])
+    expect(rowAllAllowed.hasData).toBe(true)
+    expect(rowAllAllowed.referente).toBe('26/08/2026')
+    expect(rowAllAllowed.totalLinhas).toBe(50)
+
+    // If none allowed, it returns empty
+    const rowNoneAllowed = buildConsolidatedRow(store, mockRecords, 'all', [])
+    expect(rowNoneAllowed.hasData).toBe(false)
+  })
 })

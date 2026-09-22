@@ -333,4 +333,90 @@ describe('Integração de Filtros de Data de Referência por Perfil nas Telas', 
     expect(admResult.current.hasMultipleReferences).toBe(true)
     expect(admResult.current.initialReferenceDate).toBe('all')
   })
+
+  it('Supervisor Jessica Virgens Barreto does not see 26/08/2026 in Index summary card or rows when it is disabled', async () => {
+    // Jessica Virgens Barreto has role "Supervisor", 26/08/2026 is disabled (supervisor: false)
+    mockUserRole = 'Supervisor'
+    mockCurrentUser = {
+      id: 'user-jessica',
+      name: 'Jessica Virgens Barreto',
+      email: 'jessicab376@gmail.com',
+      role: 'Supervisor',
+    }
+
+    vi.mocked(fpdService.fetchFpdRecords).mockResolvedValue([
+      {
+        id: 'rec-1',
+        store: 'store-1',
+        store_name: 'Loja 1',
+        referente: '26/08/2026',
+        total_linhas: 50,
+        fatura_paga: 10,
+        nao_tratados: 40,
+        created: '2026-08-26',
+        updated: '2026-08-26',
+        collectionId: 'fpd',
+        collectionName: 'fpd_records',
+      },
+    ] as any)
+
+    render(
+      <MemoryRouter>
+        <Index />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.queryByText('Carregando dados...')).toBeNull()
+    })
+
+    // 26/08/2026 MUST NOT appear anywhere in the summary card (effectiveReferente)
+    expect(screen.queryByText('Ref: 26/08/2026')).toBeNull()
+    // 0 references allowed -> 'Nenhuma referência disponível'
+    expect(screen.getByText('Nenhuma referência disponível')).toBeInTheDocument()
+
+    // The option for 26/08/2026 must NOT be in the select dropdown
+    const select = screen.getByTitle('Selecione a referência principal') as HTMLSelectElement
+    const optionValues = Array.from(select.options).map((o) => o.value)
+    expect(optionValues).not.toContain('26/08/2026')
+  })
+
+  it('ADM sees all reference dates including 26/08/2026 even when supervisor: false', async () => {
+    mockUserRole = 'ADM'
+    mockCurrentUser = {
+      id: 'user-adm',
+      name: 'Admin User',
+      email: 'adm@example.com',
+      role: 'ADM',
+    }
+
+    vi.mocked(fpdService.fetchFpdRecords).mockResolvedValue([
+      {
+        id: 'rec-1',
+        store: 'store-1',
+        store_name: 'Loja 1',
+        referente: '26/08/2026',
+        total_linhas: 50,
+        fatura_paga: 10,
+        nao_tratados: 40,
+        created: '2026-08-26',
+        updated: '2026-08-26',
+        collectionId: 'fpd',
+        collectionName: 'fpd_records',
+      },
+    ] as any)
+
+    render(
+      <MemoryRouter>
+        <Index />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.queryByText('Carregando dados...')).toBeNull()
+    })
+
+    // ADM sees 26/08/2026
+    expect(screen.getByText('Ref: 26/08/2026')).toBeInTheDocument()
+  })
 })
