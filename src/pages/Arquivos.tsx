@@ -16,10 +16,12 @@ import {
   Trash2,
   Eye,
   Info,
+  RefreshCw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   Dialog,
   DialogContent,
@@ -41,6 +43,7 @@ import {
   clearAllVendorConsolidations,
   clearAllStores,
 } from '@/services/fpdService'
+import { reconsolidarPainelLojas } from '@/services/relacionamentoService'
 import { exportConsolidatedToXlsx, exportConsolidatedComparisonToXlsx } from '@/lib/xlsxExport'
 import {
   FPD_STATUSES,
@@ -73,6 +76,8 @@ export const Arquivos: React.FC = () => {
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [records, setRecords] = useState<FpdRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [isConsolidating, setIsConsolidating] = useState(false)
 
   // Filters
   const [search, setSearch] = useState('')
@@ -136,10 +141,14 @@ export const Arquivos: React.FC = () => {
     return () => clearTimeout(timer)
   }, [search])
 
-  // Initial load
-  const loadData = async () => {
+  // Initial load & silent refresh
+  const loadData = async (isSilent = false) => {
     try {
-      setLoading(true)
+      if (!isSilent) {
+        setLoading(true)
+      } else {
+        setIsRefreshing(true)
+      }
       const [fetchedStores, fetchedRecords] = await Promise.all([fetchStores(), fetchFpdRecords()])
       setStores(fetchedStores)
       setRecords(fetchedRecords)
@@ -148,19 +157,80 @@ export const Arquivos: React.FC = () => {
         return
       }
       console.error(err)
-      toast({
-        title: 'Erro ao carregar dados',
-        description: 'Não foi possível buscar as informações do painel de lojas.',
-        variant: 'destructive',
-      })
+      if (!isSilent) {
+        toast({
+          title: 'Erro ao carregar dados',
+          description: 'Não foi possível buscar as informações do painel de lojas.',
+          variant: 'destructive',
+        })
+      }
     } finally {
       setLoading(false)
+      setIsRefreshing(false)
     }
   }
 
   useEffect(() => {
-    loadData()
+    loadData(false)
   }, [])
+
+  // Auto-refresh a cada 60 segundos
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      loadData(true)
+    }, 60000)
+
+    return () => {
+      clearInterval(intervalId)
+    }
+  }, [])
+
+  // Ação manual: Consolidar agora a partir das ocorrências de Inadimplência
+  const handleConsolidarAgora = async () => {
+    if (isConsolidating) return
+
+    setIsConsolidating(true)
+    toast({
+      title: 'Consolidação iniciada...',
+      description: 'Lendo ocorrências da Visão Inadimplência e recalculando o Painel de Lojas.',
+    })
+
+    try {
+      const res = await reconsolidarPainelLojas({
+        selectedReference: selectedReferenceDate,
+        allowedReferences: availableReferenceDates,
+        accessibleStores: accessibleStores.map((s) => ({ id: s.id, name: s.name })),
+      })
+
+      // Recarrega os dados imediatamente na tela
+      await loadData(false)
+
+      if (res.success) {
+        toast({
+          title: 'Consolidação concluída!',
+          description: res.mensagem,
+        })
+      } else {
+        toast({
+          title: 'Aviso na consolidação',
+          description: res.mensagem || 'Não foi possível concluir a consolidação.',
+          variant: 'destructive',
+        })
+      }
+    } catch (err: unknown) {
+      console.error('[Arquivos] Erro ao consolidar painel:', err)
+      toast({
+        title: 'Erro na consolidação',
+        description:
+          err instanceof Error
+            ? err.message
+            : 'Ocorreu uma falha inesperada ao tentar consolidar o painel.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsConsolidating(false)
+    }
+  }
 
   // Real-time subscriptions
   useRealtime<StoreRecord>('stores', (e) => {
@@ -849,7 +919,7 @@ export const Arquivos: React.FC = () => {
             </div>
 
             {/* Selector: Data de Referência */}
-            <div className="w-full sm:w-auto">
+            <div className="w-full sm:w-auto flex items-center gap-2">
               <select
                 aria-label="Selecione a referência principal"
                 value={selectedReferenceDate}
@@ -876,6 +946,55 @@ export const Arquivos: React.FC = () => {
                     : 'Sem referência'}
                 </option>
               </select>
+
+              {/* Indicador discreto de auto-refresh de 60s */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div
+                    aria-label="Atualização automática a cada 60s"
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[11px] text-[#5B6B82] bg-[#F8FAFC] border border-[#E3E9F2] select-none cursor-default"
+                  >
+                    <RefreshCw
+                      className={cn(
+                        'w-3 h-3 text-[#0E9F8A]',
+                        isRefreshing && 'animate-spin text-[#0E9F8A]',
+                      )}
+                    />
+                    <span className="hidden sm:inline">Atualização automática a cada 60s</span>
+                    <span className="sm:hidden">60s</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  Painel sincronizado a cada 60 segundos com as ocorrências da Visão Inadimplência.
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Botão Consolidar agora */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={isConsolidating}
+                    onClick={handleConsolidarAgora}
+                    aria-label="Consolidar agora"
+                    className="h-9 px-3 text-xs font-semibold border-[#0E9F8A] text-[#0E9F8A] hover:bg-[#0E9F8A]/10 hover:text-[#0c8a77] gap-1.5 transition-colors shrink-0"
+                  >
+                    <RefreshCw
+                      className={cn(
+                        'w-3.5 h-3.5 text-[#0E9F8A]',
+                        isConsolidating && 'animate-spin',
+                      )}
+                    />
+                    <span>{isConsolidating ? 'Consolidando...' : 'Consolidar agora'}</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  Lê as ocorrências da Visão Inadimplência e recalcula as quantidades do Painel de
+                  Lojas.
+                </TooltipContent>
+              </Tooltip>
             </div>
 
             {/* Selector: Comparar com (Segunda referência opcional) */}

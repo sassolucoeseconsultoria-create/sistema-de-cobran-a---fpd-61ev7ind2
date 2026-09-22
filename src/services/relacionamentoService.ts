@@ -1,6 +1,11 @@
 import pb from '@/lib/pocketbase/client'
 import { buildStoreFilterClause, getStoreVariants } from '@/lib/storeMatchingUtils'
-import { executeWithRateLimitRetry, sleep, isRateLimitError } from '@/lib/pocketbase/rateLimiter'
+import {
+  executeWithRateLimitRetry,
+  sleep,
+  isRateLimitError,
+  mapWithConcurrency,
+} from '@/lib/pocketbase/rateLimiter'
 import {
   extractMovelDeduplicationKey,
   extractResidencialDeduplicationKey,
@@ -1521,6 +1526,157 @@ export async function reconsolidarLojaReferencia(
       dataReferencia: trimmedRef,
       fpdUpdated: false,
       vendorsUpdated: 0,
+    }
+  }
+}
+
+export interface ReconsolidarPainelLojasParams {
+  selectedReference?: string
+  allowedReferences?: string[]
+  accessibleStores?: Array<{ id?: string; name: string } | string>
+}
+
+export interface ReconsolidarPainelLojasResult {
+  success: boolean
+  totalLojas: number
+  totalReferencias: number
+  lojasProcessadas: string[]
+  referenciasProcessadas: string[]
+  mensagem: string
+}
+
+/**
+ * Orquestrador para reconsolidar os dados do Painel de Lojas a partir das ocorrências
+ * da Visão Inadimplência (coleções movel e residencial).
+ *
+ * Para cada referência permitida (ou só a selecionada, se não for 'all'/'none') e para cada loja alvo,
+ * chama reconsolidarLojaReferencia(loja, ref).
+ */
+export async function reconsolidarPainelLojas(
+  params: ReconsolidarPainelLojasParams = {},
+): Promise<ReconsolidarPainelLojasResult> {
+  const { selectedReference, allowedReferences = [], accessibleStores = [] } = params
+
+  try {
+    // 1. Resolver referências a processar
+    let targetReferences: string[] = []
+    const cleanSelected = (selectedReference || '').trim()
+
+    if (
+      cleanSelected &&
+      cleanSelected !== 'all' &&
+      cleanSelected !== 'none' &&
+      cleanSelected !== 'TODAS' &&
+      cleanSelected !== 'NONE'
+    ) {
+      targetReferences = [cleanSelected]
+    } else {
+      // Usar lista permitida (filtrando sentinelas e vazios)
+      targetReferences = allowedReferences
+        .map((r) => (r || '').trim())
+        .filter((r) => r && r !== 'all' && r !== 'none' && r !== 'TODAS' && r !== 'NONE')
+    }
+
+    // Se ainda não houver referências definidas (ex: ADM sem allowedReferences explícito),
+    // buscar referências distintas já existentes nas coleções movel/residencial
+    if (targetReferences.length === 0) {
+      const distinctRefsSet = new Set<string>()
+      try {
+        const [mSample, rSample] = await Promise.all([
+          pb.collection('movel').getList<MovelRecord>(1, 100, {
+            fields: 'data_referencia',
+            sort: '-created',
+            requestKey: null,
+          }),
+          pb.collection('residencial').getList<ResidencialRecord>(1, 100, {
+            fields: 'data_referencia',
+            sort: '-created',
+            requestKey: null,
+          }),
+        ])
+        for (const item of [...mSample.items, ...rSample.items]) {
+          const r = (item.data_referencia || '').trim()
+          if (r && r !== 'TODAS' && r !== 'NONE') distinctRefsSet.add(r)
+        }
+      } catch {
+        // ignore sample error
+      }
+      targetReferences = Array.from(distinctRefsSet)
+    }
+
+    // 2. Resolver lojas a processar
+    let targetStoreNames: string[] = []
+    if (accessibleStores.length > 0) {
+      targetStoreNames = accessibleStores
+        .map((s) => (typeof s === 'string' ? s.trim() : (s.name || '').trim()))
+        .filter((n) => n && n !== 'TODAS' && n !== 'NONE')
+    }
+
+    // Se não passou lojas ou lista vazia, carregar todas as lojas cadastradas
+    if (targetStoreNames.length === 0) {
+      const allStores = await fetchStores().catch(() => [] as StoreRecord[])
+      targetStoreNames = allStores
+        .map((s) => (s.name || '').trim())
+        .filter((n) => n && n !== 'TODAS' && n !== 'NONE')
+    }
+
+    // Deduplicar nomes de lojas
+    const uniqueStoreNames = Array.from(new Set(targetStoreNames))
+    const uniqueRefs = Array.from(new Set(targetReferences))
+
+    if (uniqueStoreNames.length === 0 || uniqueRefs.length === 0) {
+      return {
+        success: true,
+        totalLojas: 0,
+        totalReferencias: 0,
+        lojasProcessadas: [],
+        referenciasProcessadas: [],
+        mensagem: 'Nenhuma loja ou referência elegível para consolidação.',
+      }
+    }
+
+    // 3. Executar reconsolidação para cada par (loja, referência)
+    // Concorrência moderada para não esgotar limites de conexão
+    const lojasProcessadasSet = new Set<string>()
+    const refsProcessadasSet = new Set<string>()
+
+    for (const ref of uniqueRefs) {
+      await mapWithConcurrency(
+        uniqueStoreNames,
+        async (storeName) => {
+          const res = await reconsolidarLojaReferencia(storeName, ref)
+          if (res.success) {
+            lojasProcessadasSet.add(res.loja || storeName)
+            refsProcessadasSet.add(ref)
+          }
+        },
+        { concurrency: 3, pacingMs: 50 },
+      )
+    }
+
+    const lojasProcessadas = Array.from(lojasProcessadasSet)
+    const referenciasProcessadas = Array.from(refsProcessadasSet)
+
+    return {
+      success: true,
+      totalLojas: lojasProcessadas.length,
+      totalReferencias: referenciasProcessadas.length,
+      lojasProcessadas,
+      referenciasProcessadas,
+      mensagem: `Consolidação atualizada com sucesso! ${lojasProcessadas.length} loja(s) e ${referenciasProcessadas.length} referência(s) recalculadas.`,
+    }
+  } catch (err: unknown) {
+    console.error('[reconsolidarPainelLojas] Erro ao reconsolidar painel:', err)
+    return {
+      success: false,
+      totalLojas: 0,
+      totalReferencias: 0,
+      lojasProcessadas: [],
+      referenciasProcessadas: [],
+      mensagem:
+        err instanceof Error
+          ? err.message
+          : 'Ocorreu um erro ao processar a consolidação do Painel de Lojas.',
     }
   }
 }

@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { reconsolidarLojaReferencia } from '@/services/relacionamentoService'
+import {
+  reconsolidarLojaReferencia,
+  reconsolidarPainelLojas,
+} from '@/services/relacionamentoService'
 import pb from '@/lib/pocketbase/client'
 import * as fpdService from '@/services/fpdService'
 import type { StoreRecord } from '@/types/fpd'
@@ -315,5 +318,73 @@ describe('reconsolidarLojaReferencia — Automação de Agregados Lojas -> Super
     const res3 = await reconsolidarLojaReferencia('CELNET PLANALTINA DF', 'NONE')
     expect(res3.success).toBe(false)
     expect(fpdService.saveFpdRecord).not.toHaveBeenCalled()
+  })
+
+  describe('reconsolidarPainelLojas — Orquestrador do Painel de Lojas', () => {
+    it('itera sobre as lojas e referências permitidas chamando reconsolidarLojaReferencia', async () => {
+      const mockMovelGetFullList = vi.fn().mockResolvedValue([])
+      const mockResGetFullList = vi.fn().mockResolvedValue([])
+
+      vi.mocked(pb.collection).mockImplementation((name: string) => {
+        if (name === 'movel') return { getFullList: mockMovelGetFullList } as any
+        if (name === 'residencial') return { getFullList: mockResGetFullList } as any
+        if (name === 'vendor_consolidations') {
+          return {
+            getFullList: vi.fn().mockResolvedValue([]),
+            update: vi.fn(),
+            create: vi.fn().mockResolvedValue({ id: 'v1' }),
+          } as any
+        }
+        return {} as any
+      })
+
+      const res = await reconsolidarPainelLojas({
+        selectedReference: '10/09/2026',
+        allowedReferences: ['10/09/2026', '15/09/2026'],
+        accessibleStores: [
+          { id: 'store-alfa-id', name: 'CELNET PLANALTINA DF' },
+          { id: 'store-beta-id', name: 'CELNET AGUAS CLARAS' },
+        ],
+      })
+
+      expect(res.success).toBe(true)
+      expect(res.totalLojas).toBe(2)
+      expect(res.totalReferencias).toBe(1)
+      expect(res.lojasProcessadas).toContain('CELNET PLANALTINA DF')
+      expect(res.lojasProcessadas).toContain('CELNET AGUAS CLARAS')
+      expect(res.referenciasProcessadas).toEqual(['10/09/2026'])
+      expect(fpdService.saveFpdRecord).toHaveBeenCalledTimes(2)
+    })
+
+    it('quando selectedReference for "all", itera sobre todas as referências permitidas', async () => {
+      const mockMovelGetFullList = vi.fn().mockResolvedValue([])
+      const mockResGetFullList = vi.fn().mockResolvedValue([])
+
+      vi.mocked(pb.collection).mockImplementation((name: string) => {
+        if (name === 'movel') return { getFullList: mockMovelGetFullList } as any
+        if (name === 'residencial') return { getFullList: mockResGetFullList } as any
+        if (name === 'vendor_consolidations') {
+          return {
+            getFullList: vi.fn().mockResolvedValue([]),
+            update: vi.fn(),
+            create: vi.fn().mockResolvedValue({ id: 'v1' }),
+          } as any
+        }
+        return {} as any
+      })
+
+      const res = await reconsolidarPainelLojas({
+        selectedReference: 'all',
+        allowedReferences: ['10/09/2026', '15/09/2026'],
+        accessibleStores: [{ id: 'store-alfa-id', name: 'CELNET PLANALTINA DF' }],
+      })
+
+      expect(res.success).toBe(true)
+      expect(res.totalLojas).toBe(1)
+      expect(res.totalReferencias).toBe(2)
+      expect(res.referenciasProcessadas).toContain('10/09/2026')
+      expect(res.referenciasProcessadas).toContain('15/09/2026')
+      expect(fpdService.saveFpdRecord).toHaveBeenCalledTimes(2)
+    })
   })
 })
