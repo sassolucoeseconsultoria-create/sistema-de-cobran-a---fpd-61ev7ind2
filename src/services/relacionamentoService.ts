@@ -8,11 +8,16 @@ import {
   normalizeReferenceDateForDedup,
   buildCompositeDeduplicationKey,
 } from '@/lib/clientDeduplication'
+import { classifyStatusCell, classifyRow, normalizeText } from '@/lib/xlsxParser'
+import { fetchStores, matchStore, saveFpdRecord } from '@/services/fpdService'
 import type {
   MovelRecord,
   ResidencialRecord,
   RelacionamentoAba,
   UnifiedAnalyticRecord,
+  StoreRecord,
+  FpdStatusKey,
+  VendorConsolidationRecord,
 } from '@/types/fpd'
 
 export interface FetchAnalyticalParams {
@@ -1166,6 +1171,332 @@ export async function clearAllAnalyticalRows(
   }
 
   return { movelCount, residencialCount }
+}
+
+/**
+ * Reconsolida os totais agregados de fpd_records e vendor_consolidations
+ * para uma loja específica e data de referência após alteração de ocorrência.
+ *
+ * Garante que alterações no nível perfil Loja se reflitam imediatamente
+ * nas visões de Supervisão, Coordenação e ADM.
+ */
+export async function reconsolidarLojaReferencia(
+  lojaName: string,
+  dataReferencia: string,
+): Promise<{
+  success: boolean
+  loja: string
+  dataReferencia: string
+  fpdUpdated: boolean
+  vendorsUpdated: number
+}> {
+  if (!lojaName || lojaName === 'TODAS' || lojaName === 'NONE' || !lojaName.trim()) {
+    return { success: false, loja: lojaName, dataReferencia, fpdUpdated: false, vendorsUpdated: 0 }
+  }
+  if (
+    !dataReferencia ||
+    dataReferencia === 'TODAS' ||
+    dataReferencia === 'NONE' ||
+    !dataReferencia.trim()
+  ) {
+    return { success: false, loja: lojaName, dataReferencia, fpdUpdated: false, vendorsUpdated: 0 }
+  }
+
+  const trimmedLoja = lojaName.trim()
+  const trimmedRef = dataReferencia.trim()
+  const escapedRef = trimmedRef.replace(/"/g, '\\"')
+
+  try {
+    // 1. Obter stores conhecidas e resolver loja canônica
+    const storesList = await fetchStores().catch(() => [] as StoreRecord[])
+    const matchedStore = matchStore(trimmedLoja, storesList)
+    const canonicalLojaName = matchedStore
+      ? matchedStore.name.toUpperCase()
+      : trimmedLoja.toUpperCase()
+    const storeId = matchedStore ? matchedStore.id : ''
+
+    // Obter variantes de nomes para filtro exato no PocketBase
+    const variants = getStoreVariants(trimmedLoja)
+    if (matchedStore && !variants.includes(matchedStore.name)) {
+      variants.push(matchedStore.name)
+    }
+
+    const lojaFilterClause =
+      variants.length > 0
+        ? `(${variants.map((v) => `loja = "${v.replace(/"/g, '\\"')}"`).join(' || ')})`
+        : `loja = "${trimmedLoja.replace(/"/g, '\\"')}"`
+
+    const refFilterClause = `(data_referencia = "${escapedRef}" || data_referencia = "" || data_referencia = null)`
+    const fullFilter = `${lojaFilterClause} && ${refFilterClause}`
+
+    // 2. Buscar TODAS as linhas de movel e residencial com paginação completa (batch: 2000)
+    const [rawMovel, rawResidencial] = await Promise.all([
+      executeWithRetry(() =>
+        pb.collection('movel').getFullList<MovelRecord>({
+          filter: fullFilter,
+          batch: 2000,
+          requestKey: null,
+        }),
+      ).catch((err) => {
+        console.warn('[reconsolidarLojaReferencia] Falha ao carregar móvel:', err)
+        return [] as MovelRecord[]
+      }),
+      executeWithRetry(() =>
+        pb.collection('residencial').getFullList<ResidencialRecord>({
+          filter: fullFilter,
+          batch: 2000,
+          requestKey: null,
+        }),
+      ).catch((err) => {
+        console.warn('[reconsolidarLojaReferencia] Falha ao carregar residencial:', err)
+        return [] as ResidencialRecord[]
+      }),
+    ])
+
+    // 3. Deduplicar por chave canônica isolada por referência
+    const seenMovelKeys = new Set<string>()
+    const uniqueMovel = rawMovel.filter((m) => {
+      const key = extractMovelDeduplicationKey(m)
+      if (!key) return true
+      if (seenMovelKeys.has(key)) return false
+      seenMovelKeys.add(key)
+      return true
+    })
+
+    const seenResKeys = new Set<string>()
+    const uniqueRes = rawResidencial.filter((r) => {
+      const key = extractResidencialDeduplicationKey(r)
+      if (!key) return true
+      if (seenResKeys.has(key)) return false
+      seenResKeys.add(key)
+      return true
+    })
+
+    // 4. Classificar e agregar fpd_records e vendor_consolidations
+    const fpdAgg = {
+      total_linhas: 0,
+      fatura_paga: 0,
+      envio_fatura: 0,
+      promessa_pagto: 0,
+      sem_contato: 0,
+      cancelados: 0,
+      pendente: 0,
+      contato_realizado: 0,
+      nao_tratados: 0,
+      outros: 0,
+    }
+
+    type VendorAgg = {
+      vendedor: string
+      loja: string
+      supervisao: string
+      data_referencia: string
+      total_linhas: number
+      fatura_paga: number
+      envio_fatura: number
+      promessa_pagto: number
+      sem_contato: number
+      cancelados: number
+      pendente: number
+      contato_realizado: number
+      nao_tratados: number
+      outros: number
+    }
+
+    const vendorAggMap = new Map<string, VendorAgg>()
+
+    const defaultSupervisao =
+      matchedStore?.supervisao ||
+      (canonicalLojaName.includes('GAMA DF')
+        ? 'Karen'
+        : canonicalLojaName === 'CELNET ILHA RESIDENCIAL'
+          ? 'Lucas Diniz'
+          : '')
+
+    const processRow = (row: { loja?: string; vendedor?: string; ocorrencias?: string }) => {
+      const rawVendedor = (row.vendedor || '').trim() || 'NÃO INFORMADO'
+      const normVendedor = normalizeText(rawVendedor)
+      const normLoja = normalizeText(row.loja || '')
+
+      if (
+        (normVendedor === 'vendedor' && normLoja === 'loja') ||
+        (normVendedor === 'vendedor' && !row.loja) ||
+        (normVendedor === 'vendedor' && normLoja === 'vendedor')
+      ) {
+        return
+      }
+
+      const vendedor =
+        rawVendedor === 'VENDEDOR' || !rawVendedor ? 'NÃO INFORMADO' : rawVendedor.toUpperCase()
+
+      const rawSt = row.ocorrencias || ''
+      const cat: FpdStatusKey =
+        classifyStatusCell(rawSt) ||
+        classifyRow([normalizeText(rawSt)]) ||
+        classifyRow([rawSt]) ||
+        'nao_tratados'
+
+      fpdAgg.total_linhas++
+      if (cat in fpdAgg) {
+        fpdAgg[cat]++
+      } else {
+        fpdAgg.outros++
+      }
+
+      let vAgg = vendorAggMap.get(vendedor)
+      if (!vAgg) {
+        vAgg = {
+          vendedor,
+          loja: canonicalLojaName,
+          supervisao: defaultSupervisao,
+          data_referencia: trimmedRef,
+          total_linhas: 0,
+          fatura_paga: 0,
+          envio_fatura: 0,
+          promessa_pagto: 0,
+          sem_contato: 0,
+          cancelados: 0,
+          pendente: 0,
+          contato_realizado: 0,
+          nao_tratados: 0,
+          outros: 0,
+        }
+        vendorAggMap.set(vendedor, vAgg)
+      }
+
+      vAgg.total_linhas++
+      if (cat in vAgg) {
+        vAgg[cat]++
+      } else {
+        vAgg.outros++
+      }
+    }
+
+    for (const m of uniqueMovel) {
+      processRow(m)
+    }
+    for (const r of uniqueRes) {
+      processRow(r)
+    }
+
+    // 5. Salvar fpd_records (accumulate: false para sobrescrever totais recalculados)
+    let fpdUpdated = false
+    if (storeId) {
+      await executeWithRetry(() =>
+        saveFpdRecord({
+          storeId,
+          referente: trimmedRef,
+          total_linhas: fpdAgg.total_linhas,
+          fatura_paga: fpdAgg.fatura_paga,
+          envio_fatura: fpdAgg.envio_fatura,
+          promessa_pagto: fpdAgg.promessa_pagto,
+          sem_contato: fpdAgg.sem_contato,
+          cancelados: fpdAgg.cancelados,
+          pendente: fpdAgg.pendente,
+          contato_realizado: fpdAgg.contato_realizado,
+          nao_tratados: fpdAgg.nao_tratados,
+          outros: fpdAgg.outros,
+          accumulate: false,
+        }),
+      )
+      fpdUpdated = true
+    }
+
+    // 6. Atualizar vendor_consolidations para o par loja + data_referencia
+    // Buscar registros existentes da loja+referência para preservar supervisão e IDs
+    const existingVendors = await executeWithRetry(() =>
+      pb.collection('vendor_consolidations').getFullList<VendorConsolidationRecord>({
+        filter: `${lojaFilterClause} && data_referencia = "${escapedRef}"`,
+        batch: 2000,
+        requestKey: null,
+      }),
+    ).catch(() => [] as VendorConsolidationRecord[])
+
+    const existingVendorMap = new Map<string, VendorConsolidationRecord>()
+    for (const ev of existingVendors) {
+      const vKey = (ev.vendedor || '').trim().toUpperCase()
+      existingVendorMap.set(vKey, ev)
+    }
+
+    let vendorsUpdated = 0
+
+    // Upsert para vendedores que têm linhas atuais
+    for (const [vendedorKey, vAgg] of vendorAggMap.entries()) {
+      const existing = existingVendorMap.get(vendedorKey)
+      const payload = {
+        vendedor: vAgg.vendedor,
+        loja: canonicalLojaName,
+        supervisao: existing?.supervisao || vAgg.supervisao || defaultSupervisao,
+        data_referencia: trimmedRef,
+        total_linhas: vAgg.total_linhas,
+        fatura_paga: vAgg.fatura_paga,
+        envio_fatura: vAgg.envio_fatura,
+        promessa_pagto: vAgg.promessa_pagto,
+        sem_contato: vAgg.sem_contato,
+        cancelados: vAgg.cancelados,
+        pendente: vAgg.pendente,
+        contato_realizado: vAgg.contato_realizado,
+        outros: vAgg.outros,
+        nao_tratados: vAgg.nao_tratados,
+      }
+
+      await executeWithRetry(() => {
+        if (existing) {
+          return pb
+            .collection('vendor_consolidations')
+            .update(existing.id, payload, { requestKey: null })
+        }
+        return pb.collection('vendor_consolidations').create(payload, { requestKey: null })
+      })
+
+      existingVendorMap.delete(vendedorKey)
+      vendorsUpdated++
+    }
+
+    // Para vendedores que existiam anteriormente nesta loja e referência mas não têm mais linhas, zerar
+    for (const remainingExisting of existingVendorMap.values()) {
+      const zeroPayload = {
+        total_linhas: 0,
+        fatura_paga: 0,
+        envio_fatura: 0,
+        promessa_pagto: 0,
+        sem_contato: 0,
+        cancelados: 0,
+        pendente: 0,
+        contato_realizado: 0,
+        outros: 0,
+        nao_tratados: 0,
+      }
+      await executeWithRetry(() =>
+        pb
+          .collection('vendor_consolidations')
+          .update(remainingExisting.id, zeroPayload, { requestKey: null }),
+      ).catch((err) => {
+        console.warn('[reconsolidarLojaReferencia] Aviso ao zerar vendedor antigo:', err)
+      })
+      vendorsUpdated++
+    }
+
+    return {
+      success: true,
+      loja: canonicalLojaName,
+      dataReferencia: trimmedRef,
+      fpdUpdated,
+      vendorsUpdated,
+    }
+  } catch (reconsolidateErr) {
+    console.warn(
+      '[reconsolidarLojaReferencia] Erro best-effort na reconsolidação:',
+      reconsolidateErr,
+    )
+    return {
+      success: false,
+      loja: trimmedLoja,
+      dataReferencia: trimmedRef,
+      fpdUpdated: false,
+      vendorsUpdated: 0,
+    }
+  }
 }
 
 // Backward compatibility exports for existing codebase referencing relacionamentoService

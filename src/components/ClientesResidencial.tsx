@@ -32,7 +32,10 @@ import {
   formatPhone,
   getDadosField,
 } from '@/lib/clientFormatters'
-import { updateClientManualFields } from '@/services/relacionamentoService'
+import {
+  updateClientManualFields,
+  reconsolidarLojaReferencia,
+} from '@/services/relacionamentoService'
 import { cn } from '@/lib/utils'
 import { getStoreVariants, buildStoreFilterClause, isSameStore } from '@/lib/storeMatchingUtils'
 
@@ -426,6 +429,22 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
       },
     }))
     await handleSaveField(id, { ocorrencias: val })
+
+    const record = records.find((r) => r.id === id)
+    const targetLoja = record?.loja || selectedLoja
+    const targetRef = record?.data_referencia || dataReferencia
+    if (
+      targetLoja &&
+      targetLoja !== 'TODAS' &&
+      targetLoja !== 'NONE' &&
+      targetRef &&
+      targetRef !== 'TODAS' &&
+      targetRef !== 'NONE'
+    ) {
+      reconsolidarLojaReferencia(targetLoja, targetRef).catch((err) =>
+        console.warn('[Clientes] Falha ao reconsolidar agregados:', err),
+      )
+    }
   }
 
   // Handle date change with mask
