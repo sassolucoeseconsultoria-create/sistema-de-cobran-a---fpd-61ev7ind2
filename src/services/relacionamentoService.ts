@@ -1215,18 +1215,29 @@ export async function reconsolidarLojaReferencia(
       : trimmedLoja.toUpperCase()
     const storeId = matchedStore ? matchedStore.id : ''
 
-    // Obter variantes de nomes para filtro exato no PocketBase
-    const variants = getStoreVariants(trimmedLoja)
-    if (matchedStore && !variants.includes(matchedStore.name)) {
-      variants.push(matchedStore.name)
+    // Obter variantes de nomes para filtro no PocketBase
+    // Garantir cobertura tanto de trimmedLoja quanto da canonicalLojaName
+    const variantsSet = new Set<string>()
+    for (const v of getStoreVariants(trimmedLoja)) {
+      variantsSet.add(v)
+    }
+    if (matchedStore) {
+      variantsSet.add(matchedStore.name)
+      for (const v of getStoreVariants(matchedStore.name)) {
+        variantsSet.add(v)
+      }
     }
 
+    const variants = Array.from(variantsSet).filter(Boolean)
     const lojaFilterClause =
       variants.length > 0
         ? `(${variants.map((v) => `loja = "${v.replace(/"/g, '\\"')}"`).join(' || ')})`
         : `loja = "${trimmedLoja.replace(/"/g, '\\"')}"`
 
-    const refFilterClause = `(data_referencia = "${escapedRef}" || data_referencia = "" || data_referencia = null)`
+    // Cláusula de data de referência tolerante a espaços residuais do Excel ("08/09/2026 "),
+    // sem misturar referências distintas (ex: 26/08 com 08/09)
+    const escapedRefWithSpace = `${escapedRef} `
+    const refFilterClause = `(data_referencia = "${escapedRef}" || data_referencia = "${escapedRefWithSpace}" || data_referencia ~ "${escapedRef}" || data_referencia = "" || data_referencia = null)`
     const fullFilter = `${lojaFilterClause} && ${refFilterClause}`
 
     // 2. Buscar TODAS as linhas de movel e residencial com paginação completa (batch: 2000)
@@ -1253,9 +1264,23 @@ export async function reconsolidarLojaReferencia(
       }),
     ])
 
+    // 2.1 Filtrar rigorosamente por referência isolada na memória:
+    // Aceita linhas com data_referencia igual (com trim), ou que contenha a referência,
+    // ou linhas sem data_referencia preenchida. Nunca aceitar uma referência diferente (ex: 26/08 != 08/09).
+    const isMatchingRef = (rowRef?: string | null) => {
+      const cleanRowRef = (rowRef || '').trim()
+      if (!cleanRowRef) return true
+      if (cleanRowRef === trimmedRef) return true
+      if (cleanRowRef.includes(trimmedRef)) return true
+      return false
+    }
+
+    const filteredMovel = rawMovel.filter((m) => isMatchingRef(m.data_referencia))
+    const filteredResidencial = rawResidencial.filter((r) => isMatchingRef(r.data_referencia))
+
     // 3. Deduplicar por chave canônica isolada por referência
     const seenMovelKeys = new Set<string>()
-    const uniqueMovel = rawMovel.filter((m) => {
+    const uniqueMovel = filteredMovel.filter((m) => {
       const key = extractMovelDeduplicationKey(m)
       if (!key) return true
       if (seenMovelKeys.has(key)) return false
@@ -1264,7 +1289,7 @@ export async function reconsolidarLojaReferencia(
     })
 
     const seenResKeys = new Set<string>()
-    const uniqueRes = rawResidencial.filter((r) => {
+    const uniqueRes = filteredResidencial.filter((r) => {
       const key = extractResidencialDeduplicationKey(r)
       if (!key) return true
       if (seenResKeys.has(key)) return false
@@ -1404,9 +1429,10 @@ export async function reconsolidarLojaReferencia(
 
     // 6. Atualizar vendor_consolidations para o par loja + data_referencia
     // Buscar registros existentes da loja+referência para preservar supervisão e IDs
+    const vendorRefFilter = `(data_referencia = "${escapedRef}" || data_referencia = "${escapedRefWithSpace}")`
     const existingVendors = await executeWithRetry(() =>
       pb.collection('vendor_consolidations').getFullList<VendorConsolidationRecord>({
-        filter: `${lojaFilterClause} && data_referencia = "${escapedRef}"`,
+        filter: `${lojaFilterClause} && ${vendorRefFilter}`,
         batch: 2000,
         requestKey: null,
       }),

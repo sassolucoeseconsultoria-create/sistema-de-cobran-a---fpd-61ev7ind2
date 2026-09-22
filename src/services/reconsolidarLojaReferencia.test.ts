@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { reconsolidarLojaReferencia } from '@/services/relacionamentoService'
-import { pb } from '@/lib/pocketbase/client'
+import pb from '@/lib/pocketbase/client'
 import * as fpdService from '@/services/fpdService'
 import type { StoreRecord } from '@/types/fpd'
 
@@ -46,6 +46,56 @@ describe('reconsolidarLojaReferencia — Automação de Agregados Lojas -> Super
     vi.clearAllMocks()
     vi.spyOn(fpdService, 'fetchStores').mockResolvedValue(mockStores)
     vi.spyOn(fpdService, 'saveFpdRecord').mockResolvedValue({ id: 'fpd-rec-1' } as any)
+  })
+
+  it('reconsolida com filtro tolerante a espaço residual de data e variantes de loja', async () => {
+    const movelWithSpaceRef = [
+      {
+        id: 'm-space-1',
+        loja: 'PLANALTINA', // variante curta
+        vendedor: 'VENDEDOR DF',
+        ocorrencias: 'Fatura(s) Paga(s)',
+        data_referencia: '08/09/2026 ', // espaço residual do Excel
+        dados: { Numero: '61991119999' },
+      },
+    ]
+
+    const mockMovelGetFullList = vi.fn().mockResolvedValue(movelWithSpaceRef)
+    const mockResGetFullList = vi.fn().mockResolvedValue([])
+
+    vi.mocked(pb.collection).mockImplementation((name: string) => {
+      if (name === 'movel') return { getFullList: mockMovelGetFullList } as any
+      if (name === 'residencial') return { getFullList: mockResGetFullList } as any
+      if (name === 'vendor_consolidations') {
+        return {
+          getFullList: vi.fn().mockResolvedValue([]),
+          update: vi.fn(),
+          create: vi.fn().mockResolvedValue({ id: 'v1' }),
+        } as any
+      }
+      return {} as any
+    })
+
+    const result = await reconsolidarLojaReferencia('PLANALTINA', '08/09/2026')
+    expect(result.success).toBe(true)
+
+    // Verifica que a query usou cláusula com variantes de loja e tolerância a espaço
+    expect(mockMovelGetFullList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filter: expect.stringContaining('08/09/2026'),
+      }),
+    )
+
+    // Verifica que saveFpdRecord foi chamado para a loja correspondente com 1 linha processada
+    expect(fpdService.saveFpdRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        storeId: 'store-alfa-id',
+        referente: '08/09/2026',
+        total_linhas: 1,
+        fatura_paga: 1,
+        accumulate: false,
+      }),
+    )
   })
 
   it('reconsolida agregados de fpd_records e vendor_consolidations para uma loja e referência', async () => {

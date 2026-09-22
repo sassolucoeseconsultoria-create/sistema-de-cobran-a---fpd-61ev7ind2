@@ -35,6 +35,7 @@ import {
   updateClientManualFields,
   reconsolidarLojaReferencia,
 } from '@/services/relacionamentoService'
+import { matchStore } from '@/services/fpdService'
 import { cn } from '@/lib/utils'
 import { getStoreVariants, buildStoreFilterClause, isSameStore } from '@/lib/storeMatchingUtils'
 
@@ -402,6 +403,11 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
           return next
         })
       }, 2500)
+
+      // Se a alteração manual modificou a ocorrência (status), disparar reconsolidação
+      if (origOcorrencias !== (currentEdit.ocorrencias || 'Não Tratados')) {
+        triggerReconsolidacao(originalRecord)
+      }
     } catch (err) {
       console.error('Erro ao salvar campos de cliente móvel:', err)
       setSaveStatus((prev) => ({ ...prev, [id]: 'error' }))
@@ -412,6 +418,54 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
       })
     } finally {
       setSavingRecordId(null)
+    }
+  }
+
+  // Helper centralizado para resolver loja e referência da linha editada e disparar reconsolidação
+  const triggerReconsolidacao = (record?: MovelRecord) => {
+    if (!record) return
+
+    // 1. Extrair loja prioritariamente da própria linha
+    let targetLoja = (record.loja || '').trim()
+
+    // Se vier vazia ou como 'TODAS'/'NONE', tentar resolver a partir de selectedLoja se específica
+    if (!targetLoja || targetLoja === 'TODAS' || targetLoja === 'NONE') {
+      if (selectedLoja && selectedLoja !== 'TODAS' && selectedLoja !== 'NONE') {
+        targetLoja = selectedLoja.trim()
+      }
+    }
+
+    // Se ainda for inválida, tentar resolver a loja do cadastro via matchStore
+    if (targetLoja && (targetLoja === 'TODAS' || targetLoja === 'NONE')) {
+      targetLoja = ''
+    }
+
+    if (targetLoja && stores.length > 0) {
+      const matched = matchStore(targetLoja, stores)
+      if (matched) {
+        targetLoja = matched.name
+      }
+    }
+
+    // 2. Extrair referência prioritariamente da própria linha
+    let targetRef = (record.data_referencia || '').trim()
+    if (!targetRef || targetRef === 'TODAS' || targetRef === 'NONE') {
+      if (dataReferencia && dataReferencia !== 'TODAS' && dataReferencia !== 'NONE') {
+        targetRef = dataReferencia.trim()
+      }
+    }
+
+    if (
+      targetLoja &&
+      targetLoja !== 'TODAS' &&
+      targetLoja !== 'NONE' &&
+      targetRef &&
+      targetRef !== 'TODAS' &&
+      targetRef !== 'NONE'
+    ) {
+      reconsolidarLojaReferencia(targetLoja, targetRef).catch((err) =>
+        console.warn('[ClientesMovel] Falha ao reconsolidar agregados:', err),
+      )
     }
   }
 
@@ -431,20 +485,7 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
     await handleSaveField(id, { ocorrencias: val })
 
     const record = records.find((r) => r.id === id)
-    const targetLoja = record?.loja || selectedLoja
-    const targetRef = record?.data_referencia || dataReferencia
-    if (
-      targetLoja &&
-      targetLoja !== 'TODAS' &&
-      targetLoja !== 'NONE' &&
-      targetRef &&
-      targetRef !== 'TODAS' &&
-      targetRef !== 'NONE'
-    ) {
-      reconsolidarLojaReferencia(targetLoja, targetRef).catch((err) =>
-        console.warn('[Clientes] Falha ao reconsolidar agregados:', err),
-      )
-    }
+    triggerReconsolidacao(record)
   }
 
   // Handle date change with mask

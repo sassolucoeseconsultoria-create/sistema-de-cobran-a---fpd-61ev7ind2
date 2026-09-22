@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { matchStore, normalizeStoreString, simplifyStoreTokens } from './fpdService'
 import type { StoreRecord } from '@/types/fpd'
 
@@ -218,5 +218,72 @@ describe('saveFpdRecord - Accumulative updates regression', () => {
   it('saveFpdRecord supports accumulate flag in its parameter type and function signature', async () => {
     const { saveFpdRecord } = await import('./fpdService')
     expect(typeof saveFpdRecord).toBe('function')
+  })
+})
+
+describe('saveFpdRecord - Espaço residual do Excel e preservação de importado_em', () => {
+  it('busca registro tolerante a espaço residual ("08/09/2026 ") e preserva importado_em existente', async () => {
+    const { saveFpdRecord } = await import('./fpdService')
+    const clientModule = await import('@/lib/pocketbase/client')
+    const pb = clientModule.default
+
+    const existingFpd = {
+      id: 'existing-fpd-1',
+      store: 'store-alfa-id',
+      referente: '08/09/2026 ',
+      importado_em: '2026-09-08T10:00:00.000Z',
+      total_linhas: 10,
+      fatura_paga: 1,
+    }
+
+    const mockGetList = vi.fn().mockResolvedValue({
+      items: [existingFpd],
+      totalItems: 1,
+    })
+    const mockUpdate = vi
+      .fn()
+      .mockImplementation((_id, payload) => Promise.resolve({ id: existingFpd.id, ...payload }))
+    const mockCreate = vi.fn()
+
+    vi.spyOn(pb, 'collection').mockImplementation((name: string) => {
+      if (name === 'fpd_records') {
+        return {
+          getList: mockGetList,
+          update: mockUpdate,
+          create: mockCreate,
+        } as any
+      }
+      return {} as any
+    })
+
+    const result = await saveFpdRecord({
+      storeId: 'store-alfa-id',
+      referente: '08/09/2026',
+      total_linhas: 15,
+      fatura_paga: 3,
+      accumulate: false,
+    })
+
+    // Deve encontrar o registro existente e fazer UPDATE, sem criar novo duplicado
+    expect(mockGetList).toHaveBeenCalledWith(
+      1,
+      1,
+      expect.objectContaining({
+        filter: expect.stringContaining('(referente = "08/09/2026" || referente = "08/09/2026 ")'),
+      }),
+    )
+    expect(mockUpdate).toHaveBeenCalledWith(
+      'existing-fpd-1',
+      expect.objectContaining({
+        store: 'store-alfa-id',
+        referente: '08/09/2026',
+        importado_em: '2026-09-08T10:00:00.000Z',
+        total_linhas: 15,
+        fatura_paga: 3,
+      }),
+      expect.anything(),
+    )
+    expect(mockCreate).not.toHaveBeenCalled()
+    expect(result.id).toBe('existing-fpd-1')
   })
 })

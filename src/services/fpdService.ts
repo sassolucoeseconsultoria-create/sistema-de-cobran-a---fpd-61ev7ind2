@@ -104,13 +104,21 @@ export async function saveFpdRecord(data: {
   outros?: number
   accumulate?: boolean
 }): Promise<FpdRecord> {
+  const cleanRef = data.referente ? data.referente.trim() : ''
+
   // Check if a record already exists for this store + referente (if referente provided)
+  // Busca tolerante a espaço residual do Excel ("08/09/2026 ")
   let existingRecord: FpdRecord | null = null
-  if (data.referente) {
+  if (cleanRef) {
     try {
+      const escapedClean = cleanRef.replace(/"/g, '\\"')
+      const escapedWithTrailing = `${escapedClean} `
+      const filterClause = `store = "${data.storeId}" && (referente = "${escapedClean}" || referente = "${escapedWithTrailing}")`
+
       const existing = await executeWithRateLimitRetry(() =>
         pb.collection('fpd_records').getList<FpdRecord>(1, 1, {
-          filter: `store = "${data.storeId}" && referente = "${data.referente?.replace(/"/g, '\\"') || ''}"`,
+          filter: filterClause,
+          sort: '-importado_em,-created',
           requestKey: null,
         }),
       )
@@ -124,9 +132,14 @@ export async function saveFpdRecord(data: {
 
   const shouldAccumulate = data.accumulate === true && existingRecord !== null
 
-  const payload = {
+  // Preservar importado_em do registro existente (ou definir data atual para novo registro)
+  // para garantir a ordenação '-importado_em,-created'
+  const importadoEmValue = existingRecord?.importado_em || new Date().toISOString()
+
+  const payload: Record<string, unknown> = {
     store: data.storeId,
-    referente: data.referente?.trim() || '',
+    referente: cleanRef,
+    importado_em: importadoEmValue,
     total_linhas:
       toSafeInt(data.total_linhas) +
       (shouldAccumulate ? toSafeInt(existingRecord!.total_linhas) : 0),
