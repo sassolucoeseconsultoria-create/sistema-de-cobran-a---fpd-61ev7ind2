@@ -6,6 +6,8 @@ import pb from '@/lib/pocketbase/client'
 import { Arquivos } from '@/pages/Arquivos'
 import { Vendedores } from '@/pages/Vendedores'
 import { TopOfensores } from '@/pages/TopOfensores'
+import { Index } from '@/pages/Index'
+import * as fpdService from '@/services/fpdService'
 
 // Mock pocketbase
 vi.mock('@/lib/pocketbase/client', () => ({
@@ -336,29 +338,41 @@ describe('Integração de Filtros de Data de Referência por Perfil nas Telas', 
 
   it('Supervisor Jessica Virgens Barreto does not see 26/08/2026 in Index summary card or rows when it is disabled', async () => {
     // Jessica Virgens Barreto has role "Supervisor", 26/08/2026 is disabled (supervisor: false)
-    mockUserRole = 'Supervisor'
-    mockCurrentUser = {
+    const jessicaUser = {
       id: 'user-jessica',
+      collectionId: 'users',
+      collectionName: 'users',
       name: 'Jessica Virgens Barreto',
       email: 'jessicab376@gmail.com',
-      role: 'Supervisor',
+      role: 'Supervisor' as const,
+      lojas: ['store_1'],
+      created: '2025-01-01',
+      updated: '2025-01-01',
     }
 
+    vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+      user: jessicaUser,
+      token: 'token',
+      loading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshAuth: vi.fn(),
+    })
+
+    // Suppose in database there are only records for 26/08/2026
+    vi.mocked(fpdService.fetchDistinctReferenceDates).mockResolvedValue(['26/08/2026'])
     vi.mocked(fpdService.fetchFpdRecords).mockResolvedValue([
       {
         id: 'rec-1',
-        store: 'store-1',
-        store_name: 'Loja 1',
+        store: 'store_1',
         referente: '26/08/2026',
         total_linhas: 50,
         fatura_paga: 10,
         nao_tratados: 40,
         created: '2026-08-26',
         updated: '2026-08-26',
-        collectionId: 'fpd',
-        collectionName: 'fpd_records',
-      },
-    ] as any)
+      } as any,
+    ])
 
     render(
       <MemoryRouter>
@@ -370,10 +384,10 @@ describe('Integração de Filtros de Data de Referência por Perfil nas Telas', 
       expect(screen.queryByText('Carregando dados...')).toBeNull()
     })
 
-    // 26/08/2026 MUST NOT appear anywhere in the summary card (effectiveReferente)
+    // 26/08/2026 MUST NOT appear in the summary card (effectiveReferente)
     expect(screen.queryByText('Ref: 26/08/2026')).toBeNull()
     // 0 references allowed -> 'Nenhuma referência disponível'
-    expect(screen.getByText('Nenhuma referência disponível')).toBeInTheDocument()
+    expect(screen.getByText('Nenhuma referência disponível')).toBeDefined()
 
     // The option for 26/08/2026 must NOT be in the select dropdown
     const select = screen.getByTitle('Selecione a referência principal') as HTMLSelectElement
@@ -382,29 +396,28 @@ describe('Integração de Filtros de Data de Referência por Perfil nas Telas', 
   })
 
   it('ADM sees all reference dates including 26/08/2026 even when supervisor: false', async () => {
-    mockUserRole = 'ADM'
-    mockCurrentUser = {
-      id: 'user-adm',
-      name: 'Admin User',
-      email: 'adm@example.com',
-      role: 'ADM',
-    }
+    vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+      user: admUser,
+      token: 'token',
+      loading: false,
+      login: vi.fn(),
+      logout: vi.fn(),
+      refreshAuth: vi.fn(),
+    })
 
+    vi.mocked(fpdService.fetchDistinctReferenceDates).mockResolvedValue(['26/08/2026'])
     vi.mocked(fpdService.fetchFpdRecords).mockResolvedValue([
       {
         id: 'rec-1',
-        store: 'store-1',
-        store_name: 'Loja 1',
+        store: 'store_1',
         referente: '26/08/2026',
         total_linhas: 50,
         fatura_paga: 10,
         nao_tratados: 40,
         created: '2026-08-26',
         updated: '2026-08-26',
-        collectionId: 'fpd',
-        collectionName: 'fpd_records',
-      },
-    ] as any)
+      } as any,
+    ])
 
     render(
       <MemoryRouter>
@@ -417,6 +430,6 @@ describe('Integração de Filtros de Data de Referência por Perfil nas Telas', 
     })
 
     // ADM sees 26/08/2026
-    expect(screen.getByText('Ref: 26/08/2026')).toBeInTheDocument()
+    expect(screen.getByText('Ref: 26/08/2026')).toBeDefined()
   })
 })
