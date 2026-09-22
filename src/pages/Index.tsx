@@ -6,6 +6,7 @@ import {
   Filter,
   X,
   RotateCcw,
+  RefreshCw,
   UploadCloud,
   FileSpreadsheet,
   AlertCircle,
@@ -120,10 +121,19 @@ export const Index: React.FC = () => {
     return () => clearTimeout(timer)
   }, [search])
 
-  // Initial load
-  const loadData = async () => {
+  const isFetchingRef = React.useRef(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  // Carregamento de dados (inicial e refresh periódico)
+  const loadData = async (isSilent = false) => {
+    if (isFetchingRef.current) return
+    isFetchingRef.current = true
     try {
-      setLoading(true)
+      if (isSilent) {
+        setIsRefreshing(true)
+      } else {
+        setLoading(true)
+      }
       const [fetchedStores, fetchedRecords] = await Promise.all([fetchStores(), fetchFpdRecords()])
       setStores(fetchedStores)
       setRecords(fetchedRecords)
@@ -132,18 +142,33 @@ export const Index: React.FC = () => {
         return
       }
       console.error(err)
-      toast({
-        title: 'Erro ao carregar dados',
-        description: 'Não foi possível buscar as informações do consolidado.',
-        variant: 'destructive',
-      })
+      if (!isSilent) {
+        toast({
+          title: 'Erro ao carregar dados',
+          description: 'Não foi possível buscar as informações do consolidado.',
+          variant: 'destructive',
+        })
+      }
     } finally {
+      isFetchingRef.current = false
       setLoading(false)
+      setIsRefreshing(false)
     }
   }
 
   useEffect(() => {
-    loadData()
+    loadData(false)
+  }, [])
+
+  // Auto-refresh a cada 60 segundos
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      loadData(true)
+    }, 60000)
+
+    return () => {
+      clearInterval(intervalId)
+    }
   }, [])
 
   // Real-time subscriptions
@@ -544,7 +569,7 @@ export const Index: React.FC = () => {
             </div>
 
             {/* Selector: Data de Referência */}
-            <div className="w-full sm:w-auto">
+            <div className="w-full sm:w-auto flex items-center gap-2">
               <select
                 aria-label="Selecione a referência principal"
                 value={selectedReferenceDate}
@@ -571,6 +596,28 @@ export const Index: React.FC = () => {
                     : 'Sem referência'}
                 </option>
               </select>
+
+              {/* Indicador discreto de auto-refresh de 60s */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div
+                    aria-label="Atualização automática a cada 60s"
+                    className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-[11px] text-[#5B6B82] bg-[#F8FAFC] border border-[#E3E9F2] select-none cursor-default"
+                  >
+                    <RefreshCw
+                      className={cn(
+                        'w-3 h-3 text-[#0E9F8A]',
+                        isRefreshing && 'animate-spin text-[#0E9F8A]',
+                      )}
+                    />
+                    <span className="hidden sm:inline">Atualização automática a cada 60s</span>
+                    <span className="sm:hidden">60s</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  Painel sincronizado a cada 60 segundos com as ocorrências da Visão Inadimplência.
+                </TooltipContent>
+              </Tooltip>
             </div>
 
             {/* Filter Coordenação */}
