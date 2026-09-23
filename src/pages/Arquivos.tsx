@@ -71,7 +71,9 @@ export const Arquivos: React.FC = () => {
     allowedReferenceDates: availableReferenceDates,
     hasMultipleReferences,
     initialReferenceDate,
+    isRestrictedRole,
     isDateAllowed,
+    loading: loadingRefs,
   } = useAllowedReferenceDates()
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [records, setRecords] = useState<FpdRecord[]>([])
@@ -84,38 +86,58 @@ export const Arquivos: React.FC = () => {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selectedReferenceDate, setSelectedReferenceDate] = useState<string>('all')
   const [comparisonReferenceDate, setComparisonReferenceDate] = useState<string>('')
+  const initialRefSetRef = React.useRef(false)
 
-  // Efeito para sincronizar a data selecionada:
-  // - 0 permitidas -> fallback para 'none'
-  // - 1 permitida -> auto-seleção dela (sem opção 'all')
-  // - 2+ permitidas -> se a selecionada não for permitida nem 'none', cai para 'all'
+  // Sincronização e pré-seleção automática da data de referência:
+  // - Perfis restritos (Gerente, Supervisão, Coordenação):
+  //     * Carrega por padrão a referência habilitada mais recente (initialReferenceDate).
+  //     * Se 1 habilitada: seleciona automaticamente e sem opção 'all'.
+  //     * Se 0 habilitadas: define 'none'.
+  //     * Se múltiplas: pré-seleciona a mais recente habilitada.
+  // - ADM:
+  //     * Mantém 'all' como padrão (ou a única se houver só 1).
   useEffect(() => {
+    if (loadingRefs) return
+
+    // Pré-seleção inicial ao carregar
+    if (!initialRefSetRef.current) {
+      initialRefSetRef.current = true
+      setSelectedReferenceDate(initialReferenceDate)
+      return
+    }
+
     if (availableReferenceDates.length === 0) {
       if (selectedReferenceDate !== 'none') {
         setSelectedReferenceDate('none')
       }
     } else if (availableReferenceDates.length === 1) {
       const singleDate = availableReferenceDates[0]
-      if (
-        selectedReferenceDate === 'all' ||
-        (selectedReferenceDate !== singleDate && selectedReferenceDate !== 'none')
-      ) {
+      if (selectedReferenceDate !== singleDate) {
         setSelectedReferenceDate(singleDate)
       }
     } else if (availableReferenceDates.length >= 2) {
+      // Se a data selecionada não for permitida, reajusta
       if (
         selectedReferenceDate !== 'all' &&
         selectedReferenceDate !== 'none' &&
         !isDateAllowed(selectedReferenceDate)
       ) {
-        setSelectedReferenceDate('all')
+        setSelectedReferenceDate(isRestrictedRole ? availableReferenceDates[0] : 'all')
       }
     }
 
     if (comparisonReferenceDate && !isDateAllowed(comparisonReferenceDate)) {
       setComparisonReferenceDate('')
     }
-  }, [selectedReferenceDate, comparisonReferenceDate, availableReferenceDates, isDateAllowed])
+  }, [
+    loadingRefs,
+    selectedReferenceDate,
+    comparisonReferenceDate,
+    availableReferenceDates,
+    initialReferenceDate,
+    isRestrictedRole,
+    isDateAllowed,
+  ])
   const [selectedCoordenacoes, setSelectedCoordenacoes] = useState<string[]>([])
   const [selectedSupervisoes, setSelectedSupervisoes] = useState<string[]>([])
 
@@ -732,8 +754,8 @@ export const Arquivos: React.FC = () => {
               <span className="text-base sm:text-lg font-bold text-[#12365A]">
                 {effectiveReferente
                   ? `Ref: ${effectiveReferente}`
-                  : availableReferenceDates.length === 0
-                    ? 'Nenhuma referência disponível'
+                  : availableReferenceDates.length === 0 || selectedReferenceDate === 'none'
+                    ? 'Nenhuma referência habilitada'
                     : 'Nenhuma importada'}
               </span>
             </div>
@@ -940,11 +962,13 @@ export const Arquivos: React.FC = () => {
                     Referência: {date}
                   </option>
                 ))}
-                <option value="none">
-                  {availableReferenceDates.length === 0
-                    ? 'Nenhuma referência disponível'
-                    : 'Sem referência'}
-                </option>
+                {(availableReferenceDates.length === 0 || selectedReferenceDate === 'none') && (
+                  <option value="none">
+                    {availableReferenceDates.length === 0
+                      ? 'Nenhuma referência habilitada'
+                      : 'Sem referência'}
+                  </option>
+                )}
               </select>
 
               {/* Indicador discreto de auto-refresh de 60s */}
@@ -1489,15 +1513,15 @@ export const Arquivos: React.FC = () => {
                       <p className="font-semibold text-[#12365A]">
                         {userAccess.hasNoStoreAssigned
                           ? 'Nenhuma loja vinculada ao seu usuário'
-                          : availableReferenceDates.length === 0
-                            ? 'Nenhuma referência disponível para o seu perfil'
+                          : availableReferenceDates.length === 0 || selectedReferenceDate === 'none'
+                            ? 'Nenhuma referência habilitada para o seu perfil. Fale com a Coordenação.'
                             : 'Nenhuma loja encontrada'}
                       </p>
                       <p className="text-xs text-[#5B6B82]">
                         {userAccess.hasNoStoreAssigned
                           ? 'Solicite ao Administrador que vincule uma ou mais lojas ao seu perfil para visualizar os dados.'
-                          : availableReferenceDates.length === 0
-                            ? 'As datas de referência cadastradas estão desabilitadas para o seu perfil. Entre em contato com o Administrador.'
+                          : availableReferenceDates.length === 0 || selectedReferenceDate === 'none'
+                            ? 'As datas de referência cadastradas estão desabilitadas para o seu perfil no Controle de Apresentação. Entre em contato com a Coordenação.'
                             : stores.length === 0
                               ? 'Importe arquivos na aba Importar para gerar os dados do Painel de Lojas.'
                               : 'Tente ajustar os filtros de busca acima.'}

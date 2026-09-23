@@ -386,8 +386,8 @@ describe('Integração de Filtros de Data de Referência por Perfil nas Telas', 
 
     // 26/08/2026 MUST NOT appear in the summary card (effectiveReferente)
     expect(screen.queryByText('Ref: 26/08/2026')).toBeNull()
-    // 0 references allowed -> 'Nenhuma referência disponível'
-    expect(screen.getByText('Nenhuma referência disponível')).toBeDefined()
+    // 0 references allowed -> 'Nenhuma referência habilitada'
+    expect(screen.getByText('Nenhuma referência habilitada')).toBeDefined()
 
     // The option for 26/08/2026 must NOT be in the select dropdown
     const select = screen.getByTitle('Selecione a referência principal') as HTMLSelectElement

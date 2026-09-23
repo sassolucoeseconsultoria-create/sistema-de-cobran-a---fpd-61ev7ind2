@@ -696,10 +696,16 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
                   <td colSpan={15} className="py-16 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
                       <p className="font-bold text-[#12365A] text-sm">
-                        Nenhum cliente residencial encontrado.
+                        {dataReferencia === 'NONE' ||
+                        (!userAccess.isAdm && allowedReferenceDates.length === 0)
+                          ? 'Nenhuma referência habilitada para o seu perfil. Fale com a Coordenação.'
+                          : 'Nenhum cliente residencial encontrado.'}
                       </p>
                       <p className="text-xs text-[#5B6B82]">
-                        Importe uma planilha na aba analítica para popular a lista de clientes.
+                        {dataReferencia === 'NONE' ||
+                        (!userAccess.isAdm && allowedReferenceDates.length === 0)
+                          ? 'As datas de referência cadastradas estão desabilitadas para o seu perfil no Controle de Apresentação.'
+                          : 'Importe uma planilha na aba analítica para popular a lista de clientes.'}
                       </p>
                     </div>
                   </td>

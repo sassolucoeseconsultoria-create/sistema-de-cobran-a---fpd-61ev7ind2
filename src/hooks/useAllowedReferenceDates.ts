@@ -5,6 +5,7 @@ import {
   fetchReferenceDatePermissions,
   filterReferenceDatesForRole,
   isReferenceDateAllowedForRole,
+  sortReferenceDatesDesc,
 } from '@/services/referenceDatePermissionService'
 import { useRealtime } from '@/hooks/use-realtime'
 import type { ReferenceDatePermissionRecord } from '@/types/fpd'
@@ -24,11 +25,15 @@ export interface UseAllowedReferenceDatesResult {
   hasMultipleReferences: boolean
   /**
    * Data de referência padrão/inicial recomendada para o perfil:
-   * se houver 2+ referências, retorna o fallback agregado (ex.: 'all' ou 'TODAS');
-   * se houver exatamente 1 referência, retorna essa data única;
-   * se 0, retorna o fallback agregado.
+   * - ADM: 'all' (se 2+ referências) ou a única disponível, ou 'none' se 0.
+   * - Gerente, Supervisão e Coordenação: a referência habilitada mais recente (se 1+ habilitadas), ou 'none' se 0.
    */
   initialReferenceDate: string
+  /**
+   * Indica se o perfil do usuário logado é restrito por controle de apresentação
+   * (Gerente, Supervisor ou Coordenador).
+   */
+  isRestrictedRole: boolean
   /**
    * Permissões carregadas do backend
    */
@@ -105,17 +110,34 @@ export function useAllowedReferenceDates(): UseAllowedReferenceDatesResult {
   })
 
   const allowedReferenceDates = useMemo(() => {
-    return filterReferenceDatesForRole(allReferenceDates, role, permissions)
+    const filtered = filterReferenceDatesForRole(allReferenceDates, role, permissions)
+    return sortReferenceDatesDesc(filtered)
   }, [allReferenceDates, role, permissions])
 
   const hasMultipleReferences = allowedReferenceDates.length >= 2
 
+  const isRestrictedRole = Boolean(
+    role === 'Gerente' || role === 'Supervisor' || role === 'Coordenador',
+  )
+
   const initialReferenceDate = useMemo(() => {
+    if (allowedReferenceDates.length === 0) {
+      return 'none'
+    }
+
+    // Para Gerente, Supervisão e Coordenação:
+    // Já trazer carregado os dados na referência habilitada no Controle de Apresentação.
+    // Se houver 1 ou múltiplas, selecionar a mais recente entre as habilitadas.
+    if (isRestrictedRole) {
+      return allowedReferenceDates[0]
+    }
+
+    // Para ADM: se houver apenas 1 data, seleciona ela; se múltiplas, 'all'
     if (allowedReferenceDates.length === 1) {
       return allowedReferenceDates[0]
     }
     return 'all'
-  }, [allowedReferenceDates])
+  }, [allowedReferenceDates, isRestrictedRole])
 
   const isDateAllowed = useCallback(
     (dateStr: string | null | undefined) => {
@@ -129,6 +151,7 @@ export function useAllowedReferenceDates(): UseAllowedReferenceDatesResult {
     allowedReferenceDates,
     hasMultipleReferences,
     initialReferenceDate,
+    isRestrictedRole,
     permissions,
     loading,
     reload: load,

@@ -1,51 +1,40 @@
-import PocketBase, { ClientResponseError } from 'pocketbase'
+import PocketBase from 'pocketbase'
 
-const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
+export const AUTH_REDIRECT_KEY = 'auth_redirect'
+export const SESSION_EXPIRED_BANNER_KEY = 'session_expired_banner'
+
+export const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
 
-export const AUTH_REDIRECT_KEY = 'celnet_auth_redirect'
-export const SESSION_EXPIRED_BANNER_KEY = 'celnet_session_expired'
-
-export function isSessionExpiredError(error: unknown): boolean {
-  if (!error) return false
-  if (error instanceof ClientResponseError) {
-    return error.status === 401 || error.status === 403
+export function isSessionExpiredError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const anyErr = err as { status?: number; response?: { message?: string } }
+  if (anyErr.status === 401 || anyErr.status === 403) return true
+  if (
+    typeof anyErr.response?.message === 'string' &&
+    /token|expire|unauthor/i.test(anyErr.response.message)
+  ) {
+    return true
   }
-  const status = (error as { status?: number })?.status
-  if (status === 401 || status === 403) return true
-  const message = String((error as { message?: string })?.message || '').toLowerCase()
-  return (
-    message.includes('token expired') ||
-    message.includes('token is expired') ||
-    message.includes('session expired') ||
-    message.includes('the request requires valid user authorization token') ||
-    message.includes('unauthorized')
-  )
+  return false
 }
 
-export function handleSessionExpired(reason?: string): void {
+export function handleSessionExpired(message?: string): void {
+  pb.authStore.clear()
   try {
-    pb.authStore.clear()
     if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem(
-        SESSION_EXPIRED_BANNER_KEY,
-        reason || 'Sua sessão expirou. Faça login novamente.',
-      )
-      if (
-        window.location.pathname !== '/login' &&
-        !window.sessionStorage.getItem(AUTH_REDIRECT_KEY)
-      ) {
-        window.sessionStorage.setItem(
-          AUTH_REDIRECT_KEY,
-          window.location.pathname + window.location.search,
-        )
+      if (message) {
+        window.sessionStorage.setItem(SESSION_EXPIRED_BANNER_KEY, message)
+      }
+      const currentPath = window.location.pathname + window.location.search
+      if (currentPath && !currentPath.includes('/login')) {
+        window.sessionStorage.setItem(AUTH_REDIRECT_KEY, currentPath)
       }
       window.location.href = '/login'
     }
-  } catch {
-    // ignore
+  } catch (e) {
+    console.warn('[pocketbase] Falha ao redirecionar após expiração:', e)
   }
 }
 
-export { pb }
 export default pb

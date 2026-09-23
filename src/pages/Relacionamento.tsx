@@ -62,7 +62,13 @@ import type { MensagemClienteRecord, FaixaAtrasoMensagem } from '@/types/fpd'
 export const Relacionamento: React.FC = () => {
   const { toast } = useToast()
   const userAccess = useUserStoreAccess()
-  const { isDateAllowed } = useAllowedReferenceDates()
+  const {
+    allowedReferenceDates,
+    initialReferenceDate,
+    isRestrictedRole,
+    isDateAllowed,
+    loading: loadingRefs,
+  } = useAllowedReferenceDates()
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Clientes tab: 'movel' | 'residencial'
@@ -225,6 +231,10 @@ export const Relacionamento: React.FC = () => {
       distinctResDates.forEach((r) => {
         if (r.data_referencia && r.data_referencia.trim()) datesSet.add(r.data_referencia.trim())
       })
+      // Também incluir as datas de allowedReferenceDates
+      allowedReferenceDates.forEach((d) => {
+        if (d && d.trim()) datesSet.add(d.trim())
+      })
       const sortedDates = Array.from(datesSet).sort((a, b) => b.localeCompare(a))
       setRawAvailableDates(sortedDates)
     } catch (err) {
@@ -240,10 +250,35 @@ export const Relacionamento: React.FC = () => {
     loadInitialData()
   }, [loadInitialData])
 
-  // Filtrar availableDates pelas permissões do perfil do usuário logado
+  // Filtrar availableDates pelas permissões do perfil do usuário logado e garantir que contenha allowedReferenceDates
   const availableDates = useMemo(() => {
-    return rawAvailableDates.filter((d) => isDateAllowed(d))
-  }, [rawAvailableDates, isDateAllowed])
+    const set = new Set<string>()
+    rawAvailableDates.filter((d) => isDateAllowed(d)).forEach((d) => set.add(d.trim()))
+    allowedReferenceDates.forEach((d) => {
+      if (isDateAllowed(d)) set.add(d.trim())
+    })
+    // Se allowedReferenceDates tiver datas ordenadas, manter a união ordenada desc
+    return Array.from(set).sort((a, b) => {
+      const partsA = a.split('/')
+      const partsB = b.split('/')
+      if (partsA.length === 3 && partsB.length === 3) {
+        const dateA = new Date(
+          Number(partsA[2]),
+          Number(partsA[1]) - 1,
+          Number(partsA[0]),
+        ).getTime()
+        const dateB = new Date(
+          Number(partsB[2]),
+          Number(partsB[1]) - 1,
+          Number(partsB[0]),
+        ).getTime()
+        if (!isNaN(dateA) && !isNaN(dateB)) {
+          return dateB - dateA
+        }
+      }
+      return b.localeCompare(a)
+    })
+  }, [rawAvailableDates, isDateAllowed, allowedReferenceDates])
 
   // Build PB filter string for counting a collection based on store, profile and reference date
   const buildCountFilter = useCallback(
@@ -332,34 +367,55 @@ export const Relacionamento: React.FC = () => {
   )
 
   const hasMultipleReferences = availableDates.length >= 2
+  const initialRefSetRef = useRef(false)
 
   // Fallback e sincronização de data de referência:
-  // - 0 permitidas -> 'none' (ou vazio)
-  // - 1 permitida -> auto-seleção dela (sem opção TODAS)
-  // - 2+ permitidas -> se a selecionada não for permitida, cai para TODAS
+  // - Perfis restritos (Gerente, Supervisão, Coordenação):
+  //     * Ao abrir, pré-seleciona a referência habilitada mais recente (initialReferenceDate).
+  //     * Se 1 habilitada: seleciona automaticamente e NÃO exibe opção 'TODAS'.
+  //     * Se 0 habilitadas: define 'NONE'.
+  //     * Se múltiplas: pré-seleciona a mais recente habilitada.
+  // - ADM:
+  //     * Default 'TODAS' (ou a única disponível).
   useEffect(() => {
+    if (loadingRefs) return
+
+    if (!initialRefSetRef.current) {
+      initialRefSetRef.current = true
+      if (initialReferenceDate === 'none' || availableDates.length === 0) {
+        setSelectedDataReferencia('NONE')
+      } else if (isRestrictedRole) {
+        setSelectedDataReferencia(initialReferenceDate)
+      } else {
+        setSelectedDataReferencia(initialReferenceDate === 'all' ? 'TODAS' : initialReferenceDate)
+      }
+      return
+    }
+
     if (availableDates.length === 0) {
       if (selectedDataReferencia !== 'NONE') {
         setSelectedDataReferencia('NONE')
       }
     } else if (availableDates.length === 1) {
       const singleDate = availableDates[0]
-      if (
-        selectedDataReferencia === 'TODAS' ||
-        selectedDataReferencia === 'NONE' ||
-        selectedDataReferencia !== singleDate
-      ) {
+      if (selectedDataReferencia !== singleDate) {
         setSelectedDataReferencia(singleDate)
       }
     } else if (availableDates.length >= 2) {
-      if (
-        (selectedDataReferencia !== 'TODAS' && !isDateAllowed(selectedDataReferencia)) ||
-        selectedDataReferencia === 'NONE'
-      ) {
-        setSelectedDataReferencia('TODAS')
+      if (selectedDataReferencia !== 'TODAS' && selectedDataReferencia !== 'NONE') {
+        if (!isDateAllowed(selectedDataReferencia)) {
+          setSelectedDataReferencia(isRestrictedRole ? availableDates[0] : 'TODAS')
+        }
       }
     }
-  }, [selectedDataReferencia, availableDates, isDateAllowed])
+  }, [
+    loadingRefs,
+    selectedDataReferencia,
+    availableDates,
+    initialReferenceDate,
+    isRestrictedRole,
+    isDateAllowed,
+  ])
 
   // Filtered available lojas based on user profile and linked stores
   const availableLojas = useMemo(() => {
@@ -921,14 +977,17 @@ export const Relacionamento: React.FC = () => {
         {/* Counter Badge & Import Button */}
         <div className="flex flex-wrap items-center gap-3 shrink-0">
           {/* Active Reference Date selector */}
-          {availableDates.length > 0 ? (
+          {availableDates.length > 0 && selectedDataReferencia !== 'NONE' ? (
             <div className="flex items-center gap-1.5 bg-[#F8FAFC] border border-[#E3E9F2] rounded-lg px-2.5 py-1">
               <Calendar className="w-3.5 h-3.5 text-[#0E9F8A]" />
               <span className="text-[10px] font-bold uppercase tracking-wider text-[#5B6B82]">
                 Ref:
               </span>
               <Select value={selectedDataReferencia} onValueChange={setSelectedDataReferencia}>
-                <SelectTrigger className="h-7 text-xs border-0 bg-transparent shadow-none px-1 font-semibold text-[#12365A] focus:ring-0">
+                <SelectTrigger
+                  aria-label="Selecione a data de referência"
+                  className="h-7 text-xs border-0 bg-transparent shadow-none px-1 font-semibold text-[#12365A] focus:ring-0"
+                >
                   <SelectValue
                     placeholder={
                       hasMultipleReferences ? 'Todas as datas' : availableDates[0] || 'Selecione'
@@ -955,7 +1014,7 @@ export const Relacionamento: React.FC = () => {
               <span className="text-[10px] font-bold uppercase tracking-wider text-[#5B6B82]">
                 Ref:
               </span>
-              <span className="font-semibold text-slate-500">Nenhuma disponível</span>
+              <span className="font-semibold text-slate-500">Nenhuma referência habilitada</span>
             </div>
           )}
           <div className="px-3 py-1.5 rounded-lg bg-[#F8FAFC] border border-[#E3E9F2] text-right shadow-2xs">
@@ -1015,6 +1074,26 @@ export const Relacionamento: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Perfil restrito sem nenhuma data de referência habilitada no Controle de Apresentação */}
+      {!userAccess.isAdm && (availableDates.length === 0 || selectedDataReferencia === 'NONE') && (
+        <div
+          data-testid="no-reference-banner"
+          className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3 text-xs text-amber-900"
+        >
+          <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="font-bold text-sm text-amber-900">
+              Nenhuma referência habilitada para o seu perfil. Fale com a Coordenação.
+            </p>
+            <p className="text-amber-800">
+              As datas de referência cadastradas estão desabilitadas para o seu perfil no Controle
+              de Apresentação. Solicite à Coordenação a habilitação da data desejada para visualizar
+              os clientes de inadimplência.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Usuário sem loja vinculada (Gerente, Supervisor ou Coordenador) - aviso / estado vazio amigável */}
       {!userAccess.isAdm && userAccess.hasNoStoreAssigned && (

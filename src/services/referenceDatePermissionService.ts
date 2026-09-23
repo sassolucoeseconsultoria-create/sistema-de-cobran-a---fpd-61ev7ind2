@@ -12,6 +12,36 @@ export function normalizeReferenceDate(dateStr?: string | null): string {
 }
 
 /**
+ * Ordena datas de referência em ordem decrescente (da mais recente para a mais antiga).
+ * Suporta formatos DD/MM/YYYY, ISO YYYY-MM-DD e strings gerais.
+ */
+export function sortReferenceDatesDesc(dates: string[]): string[] {
+  return [...dates].sort((a, b) => {
+    const normA = normalizeReferenceDate(a)
+    const normB = normalizeReferenceDate(b)
+
+    const partsA = normA.split('/')
+    const partsB = normB.split('/')
+    if (partsA.length === 3 && partsB.length === 3) {
+      const dateA = new Date(Number(partsA[2]), Number(partsA[1]) - 1, Number(partsA[0])).getTime()
+      const dateB = new Date(Number(partsB[2]), Number(partsB[1]) - 1, Number(partsB[0])).getTime()
+      if (!isNaN(dateA) && !isNaN(dateB)) {
+        return dateB - dateA
+      }
+    }
+
+    // Tentar ISO YYYY-MM-DD
+    const isoA = Date.parse(normA)
+    const isoB = Date.parse(normB)
+    if (!isNaN(isoA) && !isNaN(isoB)) {
+      return isoB - isoA
+    }
+
+    return normB.localeCompare(normA)
+  })
+}
+
+/**
  * Busca todas as configurações de permissão de data de referência gravadas no PocketBase.
  */
 export async function fetchReferenceDatePermissions(): Promise<ReferenceDatePermissionRecord[]> {
