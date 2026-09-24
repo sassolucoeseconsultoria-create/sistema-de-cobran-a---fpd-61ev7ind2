@@ -36,6 +36,8 @@ import type { StoreRecord, ReferenceDatePermissionRecord } from '@/types/fpd'
 import { Switch } from '@/components/ui/switch'
 import { MessageSquare, Calendar } from 'lucide-react'
 import { AdminMensagensTab } from '@/components/AdminMensagensTab'
+import { AdminBotoesTab } from '@/components/AdminBotoesTab'
+import { ToggleLeft } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -81,7 +83,9 @@ export const Admin: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<'ALL' | UserRole>('ALL')
-  const [adminTab, setAdminTab] = useState<'usuarios' | 'datas' | 'mensagens'>('usuarios')
+  const [adminTab, setAdminTab] = useState<'usuarios' | 'datas' | 'mensagens' | 'botoes'>(
+    'usuarios',
+  )
 
   // Reference Date Permissions state
   const [refDates, setRefDates] = useState<string[]>([])
@@ -1016,8 +1020,28 @@ export const Admin: React.FC = () => {
             <MessageSquare className="w-4 h-4 text-[#0E9F8A]" />
             <span>Mensagens</span>
           </button>
+
+          {/* Nova aba: Botões e Ações (visível apenas para ADM) */}
+          {(currentUser?.role === 'ADM' || !currentUser) && (
+            <button
+              type="button"
+              onClick={() => setAdminTab('botoes')}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all',
+                adminTab === 'botoes'
+                  ? 'bg-white text-[#12365A] shadow-xs'
+                  : 'text-[#5B6B82] hover:text-[#12365A]',
+              )}
+            >
+              <ToggleLeft className="w-4 h-4 text-[#0E9F8A]" />
+              <span>Botões e Ações</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Conteúdo da Aba de Botões e Ações */}
+      {adminTab === 'botoes' && <AdminBotoesTab />}
 
       {/* Conteúdo da Aba de Mensagens */}
       {adminTab === 'mensagens' && <AdminMensagensTab />}

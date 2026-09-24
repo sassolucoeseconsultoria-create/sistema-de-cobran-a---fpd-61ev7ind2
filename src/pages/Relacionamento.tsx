@@ -44,7 +44,9 @@ import {
   clearAllAnalyticalRows,
 } from '@/services/relacionamentoService'
 import { getStoreVariants, buildStoreFilterClause, isSameStore } from '@/lib/storeMatchingUtils'
-import { Trash2 } from 'lucide-react'
+import { Trash2, Download } from 'lucide-react'
+import * as XLSX from 'xlsx'
+import { useButtonVisibility } from '@/hooks/useButtonVisibility'
 import { parseAnalyticalXlsxFile, ParsedAnalyticalFileData } from '@/lib/analyticalImportParser'
 import { guessStoreName } from '@/lib/xlsxParser'
 import { fetchStores, matchStore } from '@/services/fpdService'
@@ -89,6 +91,10 @@ export const Relacionamento: React.FC = () => {
   const [rawAvailableLojas, setRawAvailableLojas] = useState<string[]>([])
   const [rawAvailableDates, setRawAvailableDates] = useState<string[]>([])
   const [selectedDataReferencia, setSelectedDataReferencia] = useState<string>('TODAS')
+
+  // Clear dialog state
+  const { canShow } = useButtonVisibility('inadimplencia')
+  const [isExporting, setIsExporting] = useState(false)
 
   // Clear dialog state
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
@@ -929,6 +935,109 @@ export const Relacionamento: React.FC = () => {
     }
   }
 
+  const handleExportXlsx = async () => {
+    if (isExporting) return
+    try {
+      setIsExporting(true)
+      const collectionName = activeClientesTab === 'movel' ? 'movel' : 'residencial'
+      const filterParts: string[] = []
+
+      // Loja filter: respeitando os filtros atuais da tela (loja selecionada != "TODAS" -> loja ~ "...")
+      if (selectedLoja && selectedLoja !== 'TODAS') {
+        filterParts.push(`loja ~ "${selectedLoja.replace(/"/g, '\\"')}"`)
+      }
+
+      // Data de referência filter: (data_referencia selecionada != "TODAS" e != "NONE" -> data_referencia = "...")
+      if (
+        selectedDataReferencia &&
+        selectedDataReferencia !== 'TODAS' &&
+        selectedDataReferencia !== 'NONE'
+      ) {
+        filterParts.push(`data_referencia = "${selectedDataReferencia.replace(/"/g, '\\"')}"`)
+      }
+
+      const records = await pb.collection(collectionName).getFullList({
+        filter: filterParts.length > 0 ? filterParts.join(' && ') : undefined,
+        sort: '-created',
+      })
+
+      if (!records || records.length === 0) {
+        toast({
+          title: 'Nenhum registro encontrado',
+          description: 'Não há clientes para exportar com os filtros selecionados.',
+        })
+        return
+      }
+
+      // Preparar linhas para a planilha
+      const rows = records.map((r: any) => {
+        if (activeClientesTab === 'movel') {
+          return {
+            Loja: r.loja || '',
+            'Data Referência': r.data_referencia || '',
+            Cliente: r.cliente || '',
+            'CPF/CNPJ': r.cpf_cnpj || '',
+            'Conta / Contrato': r.conta || '',
+            Telefone: r.tel_contato || '',
+            'Dias Vencidos': r.dias_vencidos ?? '',
+            'Data Vencimento': r.data_vencimento || '',
+            Valor: r.valor ?? '',
+            Ocorrência: r.ocorrencia || '',
+            Status: r.status || '',
+            'Data Promessa': r.data_promessa_pagamento || '',
+            'Data Retorno': r.data_retorno || '',
+            Vendedor: r.vendedor || '',
+            Plano: r.plano || '',
+            Anotações: r.anotacoes || '',
+          }
+        } else {
+          return {
+            Loja: r.loja || '',
+            'Data Referência': r.data_referencia || '',
+            Cliente: r.cliente || '',
+            'CPF/CNPJ': r.cpf_cnpj || '',
+            Conta: r.conta || '',
+            Contrato: r.contrato || '',
+            Telefone: r.tel_contato || '',
+            'Dias Vencidos': r.dias_vencidos ?? '',
+            'Data Vencimento': r.data_vencimento || '',
+            Valor: r.valor ?? '',
+            Ocorrência: r.ocorrencia || '',
+            Status: r.status || '',
+            'Data Promessa': r.data_promessa_pagamento || '',
+            'Data Retorno': r.data_retorno || '',
+            Vendedor: r.vendedor || '',
+            Anotações: r.anotacoes || '',
+          }
+        }
+      })
+
+      const worksheet = XLSX.utils.json_to_sheet(rows)
+      const workbook = XLSX.utils.book_new()
+      const sheetName = activeClientesTab === 'movel' ? 'Clientes Móvel' : 'Clientes Residencial'
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName)
+
+      const dateStr = new Date().toISOString().slice(0, 10)
+      const filename = `inadimplencia_${activeClientesTab}_${dateStr}.xlsx`
+      XLSX.writeFile(workbook, filename)
+
+      toast({
+        title: 'Exportação concluída!',
+        description: `${records.length} registro(s) exportado(s) em ${filename}.`,
+      })
+    } catch (err: unknown) {
+      const e = err as Error
+      console.error('Erro ao exportar inadimplência:', e)
+      toast({
+        title: 'Erro na exportação',
+        description: e?.message || 'Falha ao gerar o arquivo .xlsx.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   // Summary counts of parsed files
   const importSummary = useMemo(() => {
     let movelCount = 0
@@ -1061,7 +1170,7 @@ export const Relacionamento: React.FC = () => {
             </Tooltip>
           )}
 
-          {userAccess.isAdm && (
+          {canShow('limpar_dados') && (
             <Button
               variant="outline"
               onClick={() => setClearDialogOpen(true)}
@@ -1070,6 +1179,19 @@ export const Relacionamento: React.FC = () => {
             >
               <Trash2 className="w-4 h-4 text-rose-500" />
               <span>Limpar Dados</span>
+            </Button>
+          )}
+
+          {canShow('exportar_xlsx') && (
+            <Button
+              variant="outline"
+              disabled={isExporting}
+              onClick={handleExportXlsx}
+              className="h-9 px-3 text-xs font-semibold text-[#12365A] border-[#E3E9F2] hover:bg-[#F3F6FA] shadow-xs gap-1.5 transition-all"
+              title="Exportar clientes da aba ativa (.xlsx)"
+            >
+              <Download className={cn('w-4 h-4 text-[#0E9F8A]', isExporting && 'animate-bounce')} />
+              <span>{isExporting ? 'Exportando...' : 'Exportar .xlsx'}</span>
             </Button>
           )}
         </div>
