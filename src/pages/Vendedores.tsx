@@ -56,11 +56,13 @@ import {
 import { cn } from '@/lib/utils'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
+import { useButtonVisibility } from '@/hooks/useButtonVisibility'
 import { isSessionExpiredError } from '@/lib/pocketbase/client'
 
 export const Vendedores: React.FC = () => {
   const { toast } = useToast()
   const userAccess = useUserStoreAccess()
+  const { canShow } = useButtonVisibility('ranking_vendedores')
   const {
     allowedReferenceDates: availableReferenceDates,
     hasMultipleReferences,
@@ -1003,10 +1005,10 @@ export const Vendedores: React.FC = () => {
             )}
           </div>
 
-          {/* Right Action Buttons - Visíveis apenas para o perfil ADM (ocultos para Gerente, Supervisor e Coordenador) */}
-          {userAccess.isAdm && (
+          {/* Right Action Buttons - Visibilidade parametrizada por perfil */}
+          {(canShow('limpar_vendedores') || canShow('exportar_xlsx')) && (
             <div className="flex items-center gap-2 shrink-0">
-              {records.length > 0 && (
+              {canShow('limpar_vendedores') && records.length > 0 && (
                 <Button
                   onClick={() => setClearDialogOpen(true)}
                   variant="outline"
@@ -1017,14 +1019,16 @@ export const Vendedores: React.FC = () => {
                 </Button>
               )}
 
-              <Button
-                onClick={handleExportXlsx}
-                variant="outline"
-                className="h-9 border-[#E3E9F2] text-[#12365A] hover:bg-[#F3F6FA] font-medium text-xs sm:text-sm gap-2"
-              >
-                <Download className="w-4 h-4 text-[#0E9F8A]" />
-                <span>Exportar .xlsx</span>
-              </Button>
+              {canShow('exportar_xlsx') && (
+                <Button
+                  onClick={handleExportXlsx}
+                  variant="outline"
+                  className="h-9 border-[#E3E9F2] text-[#12365A] hover:bg-[#F3F6FA] font-medium text-xs sm:text-sm gap-2"
+                >
+                  <Download className="w-4 h-4 text-[#0E9F8A]" />
+                  <span>Exportar .xlsx</span>
+                </Button>
+              )}
             </div>
           )}
         </div>
