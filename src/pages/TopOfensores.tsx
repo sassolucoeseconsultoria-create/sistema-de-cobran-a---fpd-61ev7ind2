@@ -31,12 +31,14 @@ import {
 import { cn } from '@/lib/utils'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
+import { useButtonVisibility } from '@/hooks/useButtonVisibility'
 import { isSessionExpiredError } from '@/lib/pocketbase/client'
 import { isSameStore } from '@/lib/storeMatchingUtils'
 
 export const TopOfensores: React.FC = () => {
   const { toast } = useToast()
   const userAccess = useUserStoreAccess()
+  const { canShow } = useButtonVisibility('top_ofensores')
   const {
     allowedReferenceDates: availableReferenceDates,
     hasMultipleReferences,
@@ -693,8 +695,8 @@ export const TopOfensores: React.FC = () => {
             )}
           </div>
 
-          {/* Right Action Buttons - Visível apenas para o perfil ADM (oculto para Gerente, Supervisor e Coordenador) */}
-          {userAccess.isAdm && (
+          {/* Right Action Buttons - Visibilidade parametrizada por perfil */}
+          {canShow('exportar_principais_ofensores') && (
             <div className="flex items-center gap-2 shrink-0">
               <Button
                 onClick={handleExportXlsx}
