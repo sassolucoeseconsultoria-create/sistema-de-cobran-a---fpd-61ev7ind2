@@ -71,6 +71,21 @@ export function buildConsolidatedRow(
     return (r.referente || '').trim() === normalizedFilter
   })
 
+  // Se houver múltiplos registros para a mesma loja e referência (ex.: importações acumuladas
+  // ou duplicatas residuais no banco), garantir desempate determinístico pelo registro
+  // MAIS RECENTE por updated > importado_em > created, evitando exibir dados obsoletos/stale.
+  if (storeRecords.length > 1) {
+    storeRecords.sort((a, b) => {
+      const getTimestamp = (r: FpdRecord) => {
+        const d = r.updated || r.importado_em || r.created
+        if (!d) return 0
+        const t = new Date(d).getTime()
+        return Number.isNaN(t) ? 0 : t
+      }
+      return getTimestamp(b) - getTimestamp(a)
+    })
+  }
+
   const latest = storeRecords[0]
   if (!latest) {
     return createEmptyConsolidatedRow(store)

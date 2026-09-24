@@ -286,7 +286,13 @@ export const Arquivos: React.FC = () => {
     if (e.action === 'create') {
       setRecords((prev) => [e.record, ...prev.filter((r) => r.id !== e.record.id)])
     } else if (e.action === 'update') {
-      setRecords((prev) => prev.map((r) => (r.id === e.record.id ? e.record : r)))
+      setRecords((prev) => {
+        const found = prev.some((r) => r.id === e.record.id)
+        if (found) {
+          return prev.map((r) => (r.id === e.record.id ? e.record : r))
+        }
+        return [e.record, ...prev]
+      })
     } else if (e.action === 'delete') {
       setRecords((prev) => prev.filter((r) => r.id !== e.record.id))
     }

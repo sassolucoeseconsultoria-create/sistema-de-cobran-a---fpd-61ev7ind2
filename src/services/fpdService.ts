@@ -64,7 +64,7 @@ export async function findStoreByName(
 export async function fetchFpdRecords(): Promise<FpdRecord[]> {
   return await executeWithRateLimitRetry(() =>
     pb.collection('fpd_records').getFullList<FpdRecord>({
-      sort: '-importado_em,-created',
+      sort: '-updated,-importado_em,-created',
       expand: 'store',
       requestKey: null,
     }),
@@ -75,7 +75,7 @@ export async function fetchFpdRecordsByStore(storeId: string): Promise<FpdRecord
   return await executeWithRateLimitRetry(() =>
     pb.collection('fpd_records').getFullList<FpdRecord>({
       filter: `store = "${storeId}"`,
-      sort: '-importado_em,-created',
+      sort: '-updated,-importado_em,-created',
       requestKey: null,
     }),
   )
@@ -118,7 +118,7 @@ export async function saveFpdRecord(data: {
       const existing = await executeWithRateLimitRetry(() =>
         pb.collection('fpd_records').getList<FpdRecord>(1, 1, {
           filter: filterClause,
-          sort: '-importado_em,-created',
+          sort: '-updated,-importado_em,-created',
           requestKey: null,
         }),
       )
@@ -132,9 +132,11 @@ export async function saveFpdRecord(data: {
 
   const shouldAccumulate = data.accumulate === true && existingRecord !== null
 
-  // Preservar importado_em do registro existente (ou definir data atual para novo registro)
-  // para garantir a ordenação '-importado_em,-created'
-  const importadoEmValue = existingRecord?.importado_em || new Date().toISOString()
+  // Atualizar importado_em com a data corrente ao re-salvar/reconsolidar
+  // para que qualquer leitura ou ordenação stale reflita o momento da consolidação
+  const nowIso = new Date().toISOString()
+  const importadoEmValue =
+    data.accumulate === true && existingRecord?.importado_em ? existingRecord.importado_em : nowIso
 
   const payload: Record<string, unknown> = {
     store: data.storeId,
