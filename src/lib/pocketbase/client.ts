@@ -1,7 +1,9 @@
 import PocketBase, { ClientResponseError } from 'pocketbase'
 
-const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
+export const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
 pb.autoCancellation(false)
+
+export default pb
 
 export const AUTH_REDIRECT_KEY = 'fpd_auth_redirect_after_login'
 export const SESSION_EXPIRED_BANNER_KEY = 'fpd_session_expired_banner_notice'
@@ -69,5 +71,3 @@ export function handleSessionExpired(reason?: string): void {
     window.location.assign('/login')
   }
 }
-
-export default pb
