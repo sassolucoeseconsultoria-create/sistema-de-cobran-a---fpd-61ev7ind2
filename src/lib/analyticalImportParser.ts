@@ -86,6 +86,7 @@ export const KNOWN_RESIDENCIAL_FIELDS = new Set<string>([
   'loja',
   'vendedor',
   'ocorrencias',
+  'data_envio_fatura',
   'data_promessa_de_pagto',
   'comentarios',
 ])

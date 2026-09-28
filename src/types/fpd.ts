@@ -48,6 +48,7 @@ export interface MovelRecord extends RecordModel {
   cliente?: string
   dados?: Record<string, unknown>
   ocorrencias?: string
+  data_envio_fatura?: string
   data_promessa_de_pagto?: string
   comentarios?: string
   data_referencia?: string
@@ -108,6 +109,7 @@ export interface ResidencialRecord extends RecordModel {
   cpf?: string
   fone?: string
   ocorrencias?: string
+  data_envio_fatura?: string
   data_promessa_de_pagto?: string
   comentarios?: string
   data_referencia?: string
@@ -122,6 +124,7 @@ export interface UnifiedAnalyticRecord extends RecordModel {
   cliente?: string
   dados?: Record<string, unknown>
   ocorrencias?: string
+  data_envio_fatura?: string
   data_promessa_de_pagto?: string
   comentarios?: string
   data_referencia?: string

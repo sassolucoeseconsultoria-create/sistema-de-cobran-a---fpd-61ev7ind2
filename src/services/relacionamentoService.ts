@@ -406,6 +406,7 @@ export interface MovelInsertItem {
   cliente?: string
   dados?: Record<string, unknown>
   ocorrencias?: string
+  data_envio_fatura?: string
   data_promessa_de_pagto?: string
   comentarios?: string
   data_referencia?: string
@@ -416,6 +417,7 @@ interface ExistingRecordManualInfo {
   arquivo?: string
   linha?: number
   ocorrencias?: string
+  data_envio_fatura?: string
   data_promessa_de_pagto?: string
   comentarios?: string
   dedupKey?: string
@@ -484,7 +486,7 @@ async function fetchExistingRecordsForDeduplication(
           }>(page, perPage, {
             filter,
             fields:
-              'id,arquivo,linha,dados,nr_contrato,ocorrencias,data_promessa_de_pagto,comentarios,data_referencia',
+              'id,arquivo,linha,dados,nr_contrato,ocorrencias,data_envio_fatura,data_promessa_de_pagto,comentarios,data_referencia',
             requestKey: null,
           }),
         5,
@@ -503,6 +505,7 @@ async function fetchExistingRecordsForDeduplication(
           arquivo: item.arquivo,
           linha: item.linha,
           ocorrencias: item.ocorrencias || '',
+          data_envio_fatura: (item as any).data_envio_fatura || '',
           data_promessa_de_pagto: item.data_promessa_de_pagto || '',
           comentarios: item.comentarios || '',
           dedupKey,
@@ -575,10 +578,11 @@ export function deduplicateMovelBatchItems(rows: MovelInsertItem[]): MovelInsert
     if (compositeKey) {
       const existing = dedupMap.get(compositeKey)
       if (existing) {
-        // Mesclar preservando ocorrências/promessa/comentários se já preenchidos no anterior
+        // Mesclar preservando ocorrências/envio_fatura/promessa/comentários se já preenchidos no anterior
         const merged: MovelInsertItem = {
           ...item,
           ocorrencias: (item.ocorrencias || existing.ocorrencias || '').trim(),
+          data_envio_fatura: item.data_envio_fatura || existing.data_envio_fatura || '',
           data_promessa_de_pagto:
             item.data_promessa_de_pagto || existing.data_promessa_de_pagto || '',
           comentarios: item.comentarios || existing.comentarios || '',
@@ -624,6 +628,12 @@ export function deduplicateResidencialBatchItems(
             existing.typedFields?.ocorrencias ||
             ''
           ).trim(),
+          data_envio_fatura:
+            item.data_envio_fatura ||
+            item.typedFields?.data_envio_fatura ||
+            existing.data_envio_fatura ||
+            existing.typedFields?.data_envio_fatura ||
+            '',
           data_promessa_de_pagto:
             item.data_promessa_de_pagto ||
             item.typedFields?.data_promessa_de_pagto ||
@@ -706,6 +716,7 @@ export async function insertMovelBatch(
 
     // Preserve manual fields from existing record if not explicitly provided in new item
     const preservedOcorrencias = (existingRecord?.ocorrencias || item.ocorrencias || '').trim()
+    const preservedEnvioFatura = item.data_envio_fatura || existingRecord?.data_envio_fatura || ''
     const preservedPromessa =
       item.data_promessa_de_pagto || existingRecord?.data_promessa_de_pagto || ''
     const preservedComentarios = item.comentarios || existingRecord?.comentarios || ''
@@ -718,6 +729,7 @@ export async function insertMovelBatch(
       cliente: item.cliente?.trim() || '',
       dados: item.dados || {},
       ocorrencias: preservedOcorrencias,
+      data_envio_fatura: preservedEnvioFatura,
       data_promessa_de_pagto: preservedPromessa,
       comentarios: preservedComentarios,
       data_referencia: refKey,
@@ -745,6 +757,7 @@ export async function insertMovelBatch(
             arquivo: fileKey,
             linha: item.linha,
             ocorrencias: preservedOcorrencias,
+            data_envio_fatura: preservedEnvioFatura,
             data_promessa_de_pagto: preservedPromessa,
             comentarios: preservedComentarios,
             dedupKey: businessKey,
@@ -757,6 +770,7 @@ export async function insertMovelBatch(
             arquivo: fileKey,
             linha: item.linha,
             ocorrencias: preservedOcorrencias,
+            data_envio_fatura: preservedEnvioFatura,
             data_promessa_de_pagto: preservedPromessa,
             comentarios: preservedComentarios,
           })
@@ -809,6 +823,7 @@ export interface ResidencialInsertItem {
   typedFields?: Record<string, string>
   nr_contrato?: string
   ocorrencias?: string
+  data_envio_fatura?: string
   data_promessa_de_pagto?: string
   comentarios?: string
   data_referencia?: string
@@ -871,6 +886,9 @@ export async function insertResidencialBatch(
     const typedOcorrencias = item.typedFields?.ocorrencias || item.ocorrencias
     const preservedOcorrencias = (existingRecord?.ocorrencias || typedOcorrencias || '').trim()
 
+    const typedEnvioFatura = item.typedFields?.data_envio_fatura || item.data_envio_fatura
+    const preservedEnvioFatura = typedEnvioFatura || existingRecord?.data_envio_fatura || ''
+
     const typedPromessa = item.typedFields?.data_promessa_de_pagto || item.data_promessa_de_pagto
     const preservedPromessa = typedPromessa || existingRecord?.data_promessa_de_pagto || ''
 
@@ -886,6 +904,7 @@ export async function insertResidencialBatch(
       dados: item.dados || {},
       ...(item.typedFields || {}),
       ocorrencias: preservedOcorrencias,
+      data_envio_fatura: preservedEnvioFatura,
       data_promessa_de_pagto: preservedPromessa,
       comentarios: preservedComentarios,
       data_referencia: refKey,
@@ -914,6 +933,7 @@ export async function insertResidencialBatch(
             arquivo: fileKey,
             linha: item.linha,
             ocorrencias: preservedOcorrencias,
+            data_envio_fatura: preservedEnvioFatura,
             data_promessa_de_pagto: preservedPromessa,
             comentarios: preservedComentarios,
             dedupKey: businessKey,
@@ -926,6 +946,7 @@ export async function insertResidencialBatch(
             arquivo: fileKey,
             linha: item.linha,
             ocorrencias: preservedOcorrencias,
+            data_envio_fatura: preservedEnvioFatura,
             data_promessa_de_pagto: preservedPromessa,
             comentarios: preservedComentarios,
           })
@@ -969,12 +990,17 @@ export async function insertResidencialBatch(
 }
 
 /**
- * Update manual fields (ocorrencias, data_promessa_de_pagto and comentarios) for a single row in 'movel' or 'residencial'.
+ * Update manual fields (ocorrencias, data_envio_fatura, data_promessa_de_pagto and comentarios) for a single row in 'movel' or 'residencial'.
  */
 export async function updateClientManualFields(
   id: string,
   aba: RelacionamentoAba,
-  fields: { ocorrencias?: string; data_promessa_de_pagto?: string; comentarios?: string },
+  fields: {
+    ocorrencias?: string
+    data_envio_fatura?: string
+    data_promessa_de_pagto?: string
+    comentarios?: string
+  },
 ): Promise<boolean> {
   const collectionName = aba === 'Móvel' ? 'movel' : 'residencial'
   return await executeWithRetry(

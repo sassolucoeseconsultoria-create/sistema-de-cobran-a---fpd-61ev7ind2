@@ -28,8 +28,10 @@ import { OCORRENCIAS_OPTIONS, type ResidencialRecord, type OcorrenciaType } from
 import {
   applyDateMask,
   formatCpf,
-  formatExcelOrIsoDateShort,
   formatPhone,
+  formatExcelOrIsoDate,
+  formatExcelOrIsoDateShort,
+  isValidDateDDMMAAAA,
   getDadosField,
 } from '@/lib/clientFormatters'
 import {
@@ -87,8 +89,17 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
   )
 
   // Inline edit state
+  // key: recordId -> { ocorrencias, data_envio_fatura, data_promessa_de_pagto, comentarios }
   const [editValues, setEditValues] = useState<
-    Record<string, { ocorrencias: string; data_promessa_de_pagto: string; comentarios: string }>
+    Record<
+      string,
+      {
+        ocorrencias: string
+        data_envio_fatura: string
+        data_promessa_de_pagto: string
+        comentarios: string
+      }
+    >
   >({})
   const [savingRecordId, setSavingRecordId] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<Record<string, 'saved' | 'error' | 'saving'>>({})
@@ -277,12 +288,18 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
       // Initialize edit values
       const initialEdits: Record<
         string,
-        { ocorrencias: string; data_promessa_de_pagto: string; comentarios: string }
+        {
+          ocorrencias: string
+          data_envio_fatura: string
+          data_promessa_de_pagto: string
+          comentarios: string
+        }
       > = {}
       sortedItems.forEach((item) => {
         const itemOcorrencia = item.ocorrencias || 'Não Tratados'
         initialEdits[item.id] = {
           ocorrencias: itemOcorrencia,
+          data_envio_fatura: formatExcelOrIsoDate(item.data_envio_fatura || ''),
           data_promessa_de_pagto: item.data_promessa_de_pagto || '',
           comentarios: item.comentarios || '',
         }
@@ -324,6 +341,7 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
     id: string,
     overrideFields?: Partial<{
       ocorrencias: string
+      data_envio_fatura: string
       data_promessa_de_pagto: string
       comentarios: string
     }>,
@@ -331,6 +349,7 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
     const currentEdit = {
       ...(editValues[id] || {
         ocorrencias: 'Não Tratados',
+        data_envio_fatura: '',
         data_promessa_de_pagto: '',
         comentarios: '',
       }),
@@ -340,13 +359,40 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
     const originalRecord = records.find((r) => r.id === id)
     if (!originalRecord) return
 
+    // Validação da DATA ENVIO FATURA: se preenchida, deve estar no formato DD/MM/AAAA válido
+    const envioTrimmed = (currentEdit.data_envio_fatura || '').trim()
+    if (envioTrimmed && !isValidDateDDMMAAAA(envioTrimmed)) {
+      toast({
+        title: 'Data inválida',
+        description: 'Informe uma data válida no formato DD/MM/AAAA para Data Envio Fatura.',
+        variant: 'destructive',
+      })
+      // Restaura o valor anterior no editValues para não deixar em estado inconsistente
+      const origEnvio = formatExcelOrIsoDate(originalRecord.data_envio_fatura || '')
+      setEditValues((prev) => ({
+        ...prev,
+        [id]: {
+          ...(prev[id] || {
+            ocorrencias: 'Não Tratados',
+            data_envio_fatura: '',
+            data_promessa_de_pagto: '',
+            comentarios: '',
+          }),
+          data_envio_fatura: origEnvio,
+        },
+      }))
+      return
+    }
+
     const origOcorrencias = originalRecord.ocorrencias || 'Não Tratados'
+    const origEnvioFatura = formatExcelOrIsoDate(originalRecord.data_envio_fatura || '')
     const origPromessa = originalRecord.data_promessa_de_pagto || ''
     const origComentarios = originalRecord.comentarios || ''
 
     // If unchanged, skip save
     if (
       origOcorrencias === (currentEdit.ocorrencias || 'Não Tratados') &&
+      origEnvioFatura === (currentEdit.data_envio_fatura || '') &&
       origPromessa === (currentEdit.data_promessa_de_pagto || '') &&
       origComentarios === (currentEdit.comentarios || '')
     ) {
@@ -359,6 +405,7 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
     try {
       await updateClientManualFields(id, 'Residencial', {
         ocorrencias: currentEdit.ocorrencias,
+        data_envio_fatura: currentEdit.data_envio_fatura,
         data_promessa_de_pagto: currentEdit.data_promessa_de_pagto,
         comentarios: currentEdit.comentarios,
       })
@@ -373,6 +420,7 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
             ? {
                 ...r,
                 ocorrencias: currentEdit.ocorrencias,
+                data_envio_fatura: currentEdit.data_envio_fatura,
                 data_promessa_de_pagto: currentEdit.data_promessa_de_pagto,
                 comentarios: currentEdit.comentarios,
               }
@@ -476,6 +524,7 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
       [id]: {
         ...(prev[id] || {
           ocorrencias: 'Não Tratados',
+          data_envio_fatura: '',
           data_promessa_de_pagto: '',
           comentarios: '',
         }),
@@ -488,13 +537,35 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
     triggerReconsolidacao(record)
   }
 
-  // Handle date change with mask
+  // Handle data_envio_fatura change with mask
+  const handleDataEnvioFaturaChange = (id: string, rawVal: string) => {
+    const masked = applyDateMask(rawVal)
+    setEditValues((prev) => ({
+      ...prev,
+      [id]: {
+        ...(prev[id] || {
+          ocorrencias: 'Não Tratados',
+          data_envio_fatura: '',
+          data_promessa_de_pagto: '',
+          comentarios: '',
+        }),
+        data_envio_fatura: masked,
+      },
+    }))
+  }
+
+  // Handle date change with mask (data promessa)
   const handleDateChange = (id: string, rawVal: string) => {
     const masked = applyDateMask(rawVal)
     setEditValues((prev) => ({
       ...prev,
       [id]: {
-        ...(prev[id] || { ocorrencias: 'Não Tratados', comentarios: '' }),
+        ...(prev[id] || {
+          ocorrencias: 'Não Tratados',
+          data_envio_fatura: '',
+          data_promessa_de_pagto: '',
+          comentarios: '',
+        }),
         data_promessa_de_pagto: masked,
       },
     }))
@@ -505,7 +576,12 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
     setEditValues((prev) => ({
       ...prev,
       [id]: {
-        ...(prev[id] || { ocorrencias: 'Não Tratados', data_promessa_de_pagto: '' }),
+        ...(prev[id] || {
+          ocorrencias: 'Não Tratados',
+          data_envio_fatura: '',
+          data_promessa_de_pagto: '',
+          comentarios: '',
+        }),
         comentarios: val,
       },
     }))
@@ -674,6 +750,9 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
                   Ocorrências
                 </th>
                 <th className="px-3.5 py-3.5 min-w-[170px] text-center border-r border-[#1e456f]">
+                  DATA ENVIO FATURA
+                </th>
+                <th className="px-3.5 py-3.5 min-w-[170px] text-center border-r border-[#1e456f]">
                   Data Promessa de Pagto
                 </th>
                 <th className="px-3.5 py-3.5 min-w-[240px] text-center">Comentários</th>
@@ -682,7 +761,7 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
             <tbody className="divide-y divide-[#E3E9F2]">
               {loading ? (
                 <tr>
-                  <td colSpan={15} className="py-16 text-center text-[#5B6B82]">
+                  <td colSpan={16} className="py-16 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <div className="w-7 h-7 border-2 border-[#0E9F8A] border-t-transparent rounded-full animate-spin" />
                       <span className="text-xs sm:text-sm">
@@ -693,7 +772,7 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
                 </tr>
               ) : records.length === 0 ? (
                 <tr>
-                  <td colSpan={15} className="py-16 text-center text-[#5B6B82]">
+                  <td colSpan={16} className="py-16 text-center text-[#5B6B82]">
                     <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
                       <p className="font-bold text-[#12365A] text-sm">
                         {dataReferencia === 'NONE' ||
@@ -810,6 +889,7 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
 
                   const edit = editValues[row.id] || {
                     ocorrencias: row.ocorrencias || 'Não Tratados',
+                    data_envio_fatura: formatExcelOrIsoDate(row.data_envio_fatura || ''),
                     data_promessa_de_pagto: row.data_promessa_de_pagto || '',
                     comentarios: row.comentarios || '',
                   }
@@ -979,6 +1059,38 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
                                 )}
                             </SelectContent>
                           </Select>
+                        </div>
+                      </td>
+
+                      {/* DATA ENVIO FATURA (Editable Mask) */}
+                      <td className="px-3.5 py-2.5 border-r border-[#E3E9F2]">
+                        <div className="relative flex items-center">
+                          <Calendar className="w-3.5 h-3.5 text-[#8A97AC] absolute left-2 pointer-events-none" />
+                          <Input
+                            type="text"
+                            placeholder="DD/MM/AAAA"
+                            value={edit.data_envio_fatura}
+                            onChange={(e) => handleDataEnvioFaturaChange(row.id, e.target.value)}
+                            onBlur={() => handleSaveField(row.id)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSaveField(row.id)}
+                            disabled={isSavingThis}
+                            maxLength={10}
+                            className={cn(
+                              'h-8 pl-7 pr-7 text-xs font-mono bg-white border-[#E3E9F2] focus:border-[#0E9F8A] transition-all',
+                              edit.data_envio_fatura && 'font-semibold text-[#12365A]',
+                              rowStatus === 'saved' && 'border-green-500 bg-green-50/30',
+                              rowStatus === 'error' && 'border-red-500 bg-red-50/30',
+                            )}
+                          />
+                          {rowStatus === 'saving' && (
+                            <RefreshCw className="w-3.5 h-3.5 text-[#0E9F8A] animate-spin absolute right-2 pointer-events-none" />
+                          )}
+                          {rowStatus === 'saved' && (
+                            <CheckCircle2 className="w-3.5 h-3.5 text-green-600 absolute right-2 pointer-events-none" />
+                          )}
+                          {rowStatus === 'error' && (
+                            <AlertCircle className="w-3.5 h-3.5 text-red-600 absolute right-2 pointer-events-none" />
+                          )}
                         </div>
                       </td>
 

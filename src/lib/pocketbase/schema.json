@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-24T19:41:58.421Z",
+  "generatedAt": "2026-09-28T13:52:23.692Z",
   "collections": [
     {
       "name": "users",
@@ -729,6 +729,12 @@
           "type": "text",
           "required": false,
           "system": false
+        },
+        {
+          "name": "data_envio_fatura",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -1092,6 +1098,12 @@
         },
         {
           "name": "data_referencia",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_envio_fatura",
           "type": "text",
           "required": false,
           "system": false

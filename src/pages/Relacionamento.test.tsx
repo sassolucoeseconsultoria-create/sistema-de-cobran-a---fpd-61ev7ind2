@@ -72,6 +72,17 @@ vi.mock('@/services/mensagensService', () => {
   }
 })
 
+// Mock xlsx
+vi.mock('xlsx', () => {
+  return {
+    utils: {
+      json_to_sheet: vi.fn().mockReturnValue({}),
+      book_new: vi.fn().mockReturnValue({}),
+      book_append_sheet: vi.fn(),
+    },
+    writeFile: vi.fn(),
+  }
+})
 // Mock fpdService
 vi.mock('@/services/fpdService', () => {
   return {
@@ -552,6 +563,77 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
           screen.getByText('Nenhuma mensagem cadastrada para esta faixa de atraso'),
         ).toBeDefined()
       })
+    })
+  })
+
+  describe('Exportação .xlsx com DATA ENVIO FATURA', () => {
+    it('inclui a coluna DATA ENVIO FATURA com data formatada DD/MM/AAAA na exportação de Móvel', async () => {
+      const XLSX = await import('xlsx')
+      const user = userEvent.setup()
+
+      const mockMovelFullList = [
+        {
+          id: 'm_exp1',
+          loja: 'CELNET AGUAS CLARA',
+          cliente: 'Cliente Exportacao 1',
+          data_referencia: '10/08/2026',
+          ocorrencias: 'Enviado Fatura(s)',
+          data_envio_fatura: '2026-08-26',
+          data_promessa_de_pagto: '28/08/2026',
+          vendedor: 'Vendedor Exp',
+          comentarios: 'Obs',
+          dados: {},
+        },
+        {
+          id: 'm_exp2',
+          loja: 'CELNET AGUAS CLARA',
+          cliente: 'Cliente Exportacao 2',
+          data_referencia: '10/08/2026',
+          ocorrencias: 'Não Tratados',
+          data_envio_fatura: '',
+          data_promessa_de_pagto: '',
+          vendedor: 'Vendedor Exp 2',
+          comentarios: '',
+          dados: {},
+        },
+      ]
+
+      vi.mocked(pb.collection).mockImplementation((name: string) => {
+        if (name === 'movel') {
+          return {
+            getList: vi.fn().mockResolvedValue({
+              items: mockMovelFullList,
+              totalItems: 2,
+              totalPages: 1,
+              page: 1,
+              perPage: 25,
+            }),
+            getFullList: vi.fn().mockResolvedValue(mockMovelFullList),
+          } as any
+        }
+        return {
+          getList: vi.fn().mockResolvedValue({ items: [], totalItems: 0, totalPages: 1 }),
+          getFullList: vi.fn().mockResolvedValue([]),
+        } as any
+      })
+
+      render(<Relacionamento />)
+
+      const exportBtn = await screen.findByRole('button', { name: /Exportar \.xlsx/i })
+      await user.click(exportBtn)
+
+      await waitFor(() => {
+        expect(XLSX.utils.json_to_sheet).toHaveBeenCalled()
+      })
+
+      const exportedRows = vi.mocked(XLSX.utils.json_to_sheet).mock.calls[0][0] as any[]
+      expect(exportedRows.length).toBe(2)
+      // Linha 1: data formatada DD/MM/AAAA
+      expect(exportedRows[0]['DATA ENVIO FATURA']).toBe('26/08/2026')
+      expect(exportedRows[0]['Ocorrências']).toBe('Enviado Fatura(s)')
+
+      // Linha 2: data vazia é string vazia '' (sem "—" nem "N/A")
+      expect(exportedRows[1]['DATA ENVIO FATURA']).toBe('')
     })
   })
 })

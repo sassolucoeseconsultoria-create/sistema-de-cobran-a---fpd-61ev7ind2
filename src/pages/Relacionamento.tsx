@@ -54,6 +54,11 @@ import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
 import type { MovelRecord, ResidencialRecord, StoreRecord } from '@/types/fpd'
 import { cn } from '@/lib/utils'
+import {
+  formatExcelOrIsoDate,
+  formatExcelOrIsoDateShort,
+  getDadosField,
+} from '@/lib/clientFormatters'
 import { ClientesMovel } from '@/components/ClientesMovel'
 import { ClientesResidencial } from '@/components/ClientesResidencial'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -971,43 +976,79 @@ export const Relacionamento: React.FC = () => {
 
       // Preparar linhas para a planilha
       const rows = records.map((r: any) => {
+        const d = r.dados || {}
+        const dataEnvioFormatada = formatExcelOrIsoDate(r.data_envio_fatura || '')
+
         if (activeClientesTab === 'movel') {
+          const numero =
+            r.linha !== undefined && r.linha !== null
+              ? r.linha
+              : getDadosField(d, 'Numero', 'NÚMERO', 'NUMERO', 'Telefone') || ''
+          const vencimento =
+            r.data_vencimento ||
+            getDadosField(d, 'Vencimento', 'VENCIMENTO', 'Data Vencimento') ||
+            ''
+          const ocorrencia = r.ocorrencias || r.ocorrencia || ''
+          const dataPromessa = r.data_promessa_de_pagto || r.data_promessa_pagamento || ''
+          const comentarios = r.comentarios || r.anotacoes || ''
+
           return {
             Loja: r.loja || '',
             'Data Referência': r.data_referencia || '',
             Cliente: r.cliente || '',
-            'CPF/CNPJ': r.cpf_cnpj || '',
-            'Conta / Contrato': r.conta || '',
-            Telefone: r.tel_contato || '',
-            'Dias Vencidos': r.dias_vencidos ?? '',
-            'Data Vencimento': r.data_vencimento || '',
-            Valor: r.valor ?? '',
-            Ocorrência: r.ocorrencia || '',
-            Status: r.status || '',
-            'Data Promessa': r.data_promessa_pagamento || '',
-            'Data Retorno': r.data_retorno || '',
+            Número: numero,
+            Vencimento: vencimento
+              ? formatExcelOrIsoDateShort(vencimento) || String(vencimento)
+              : '',
+            Ocorrências: ocorrencia,
+            'DATA ENVIO FATURA': dataEnvioFormatada,
+            'Data Promessa de Pagto': dataPromessa,
             Vendedor: r.vendedor || '',
-            Plano: r.plano || '',
-            Anotações: r.anotacoes || '',
+            Comentários: comentarios,
           }
         } else {
+          const nrContrato =
+            r.nr_contrato ||
+            getDadosField(d, 'NR_CONTRATO', 'NR CONTRATO', 'CONTRATO', 'Numero Contrato') ||
+            ''
+          const dscStatus =
+            r.dsc_status_contrato ||
+            getDadosField(d, 'DSC_STATUS_CONTRATO', 'DSC STATUS CONTRATO', 'Status Contrato') ||
+            ''
+          const vencimento =
+            r.dat_vencimento ||
+            r.data_vencimento ||
+            getDadosField(d, 'DAT_VENCIMENTO', 'DAT VENCIMENTO', 'Vencimento') ||
+            ''
+          const pago = r.pago || getDadosField(d, 'Pago', 'PAGO') || ''
+          const preventivaFpd =
+            r.preventiva_fpd || getDadosField(d, 'Preventiva FPD', 'PREVENTIVA FPD') || ''
+          const virouFpd = r.virou_fpd || getDadosField(d, 'Virou FPD', 'VIROU FPD') || ''
+          const cpf = r.cpf || r.cpf_cnpj || getDadosField(d, 'CPF', 'Cpf') || ''
+          const fone = r.fone || r.tel_contato || getDadosField(d, 'FONE', 'Fone', 'Telefone') || ''
+          const ocorrencia = r.ocorrencias || r.ocorrencia || ''
+          const dataPromessa = r.data_promessa_de_pagto || r.data_promessa_pagamento || ''
+          const comentarios = r.comentarios || r.anotacoes || ''
+
           return {
-            Loja: r.loja || '',
+            'NR CONTRATO': nrContrato,
+            'DSC STATUS CONTRATO': dscStatus,
+            'DAT VENCIMENTO': vencimento
+              ? formatExcelOrIsoDateShort(vencimento) || String(vencimento)
+              : '',
+            Pago: pago,
+            'Preventiva FPD': preventivaFpd,
+            'Virou FPD': virouFpd,
+            CPF: cpf,
+            CLIENTE: r.cliente || '',
+            FONE: fone,
+            LOJA: r.loja || '',
+            VENDEDOR: r.vendedor || '',
             'Data Referência': r.data_referencia || '',
-            Cliente: r.cliente || '',
-            'CPF/CNPJ': r.cpf_cnpj || '',
-            Conta: r.conta || '',
-            Contrato: r.contrato || '',
-            Telefone: r.tel_contato || '',
-            'Dias Vencidos': r.dias_vencidos ?? '',
-            'Data Vencimento': r.data_vencimento || '',
-            Valor: r.valor ?? '',
-            Ocorrência: r.ocorrencia || '',
-            Status: r.status || '',
-            'Data Promessa': r.data_promessa_pagamento || '',
-            'Data Retorno': r.data_retorno || '',
-            Vendedor: r.vendedor || '',
-            Anotações: r.anotacoes || '',
+            Ocorrências: ocorrencia,
+            'DATA ENVIO FATURA': dataEnvioFormatada,
+            'Data Promessa de Pagto': dataPromessa,
+            Comentários: comentarios,
           }
         }
       })
