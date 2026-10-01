@@ -18,8 +18,9 @@
     --popover: 0 0% 100%;
     --popover-foreground: 215 53% 15%;
 
-    --primary: 210 66% 21%; /* Navy #12365A */
-    --primary-foreground: 0 0% 100%;
+    --primary: 356 86% 44%; /* Vermelho #D0101B */
+    --primary-foreground: 0 0% 100%; /* Branco puro para contraste ótimo */
+    --primary-hover: 356 86% 35%; /* Vermelho escuro #A80D16 */
 
     --secondary: 214 32% 91%; /* #E3E9F2 */
     --secondary-foreground: 215 53% 15%;
