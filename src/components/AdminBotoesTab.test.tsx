@@ -9,6 +9,7 @@ import { Relacionamento } from '@/pages/Relacionamento'
 import { Vendedores } from '@/pages/Vendedores'
 import { TopOfensores } from '@/pages/TopOfensores'
 import { Arquivos } from '@/pages/Arquivos'
+import Index from '@/pages/Index'
 import pb from '@/lib/pocketbase/client'
 
 // Mocks
@@ -329,6 +330,134 @@ describe('Parametrização de Visibilidade de Botões por Perfil', () => {
         expect(screen.getByText(/Painel de Lojas/i)).toBeDefined()
       })
 
+      expect(screen.queryByText('Limpar Dados')).toBeNull()
+      expect(screen.queryByText('Exportar .xlsx')).toBeNull()
+    })
+
+    it('Na rota principal / (Index), Gerente com todos os botões false NÃO visualiza Limpar Dados nem Exportar .xlsx', async () => {
+      vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+        user: {
+          id: 'u_ger',
+          collectionId: 'users',
+          collectionName: 'users',
+          name: 'Gerente',
+          email: 'gerente@test.com',
+          role: 'Gerente',
+          lojas: ['loja1'],
+        } as any,
+        token: 'token',
+        loading: false,
+        login: vi.fn(),
+        logout: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      render(
+        <MemoryRouter>
+          <Index />
+        </MemoryRouter>,
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('LOJAS')).toBeDefined()
+      })
+
+      expect(screen.queryByText('Limpar Dados')).toBeNull()
+      expect(screen.queryByText('Exportar .xlsx')).toBeNull()
+    })
+
+    it('Na rota principal / (Index), Coordenador com todos os botões false NÃO visualiza botões', async () => {
+      vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+        user: {
+          id: 'u_coord',
+          collectionId: 'users',
+          collectionName: 'users',
+          name: 'Coordenador',
+          email: 'coord@test.com',
+          role: 'Coordenador',
+          lojas: ['loja1'],
+        } as any,
+        token: 'token',
+        loading: false,
+        login: vi.fn(),
+        logout: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      render(
+        <MemoryRouter>
+          <Index />
+        </MemoryRouter>,
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('LOJAS')).toBeDefined()
+      })
+
+      expect(screen.queryByText('Limpar Dados')).toBeNull()
+      expect(screen.queryByText('Exportar .xlsx')).toBeNull()
+    })
+
+    it('Na rota principal / (Index), ADM visualiza Limpar Dados e Exportar .xlsx', async () => {
+      vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+        user: {
+          id: 'u_adm',
+          collectionId: 'users',
+          collectionName: 'users',
+          name: 'Admin',
+          email: 'adm@test.com',
+          role: 'ADM',
+          lojas: [],
+        } as any,
+        token: 'token',
+        loading: false,
+        login: vi.fn(),
+        logout: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      render(
+        <MemoryRouter>
+          <Index />
+        </MemoryRouter>,
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Limpar Dados')).toBeDefined()
+        expect(screen.getByText('Exportar .xlsx')).toBeDefined()
+      })
+    })
+
+    it('Durante loading das configurações, não-ADM NUNCA vê botões (bloqueio seguro)', async () => {
+      // Retorna uma Promise que nunca resolve para simular loading ativo
+      vi.spyOn(configBotoesService, 'fetchConfigBotoes').mockImplementation(
+        () => new Promise(() => {}),
+      )
+
+      vi.spyOn(AuthContext, 'useAuth').mockReturnValue({
+        user: {
+          id: 'u_ger',
+          collectionId: 'users',
+          collectionName: 'users',
+          name: 'Gerente',
+          email: 'ger@test.com',
+          role: 'Gerente',
+          lojas: ['loja1'],
+        } as any,
+        token: 'token',
+        loading: false,
+        login: vi.fn(),
+        logout: vi.fn(),
+        refreshAuth: vi.fn(),
+      })
+
+      render(
+        <MemoryRouter>
+          <Index />
+        </MemoryRouter>,
+      )
+
+      // Durante o loading, nenhum botão deve vazar para não-ADM
       expect(screen.queryByText('Limpar Dados')).toBeNull()
       expect(screen.queryByText('Exportar .xlsx')).toBeNull()
     })
