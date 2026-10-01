@@ -29,8 +29,16 @@ export type RoleConfigField = 'adm' | 'coordenador' | 'supervisor' | 'gerente'
 export function normalizeUserRole(role?: string | null): UserRole | 'ADM' | string {
   if (!role) return ''
   const trimmed = role.trim()
-  if (trimmed.toUpperCase() === 'ADMINISTRADOR' || trimmed.toUpperCase() === 'ADM') {
+  const upper = trimmed.toUpperCase()
+  if (upper === 'ADMINISTRADOR' || upper === 'ADM') {
     return 'ADM'
+  }
+  // Suporte a papéis legados caso venham do banco antigo
+  if (upper === 'GESTOR') {
+    return 'Coordenador'
+  }
+  if (upper === 'ANALISTA') {
+    return 'Supervisor'
   }
   return trimmed
 }
@@ -111,15 +119,16 @@ export function isButtonVisibleForRole(
     return found.adm !== false
   }
 
-  if (normRole.toLowerCase() === 'coordenador') {
+  const lowerRole = normRole.toLowerCase()
+  if (lowerRole === 'coordenador') {
     return found.coordenador === true
   }
 
-  if (normRole.toLowerCase() === 'supervisor') {
+  if (lowerRole === 'supervisor') {
     return found.supervisor === true
   }
 
-  if (normRole.toLowerCase() === 'gerente') {
+  if (lowerRole === 'gerente') {
     return found.gerente === true
   }
 

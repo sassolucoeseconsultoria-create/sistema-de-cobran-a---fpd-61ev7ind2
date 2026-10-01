@@ -49,11 +49,13 @@ import { cn } from '@/lib/utils'
 import { StoreAnalyticsDrawer } from '@/components/StoreAnalyticsDrawer'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
+import { useButtonVisibility } from '@/hooks/useButtonVisibility'
 import { isSessionExpiredError } from '@/lib/pocketbase/client'
 
 export const Index: React.FC = () => {
   const { toast } = useToast()
   const userAccess = useUserStoreAccess()
+  const { canShow } = useButtonVisibility('painel_lojas')
   const {
     allowedReferenceDates: availableReferenceDates,
     hasMultipleReferences,
@@ -800,26 +802,32 @@ export const Index: React.FC = () => {
             )}
           </div>
 
-          {/* Right Action Buttons */}
-          <div className="flex items-center gap-2 shrink-0">
-            <Button
-              onClick={() => setClearDialogOpen(true)}
-              variant="outline"
-              className="h-9 border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50 font-medium text-xs sm:text-sm gap-1.5 transition-colors"
-            >
-              <Trash2 className="w-4 h-4 text-red-500" />
-              <span>Limpar Dados</span>
-            </Button>
+          {/* Right Action Buttons - Visibilidade parametrizada por perfil */}
+          {(canShow('limpar_dados') || canShow('exportar_xlsx')) && (
+            <div className="flex items-center gap-2 shrink-0">
+              {canShow('limpar_dados') && (
+                <Button
+                  onClick={() => setClearDialogOpen(true)}
+                  variant="outline"
+                  className="h-9 border-red-200 text-red-600 hover:text-red-700 hover:bg-red-50 font-medium text-xs sm:text-sm gap-1.5 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                  <span>Limpar Dados</span>
+                </Button>
+              )}
 
-            <Button
-              onClick={handleExportXlsx}
-              variant="outline"
-              className="h-9 border-[#E3E9F2] text-[#12365A] hover:bg-[#F3F6FA] font-medium text-xs sm:text-sm gap-2"
-            >
-              <Download className="w-4 h-4 text-[#0E9F8A]" />
-              <span>Exportar .xlsx</span>
-            </Button>
-          </div>
+              {canShow('exportar_xlsx') && (
+                <Button
+                  onClick={handleExportXlsx}
+                  variant="outline"
+                  className="h-9 border-[#E3E9F2] text-[#12365A] hover:bg-[#F3F6FA] font-medium text-xs sm:text-sm gap-2"
+                >
+                  <Download className="w-4 h-4 text-[#0E9F8A]" />
+                  <span>Exportar .xlsx</span>
+                </Button>
+              )}
+            </div>
+          )}
         </div>
         {/* 13-Column Consolidated Table */}
         <div className="relative overflow-x-auto max-h-[70vh] border-b border-[#E3E9F2]">

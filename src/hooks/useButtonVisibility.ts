@@ -40,9 +40,20 @@ export function useButtonVisibility(telaId: string): UseButtonVisibilityResult {
 
   const canShow = useCallback(
     (botaoId: string): boolean => {
+      const isAdm =
+        user?.role === 'ADM' ||
+        (typeof user?.role === 'string' && user.role.trim().toUpperCase() === 'ADMINISTRADOR')
+
+      // Enquanto estiver carregando a configuração do backend:
+      // ADM sempre vê tudo por padrão; perfis não-ADM NUNCA veem botões restritos
+      // para evitar flash de botões ou vazamento de ações enquanto a requisição roda.
+      if (loading) {
+        return isAdm
+      }
+
       return isButtonVisibleForRole(configs, telaId, botaoId, user?.role)
     },
-    [configs, telaId, user?.role],
+    [configs, telaId, user?.role, loading],
   )
 
   return {
