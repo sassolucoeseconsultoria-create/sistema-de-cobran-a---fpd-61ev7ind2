@@ -48,12 +48,18 @@ export interface UserStoreAccess {
 
   /**
    * Retorna se um determinado ID de loja é permitido para o usuário.
+   * Aceita também opcionalmente `storeName` para resolução híbrida (ID ou nome).
    */
-  isStoreIdAllowed: (storeId?: string | null) => boolean
+  isStoreIdAllowed: (storeId?: string | null, storeName?: string) => boolean
+
+  /**
+   * Helper para resolução híbrida de acesso a uma loja dado seu ID e nome.
+   */
+  resolveAllowed: (store: { id: string; name: string }) => boolean
 
   /**
    * Retorna se um determinado nome de loja (ou texto com nome de loja) é permitido para o usuário.
-   * Compara de forma normalizada (trim, case-insensitive).
+   * Compara de forma normalizada (trim, case-insensitive) e por contenção mútua/variantes.
    */
   isStoreNameAllowed: (storeName?: string | null, allStores?: StoreRecord[]) => boolean
 
@@ -91,16 +97,84 @@ export function useUserStoreAccess(): UserStoreAccess {
 
     const hasNoStoreAssigned = !isAdm && effectiveAllowedIds.length === 0
 
-    const isStoreIdAllowed = (storeId?: string | null): boolean => {
+    // Função interna de normalização (lowercase, trim, colapsar espaços múltiplos)
+    const normalizeInternal = (str: unknown): string => {
+      if (str === null || str === undefined) return ''
+      return String(str)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^\w\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    }
+
+    // Helper interno para verificar se um nome de loja casa com as lojas vinculadas do usuário
+    const matchesUserAssignedStore = (rawStoreName: string): boolean => {
+      if (!rawStoreName) return false
+      const normInput = normalizeInternal(rawStoreName)
+      if (!normInput) return false
+
+      const isCallOrIlhaInput = /\b(call|ilha)\b/.test(normInput)
+      const hasDfInput = /\bdf\b/.test(normInput)
+      const hasGoInput = /\bgo\b/.test(normInput)
+
+      return effectiveAllowedIds.some((assigned) => {
+        if (!assigned) return false
+        const normAssigned = normalizeInternal(assigned)
+        if (!normAssigned) return false
+
+        const isCallOrIlhaAssigned = /\b(call|ilha)\b/.test(normAssigned)
+        if (isCallOrIlhaInput !== isCallOrIlhaAssigned) return false
+
+        const hasDfAssigned = /\bdf\b/.test(normAssigned)
+        const hasGoAssigned = /\bgo\b/.test(normAssigned)
+        if ((hasDfInput && hasGoAssigned) || (hasGoInput && hasDfAssigned)) return false
+
+        // 1. Igualdade direta ou normalizada
+        if (normAssigned === normInput) return true
+
+        // 2. isSameStore
+        if (isSameStore(assigned, rawStoreName)) return true
+
+        // 3. Contenção mútua (nome cadastrado contido no nome da linha ou vice-versa)
+        // ex: "CELNET CALL" vs "CELNET CALL NOVA SUIÇA"
+        if (normInput.includes(normAssigned) || normAssigned.includes(normInput)) return true
+
+        return false
+      })
+    }
+
+    const isStoreIdAllowed = (storeId?: string | null, storeName?: string): boolean => {
       if (isAdm) return true
-      if (hasNoStoreAssigned || !storeId) return false
-      return effectiveAllowedIds.includes(storeId)
+      if (hasNoStoreAssigned) return false
+
+      // 1. Verifica se effectiveAllowedIds contém o ID diretamente
+      if (storeId && effectiveAllowedIds.includes(storeId)) return true
+
+      // 2. Se storeName foi fornecido, verifica match híbrido por nome
+      if (storeName && matchesUserAssignedStore(storeName)) {
+        return true
+      }
+
+      // 3. Se storeId foi fornecido e é um nome de loja (caso não seja id de 15 chars)
+      if (storeId && matchesUserAssignedStore(storeId)) {
+        return true
+      }
+
+      return false
+    }
+
+    const resolveAllowed = (store: { id: string; name: string }): boolean => {
+      if (isAdm) return true
+      if (hasNoStoreAssigned) return false
+      return isStoreIdAllowed(store.id, store.name)
     }
 
     const filterStores = (stores: StoreRecord[]): StoreRecord[] => {
       if (isAdm) return stores
       if (hasNoStoreAssigned) return []
-      return stores.filter((s) => effectiveAllowedIds.includes(s.id))
+      return stores.filter((s) => isStoreIdAllowed(s.id, s.name))
     }
 
     const getAllowedStoreNames = (allStores: StoreRecord[]): string[] => {
@@ -108,10 +182,18 @@ export function useUserStoreAccess(): UserStoreAccess {
         return allStores.map((s) => s.name.trim()).filter(Boolean)
       }
       if (hasNoStoreAssigned) return []
-      return allStores
-        .filter((s) => effectiveAllowedIds.includes(s.id))
+
+      const matchedNames = allStores
+        .filter((s) => isStoreIdAllowed(s.id, s.name))
         .map((s) => s.name.trim())
         .filter(Boolean)
+
+      if (matchedNames.length > 0) {
+        return Array.from(new Set(matchedNames))
+      }
+
+      // Se allStores não bateu nenhum ID, retorna os próprios nomes vinculados (se não forem IDs)
+      return effectiveAllowedIds.map((idOrName) => idOrName.trim()).filter(Boolean)
     }
 
     const isStoreNameAllowed = (storeName?: string | null, allStores?: StoreRecord[]): boolean => {
@@ -123,7 +205,7 @@ export function useUserStoreAccess(): UserStoreAccess {
       // Direct ID check (se storeName for o próprio ID de uma loja permitida)
       if (effectiveAllowedIds.includes(raw)) return true
 
-      const normInput = normalizeStoreString(raw)
+      const normInput = normalizeInternal(raw)
       if (!normInput) return false
 
       // Diferenciação estrita de CALL / ILHA e de DF vs GO
@@ -136,14 +218,13 @@ export function useUserStoreAccess(): UserStoreAccess {
         // Se a loja de entrada resolver para qualquer loja do cadastro geral via matchStore:
         const matchedAll = matchStore(raw, allStores)
         if (matchedAll) {
-          // Lojas sem supervisão ou sem coordenação (ex.: CALL/ILHA) NUNCA podem ser vistas por Supervisor/Coordenador
-          // a menos que estejam explicitamente na lista de lojas vinculadas do usuário
-          const isAllowed = effectiveAllowedIds.includes(matchedAll.id)
+          // Verifica se essa loja casada é permitida pelo ID OU pelo nome
+          const isAllowed = isStoreIdAllowed(matchedAll.id, matchedAll.name)
           if (!isAllowed) {
             return false
           }
-          // Se está entre os IDs permitidos, verificar que não haja colisão de CALL/ILHA ou DF/GO
-          const normMatched = normalizeStoreString(matchedAll.name)
+          // Se está permitida, verificar que não haja colisão de CALL/ILHA ou DF/GO
+          const normMatched = normalizeInternal(matchedAll.name)
           const isCallOrIlhaMatched = /\b(call|ilha)\b/.test(normMatched)
           const hasDfMatched = /\bdf\b/.test(normMatched)
           const hasGoMatched = /\bgo\b/.test(normMatched)
@@ -153,33 +234,34 @@ export function useUserStoreAccess(): UserStoreAccess {
         }
 
         // Se matchStore contra allStores não encontrou uma loja cadastrada:
-        // A regra é: linhas de lojas não vinculadas ou não cadastradas são INVISÍVEIS por padrão para não-ADM
-        const allowedStores = allStores.filter((s) => effectiveAllowedIds.includes(s.id))
-        if (allowedStores.length === 0) return false
+        const allowedStores = allStores.filter((s) => isStoreIdAllowed(s.id, s.name))
+        if (allowedStores.length > 0) {
+          // Comparação contra as lojas permitidas
+          const matchedInAllowed = allowedStores.some((store) => {
+            const normStore = normalizeInternal(store.name)
+            const isCallOrIlhaStore = /\b(call|ilha)\b/.test(normStore)
+            if (isCallOrIlhaInput !== isCallOrIlhaStore) return false
 
-        // Comparação estrita apenas contra as lojas permitidas
-        return allowedStores.some((store) => {
-          const normStore = normalizeStoreString(store.name)
-          const isCallOrIlhaStore = /\b(call|ilha)\b/.test(normStore)
-          if (isCallOrIlhaInput !== isCallOrIlhaStore) return false
+            const hasDfStore = /\bdf\b/.test(normStore)
+            const hasGoStore = /\bgo\b/.test(normStore)
+            if (hasDfInput && hasGoStore) return false
+            if (hasGoInput && hasDfStore) return false
 
-          const hasDfStore = /\bdf\b/.test(normStore)
-          const hasGoStore = /\bgo\b/.test(normStore)
-          if (hasDfInput && hasGoStore) return false
-          if (hasGoInput && hasDfStore) return false
+            // Match exato normalizado, variante canônica estrita (isSameStore) ou contenção mútua
+            if (normStore === normInput) return true
+            if (isSameStore(store.name, raw)) return true
+            if (normInput.includes(normStore) || normStore.includes(normInput)) return true
 
-          // Match exato normalizado ou variante canônica estrita (isSameStore)
-          if (normStore === normInput) return true
-          if (isSameStore(store.name, raw)) return true
-
-          return false
-        })
+            return false
+          })
+          if (matchedInAllowed) return true
+        }
       }
 
-      // Fallback estrito se allStores não foi fornecido (apenas contra effectiveAllowedIds se contiverem nomes)
+      // Fallback estrito contra effectiveAllowedIds (se contiverem nomes)
       return effectiveAllowedIds.some((allowedId) => {
-        const normAllowed = normalizeStoreString(allowedId)
-        if (normAllowed === normInput) return true
+        const normAllowed = normalizeInternal(allowedId)
+        if (!normAllowed) return false
 
         const isCallOrIlhaAllowed = /\b(call|ilha)\b/.test(normAllowed)
         if (isCallOrIlhaInput !== isCallOrIlhaAllowed) return false
@@ -189,7 +271,9 @@ export function useUserStoreAccess(): UserStoreAccess {
         if (hasDfInput && hasGoAllowed) return false
         if (hasGoInput && hasDfAllowed) return false
 
+        if (normAllowed === normInput) return true
         if (isSameStore(allowedId, raw)) return true
+        if (normInput.includes(normAllowed) || normAllowed.includes(normInput)) return true
 
         return false
       })
@@ -211,6 +295,7 @@ export function useUserStoreAccess(): UserStoreAccess {
       hasNoStoreAssigned,
       allowedStoreIds: effectiveAllowedIds,
       isStoreIdAllowed,
+      resolveAllowed,
       isStoreNameAllowed,
       filterStores,
       getAllowedStoreNames,

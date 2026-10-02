@@ -197,6 +197,12 @@ export const Relacionamento: React.FC = () => {
   const isImportingRef = useRef(false)
   isImportingRef.current = isImporting
 
+  // Estado para indicar quando o escopo inicial (lojas e permissões) está pronto
+  const [scopeReady, setScopeReady] = useState<boolean>(() => {
+    // Para ADM, o escopo está sempre pronto
+    return userAccess.isAdm
+  })
+
   // Load distinct store names, registered stores, and reference dates
   const loadInitialData = useCallback(async () => {
     try {
@@ -248,11 +254,13 @@ export const Relacionamento: React.FC = () => {
       })
       const sortedDates = Array.from(datesSet).sort((a, b) => b.localeCompare(a))
       setRawAvailableDates(sortedDates)
+      setScopeReady(true)
     } catch (err) {
       if (isSessionExpiredError(err)) {
         return
       }
       console.error('Erro ao carregar dados iniciais de inadimplência:', err)
+      setScopeReady(true)
     }
   }, [userAccess.isGerente, userAccess.hasNoStoreAssigned, userAccess.managerStoreId])
 
@@ -330,8 +338,10 @@ export const Relacionamento: React.FC = () => {
           })
         }
 
-        // 2. Variantes das lojas oficiais vinculadas ao perfil
-        const allowedOfficialStores = stores.filter((s) => userAccess.isStoreIdAllowed(s.id))
+        // 2. Variantes das lojas oficiais vinculadas ao perfil (resolução híbrida ID + Nome)
+        const allowedOfficialStores = stores.filter((s) =>
+          userAccess.isStoreIdAllowed(s.id, s.name),
+        )
         for (const s of allowedOfficialStores) {
           if (!s.name || !s.name.trim()) continue
           const variants = getStoreVariants(s.name)
@@ -533,6 +543,11 @@ export const Relacionamento: React.FC = () => {
   // Recalculate Móvel count whenever selectedLoja, availableLojas or selectedDataReferencia change
   const refreshMovelCount = useCallback(
     async (lojaOverride?: string) => {
+      // Se não for ADM e o escopo ainda não estiver pronto, não zerar prematuramente os totais
+      if (!userAccess.isAdm && !scopeReady) {
+        return
+      }
+
       if (userAccess.hasNoStoreAssigned) {
         setTotalMovel(0)
         return
@@ -550,8 +565,8 @@ export const Relacionamento: React.FC = () => {
           effectiveLoja === 'TODAS' ||
           !userAccess.isStoreNameAllowed(effectiveLoja, stores)
         ) {
-          // Se ainda não temos o nome da loja em stores, verificar se o ID bate com alguma loja ou esperar resolução
-          const directMatch = stores.find((s) => userAccess.isStoreIdAllowed(s.id))
+          // Se ainda não temos o nome da loja em stores, verificar se o ID/nome bate com alguma loja ou esperar resolução
+          const directMatch = stores.find((s) => userAccess.isStoreIdAllowed(s.id, s.name))
           if (directMatch?.name) {
             effectiveLoja = directMatch.name
           } else {
@@ -588,12 +603,25 @@ export const Relacionamento: React.FC = () => {
         setTotalMovel(0)
       }
     },
-    [buildCountFilter, selectedLoja, availableLojas, userAccess, stores, managerAssignedStoreName],
+    [
+      scopeReady,
+      buildCountFilter,
+      selectedLoja,
+      availableLojas,
+      userAccess,
+      stores,
+      managerAssignedStoreName,
+    ],
   )
 
   // Recalculate Residencial count whenever selectedLoja, availableLojas or selectedDataReferencia change
   const refreshResidencialCount = useCallback(
     async (lojaOverride?: string) => {
+      // Se não for ADM e o escopo ainda não estiver pronto, não zerar prematuramente os totais
+      if (!userAccess.isAdm && !scopeReady) {
+        return
+      }
+
       if (userAccess.hasNoStoreAssigned) {
         setTotalResidencial(0)
         return
@@ -610,7 +638,7 @@ export const Relacionamento: React.FC = () => {
           effectiveLoja === 'TODAS' ||
           !userAccess.isStoreNameAllowed(effectiveLoja, stores)
         ) {
-          const directMatch = stores.find((s) => userAccess.isStoreIdAllowed(s.id))
+          const directMatch = stores.find((s) => userAccess.isStoreIdAllowed(s.id, s.name))
           if (directMatch?.name) {
             effectiveLoja = directMatch.name
           } else {
@@ -646,24 +674,24 @@ export const Relacionamento: React.FC = () => {
         setTotalResidencial(0)
       }
     },
-    [buildCountFilter, selectedLoja, availableLojas, userAccess, stores, managerAssignedStoreName],
+    [
+      scopeReady,
+      buildCountFilter,
+      selectedLoja,
+      availableLojas,
+      userAccess,
+      stores,
+      managerAssignedStoreName,
+    ],
   )
 
   useEffect(() => {
     refreshMovelCount()
-  }, [refreshMovelCount])
+  }, [refreshMovelCount, scopeReady, stores, availableLojas])
 
   useEffect(() => {
     refreshResidencialCount()
-  }, [refreshResidencialCount])
-
-  useEffect(() => {
-    refreshMovelCount()
-  }, [refreshMovelCount])
-
-  useEffect(() => {
-    refreshResidencialCount()
-  }, [refreshResidencialCount])
+  }, [refreshResidencialCount, scopeReady, stores, availableLojas])
 
   // Real-time subscription to 'movel' and 'residencial'
   useRealtime<MovelRecord>('movel', (e) => {

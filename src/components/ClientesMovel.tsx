@@ -184,8 +184,10 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
           })
         }
 
-        // 2. Variantes das lojas oficiais vinculadas ao perfil
-        const allowedOfficialStores = stores.filter((s) => userAccess.isStoreIdAllowed(s.id))
+        // 2. Variantes das lojas oficiais vinculadas ao perfil (resolução híbrida ID + Nome)
+        const allowedOfficialStores = stores.filter((s) =>
+          userAccess.isStoreIdAllowed(s.id, s.name),
+        )
         for (const s of allowedOfficialStores) {
           if (!s.name || !s.name.trim()) continue
           const variants = getStoreVariants(s.name)
