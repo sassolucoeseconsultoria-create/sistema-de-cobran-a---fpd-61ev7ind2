@@ -205,6 +205,14 @@ export function useUserStoreAccess(): UserStoreAccess {
       // Direct ID check (se storeName for o próprio ID de uma loja permitida)
       if (effectiveAllowedIds.includes(raw)) return true
 
+      // Se allStores fornecido ou disponível, verifica se raw é ID de alguma loja em allStores
+      if (allStores && allStores.length > 0) {
+        const storeById = allStores.find((s) => s.id === raw)
+        if (storeById && effectiveAllowedIds.includes(storeById.id)) {
+          return true
+        }
+      }
+
       const normInput = normalizeInternal(raw)
       if (!normInput) return false
 
@@ -258,8 +266,14 @@ export function useUserStoreAccess(): UserStoreAccess {
         }
       }
 
-      // Fallback estrito contra effectiveAllowedIds (se contiverem nomes)
+      // Se allStores ainda estiver vazia/carregando e effectiveAllowedIds só tiver IDs de 15 caracteres,
+      // não negar por nome ainda carregando se for um ID direto (já checado acima).
+      // Se allStores estiver vazia e effectiveAllowedIds tiver IDs (não nomes), não temos lojas ainda para resolver.
+      // Fallback estrito contra effectiveAllowedIds (se contiverem nomes ou IDs conhecidos)
       return effectiveAllowedIds.some((allowedId) => {
+        // Se for o ID exato
+        if (allowedId === raw) return true
+
         const normAllowed = normalizeInternal(allowedId)
         if (!normAllowed) return false
 

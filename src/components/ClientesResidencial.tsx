@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Search,
   RotateCcw,
@@ -76,16 +76,30 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [internalLoja, setInternalLoja] = useState('TODAS')
 
-  const selectedLoja = controlledLoja !== undefined ? controlledLoja : internalLoja
+  const rawSelectedLoja = controlledLoja !== undefined ? controlledLoja : internalLoja
+  // Se selectedLoja for um ID de 15 caracteres, resolver para o nome da loja
+  const selectedLoja = useMemo(() => {
+    if (rawSelectedLoja && /^[a-z0-9]{15}$/i.test(rawSelectedLoja)) {
+      const matched = stores.find((s) => s.id === rawSelectedLoja)
+      if (matched?.name) return matched.name
+    }
+    return rawSelectedLoja
+  }, [rawSelectedLoja, stores])
+
   const setSelectedLoja = useCallback(
     (newLoja: string) => {
+      let resolved = newLoja
+      if (newLoja && /^[a-z0-9]{15}$/i.test(newLoja)) {
+        const matched = stores.find((s) => s.id === newLoja)
+        if (matched?.name) resolved = matched.name
+      }
       if (onLojaChange) {
-        onLojaChange(newLoja)
+        onLojaChange(resolved)
       } else {
-        setInternalLoja(newLoja)
+        setInternalLoja(resolved)
       }
     },
-    [onLojaChange],
+    [onLojaChange, stores],
   )
 
   // Inline edit state
@@ -171,36 +185,30 @@ export const ClientesResidencial: React.FC<ClientesResidencialProps> = ({
         }
       } else if (!userAccess.isAdm) {
         // Se usuário não é ADM e TODAS está selecionado, filtrar por todas as lojas permitidas
-        const expandedStoreNames = new Set<string>()
+        // Usamos NOMES únicos reais cadastrados + lojas detectadas SEM explosão massiva de variantes
+        const uniqueStoreNames = new Set<string>()
 
-        // 1. Variantes das lojas em availableLojas (filtrando para garantir que são permitidas)
+        // 1. Lojas em availableLojas (filtrando para garantir que são permitidas e não são IDs brutos)
         for (const l of availableLojas) {
           if (!l || !l.trim()) continue
-          if (!userAccess.isStoreNameAllowed(l, stores)) continue
-          const variants = getStoreVariants(l)
-          variants.forEach((v) => {
-            if (userAccess.isStoreNameAllowed(v, stores)) {
-              expandedStoreNames.add(v)
-            }
-          })
+          if (/^[a-z0-9]{15}$/i.test(l.trim())) continue
+          if (userAccess.isStoreNameAllowed(l, stores)) {
+            uniqueStoreNames.add(l.trim())
+          }
         }
 
-        // 2. Variantes das lojas oficiais vinculadas ao perfil (resolução híbrida ID + Nome)
+        // 2. Lojas oficiais vinculadas ao perfil (resolução híbrida ID + Nome)
         const allowedOfficialStores = stores.filter((s) =>
           userAccess.isStoreIdAllowed(s.id, s.name),
         )
         for (const s of allowedOfficialStores) {
-          if (!s.name || !s.name.trim()) continue
-          const variants = getStoreVariants(s.name)
-          variants.forEach((v) => {
-            if (userAccess.isStoreNameAllowed(v, stores)) {
-              expandedStoreNames.add(v)
-            }
-          })
+          if (s.name && s.name.trim()) {
+            uniqueStoreNames.add(s.name.trim())
+          }
         }
 
-        if (expandedStoreNames.size > 0) {
-          const storeFilters = Array.from(expandedStoreNames).map(
+        if (uniqueStoreNames.size > 0) {
+          const storeFilters = Array.from(uniqueStoreNames).map(
             (l) => `loja = "${l.replace(/"/g, '\\"')}"`,
           )
           filterParts.push(`(${storeFilters.join(' || ')})`)

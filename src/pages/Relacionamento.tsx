@@ -85,11 +85,15 @@ export const Relacionamento: React.FC = () => {
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [totalMovel, setTotalMovel] = useState(0)
   const [totalResidencial, setTotalResidencial] = useState(0)
-  // Para Gerente com loja vinculada já conhecida de imediato, inicializar direto com o ID/nome se possível
+  // Para Gerente com loja vinculada, se for ID de 15 caracteres não inicializar como ID bruto
   const [selectedLoja, setSelectedLoja] = useState<string>(() => {
     if (userAccess.isGerente) {
       if (userAccess.hasNoStoreAssigned) return ''
-      if (userAccess.managerStoreId) return userAccess.managerStoreId
+      // Se não for um ID de 15 caracteres (for nome direto), pode usar; caso seja ID, aguardar stores
+      if (userAccess.managerStoreId && !/^[a-z0-9]{15}$/i.test(userAccess.managerStoreId)) {
+        return userAccess.managerStoreId
+      }
+      return ''
     }
     return 'TODAS'
   })
@@ -300,60 +304,64 @@ export const Relacionamento: React.FC = () => {
   }, [rawAvailableDates, isDateAllowed, allowedReferenceDates])
 
   // Build PB filter string for counting a collection based on store, profile and reference date
+  // (Usa apenas nomes reais únicos sem explosão massiva de variantes para evitar estourar URL)
   const buildCountFilter = useCallback(
     (loja: string, allowedLojas: string[]) => {
       if (userAccess.hasNoStoreAssigned) {
         return '__NO_ACCESS__'
       }
 
+      // Se loja recebida for um ID de 15 caracteres, converte para o nome real
+      let resolvedLoja = loja
+      if (loja && /^[a-z0-9]{15}$/i.test(loja)) {
+        const found = stores.find((s) => s.id === loja)
+        if (found?.name) {
+          resolvedLoja = found.name
+        }
+      }
+
       const filterParts: string[] = []
 
       // Se for Gerente e loja for TODAS ou não definida, nunca contar todas as lojas da rede
-      if (userAccess.isGerente && (!loja || loja === 'TODAS')) {
+      if (userAccess.isGerente && (!resolvedLoja || resolvedLoja === 'TODAS')) {
         return '__NO_ACCESS__'
       }
 
-      if (loja && loja !== 'TODAS') {
-        if (!userAccess.isAdm && !userAccess.isStoreNameAllowed(loja, stores)) {
+      if (resolvedLoja && resolvedLoja !== 'TODAS') {
+        if (!userAccess.isAdm && !userAccess.isStoreNameAllowed(resolvedLoja, stores)) {
           return '__NO_ACCESS__'
         }
 
-        const storeClause = buildStoreFilterClause(loja)
+        const storeClause = buildStoreFilterClause(resolvedLoja)
         if (storeClause) {
           filterParts.push(storeClause)
         }
       } else if (!userAccess.isAdm) {
         // Se usuário não é ADM e TODAS está selecionado, somar todas as lojas do escopo do perfil
-        const expandedStoreNames = new Set<string>()
+        // Coletamos NOMES únicos reais cadastrados + lojas detectadas, SEM explosão massiva de variantes
+        const uniqueStoreNames = new Set<string>()
 
-        // 1. Variantes das lojas detectadas no banco pertencentes ao perfil
+        // 1. Lojas detectadas no banco pertencentes ao perfil (apenas nomes que não sejam IDs)
         for (const l of allowedLojas) {
           if (!l || !l.trim()) continue
-          if (!userAccess.isStoreNameAllowed(l, stores)) continue
-          const variants = getStoreVariants(l)
-          variants.forEach((v) => {
-            if (userAccess.isStoreNameAllowed(v, stores)) {
-              expandedStoreNames.add(v)
-            }
-          })
+          if (/^[a-z0-9]{15}$/i.test(l.trim())) continue
+          if (userAccess.isStoreNameAllowed(l, stores)) {
+            uniqueStoreNames.add(l.trim())
+          }
         }
 
-        // 2. Variantes das lojas oficiais vinculadas ao perfil (resolução híbrida ID + Nome)
+        // 2. Lojas oficiais cadastradas vinculadas ao perfil
         const allowedOfficialStores = stores.filter((s) =>
           userAccess.isStoreIdAllowed(s.id, s.name),
         )
         for (const s of allowedOfficialStores) {
-          if (!s.name || !s.name.trim()) continue
-          const variants = getStoreVariants(s.name)
-          variants.forEach((v) => {
-            if (userAccess.isStoreNameAllowed(v, stores)) {
-              expandedStoreNames.add(v)
-            }
-          })
+          if (s.name && s.name.trim()) {
+            uniqueStoreNames.add(s.name.trim())
+          }
         }
 
-        if (expandedStoreNames.size > 0) {
-          const storeFilters = Array.from(expandedStoreNames).map(
+        if (uniqueStoreNames.size > 0) {
+          const storeFilters = Array.from(uniqueStoreNames).map(
             (l) => `loja = "${l.replace(/"/g, '\\"')}"`,
           )
           filterParts.push(`(${storeFilters.join(' || ')})`)
@@ -490,14 +498,20 @@ export const Relacionamento: React.FC = () => {
       }
     }
 
-    // 2. Procurar em availableLojas
+    // 2. Procurar em availableLojas (apenas se não for ID de 15 chars)
     if (availableLojas.length > 0) {
-      return availableLojas[0]
+      const first = availableLojas[0]
+      if (first && !/^[a-z0-9]{15}$/i.test(first)) {
+        return first
+      }
     }
 
-    // 3. Fallback: se o allowedStoreId for o próprio nome da loja
+    // 3. Fallback: se o allowedStoreId for o próprio NOME da loja (não ID de 15 caracteres)
     if (userAccess.allowedStoreIds.length > 0) {
-      return userAccess.allowedStoreIds[0]
+      const firstAllowed = userAccess.allowedStoreIds[0]
+      if (firstAllowed && !/^[a-z0-9]{15}$/i.test(firstAllowed)) {
+        return firstAllowed
+      }
     }
 
     return null
@@ -558,6 +572,14 @@ export const Relacionamento: React.FC = () => {
       const baseLoja = lojaOverride !== undefined ? lojaOverride : selectedLoja
       let effectiveLoja = baseLoja
 
+      // Se for ID de 15 caracteres, resolve para o nome da store
+      if (effectiveLoja && /^[a-z0-9]{15}$/i.test(effectiveLoja)) {
+        const found = stores.find((s) => s.id === effectiveLoja)
+        if (found?.name) {
+          effectiveLoja = found.name
+        }
+      }
+
       if (userAccess.isGerente) {
         if (managerAssignedStoreName) {
           effectiveLoja = managerAssignedStoreName
@@ -600,6 +622,29 @@ export const Relacionamento: React.FC = () => {
           return
         }
         console.error('Erro ao contar clientes móvel:', err)
+        // Fallback em blocos caso a URL tenha sido longa ou haja erro pontual
+        try {
+          if (!userAccess.isAdm && effectiveLoja === 'TODAS' && effectiveAllowed.length > 1) {
+            let chunkSum = 0
+            const chunkSize = 5
+            for (let i = 0; i < effectiveAllowed.length; i += chunkSize) {
+              const chunk = effectiveAllowed.slice(i, i + chunkSize)
+              const chunkFilter = buildCountFilter('TODAS', chunk)
+              if (chunkFilter && chunkFilter !== '__NO_ACCESS__') {
+                const chunkRes = await pb.collection('movel').getList(1, 1, {
+                  fields: 'id',
+                  filter: chunkFilter,
+                  requestKey: null,
+                })
+                chunkSum += chunkRes.totalItems || 0
+              }
+            }
+            setTotalMovel(chunkSum)
+            return
+          }
+        } catch (fallbackErr) {
+          console.error('Erro no fallback de contagem móvel:', fallbackErr)
+        }
         setTotalMovel(0)
       }
     },
@@ -630,6 +675,14 @@ export const Relacionamento: React.FC = () => {
       // Determina a loja efetiva a ser consultada:
       const baseLoja = lojaOverride !== undefined ? lojaOverride : selectedLoja
       let effectiveLoja = baseLoja
+
+      // Se for ID de 15 caracteres, resolve para o nome da store
+      if (effectiveLoja && /^[a-z0-9]{15}$/i.test(effectiveLoja)) {
+        const found = stores.find((s) => s.id === effectiveLoja)
+        if (found?.name) {
+          effectiveLoja = found.name
+        }
+      }
 
       if (userAccess.isGerente) {
         if (managerAssignedStoreName) {
@@ -671,6 +724,29 @@ export const Relacionamento: React.FC = () => {
           return
         }
         console.error('Erro ao contar clientes residencial:', err)
+        // Fallback em blocos caso a URL tenha sido longa ou haja erro pontual
+        try {
+          if (!userAccess.isAdm && effectiveLoja === 'TODAS' && effectiveAllowed.length > 1) {
+            let chunkSum = 0
+            const chunkSize = 5
+            for (let i = 0; i < effectiveAllowed.length; i += chunkSize) {
+              const chunk = effectiveAllowed.slice(i, i + chunkSize)
+              const chunkFilter = buildCountFilter('TODAS', chunk)
+              if (chunkFilter && chunkFilter !== '__NO_ACCESS__') {
+                const chunkRes = await pb.collection('residencial').getList(1, 1, {
+                  fields: 'id',
+                  filter: chunkFilter,
+                  requestKey: null,
+                })
+                chunkSum += chunkRes.totalItems || 0
+              }
+            }
+            setTotalResidencial(chunkSum)
+            return
+          }
+        } catch (fallbackErr) {
+          console.error('Erro no fallback de contagem residencial:', fallbackErr)
+        }
         setTotalResidencial(0)
       }
     },
