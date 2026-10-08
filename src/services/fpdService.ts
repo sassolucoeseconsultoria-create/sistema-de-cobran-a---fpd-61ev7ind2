@@ -442,12 +442,21 @@ export async function clearAllVendorConsolidations(): Promise<number> {
 export function normalizeStoreString(str: unknown): string {
   if (str === null || str === undefined) return ''
   return String(str)
+    .trim()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '') // remove accents
     .toLowerCase()
     .replace(/[^\w\s]/g, ' ') // replace punctuation with spaces
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+/**
+ * Remove o prefixo "celnet" caso exista na string já normalizada.
+ */
+export function stripCelnetPrefix(normalizedStr: string): string {
+  if (!normalizedStr) return ''
+  return normalizedStr.replace(/^celnet\s+/, '').trim()
 }
 
 /**
@@ -484,34 +493,90 @@ export function matchStore(inputStoreName: string, storesList: StoreRecord[]): S
   const inputNorm = normalizeStoreString(inputStoreName)
   if (!inputNorm) return null
 
-  // Pass 1: Exact normalized match
-  for (const s of storesList) {
-    if (normalizeStoreString(s.name) === inputNorm) {
-      return s
-    }
-  }
-
-  // Pass 2: Normalized contains (one contains the other)
-  // ATENÇÃO: NUNCA casar se um contém CALL/ILHA e o outro não, nem colidir DF vs GO
-  const isCallOrIlhaInput = /\b(call|ilha)\b/.test(inputNorm)
+  // Preservar estritamente distinções: CALL vs ILHA vs lojas comuns, e DF vs GO
+  const isCallInput = /\bcall\b/.test(inputNorm)
+  const isIlhaInput = /\bilha\b/.test(inputNorm)
   const hasDfInput = /\bdf\b/.test(inputNorm)
   const hasGoInput = /\bgo\b/.test(inputNorm)
 
-  for (const s of storesList) {
-    const sNorm = normalizeStoreString(s.name)
-    const isCallOrIlhaStore = /\b(call|ilha)\b/.test(sNorm)
-    if (isCallOrIlhaInput !== isCallOrIlhaStore) {
-      continue
-    }
-    const hasDfStore = /\bdf\b/.test(sNorm)
-    const hasGoStore = /\bgo\b/.test(sNorm)
+  const isClassCompatible = (storeNorm: string): boolean => {
+    const isCallStore = /\bcall\b/.test(storeNorm)
+    const isIlhaStore = /\bilha\b/.test(storeNorm)
+
+    // CALL só pode casar com CALL
+    if (isCallInput !== isCallStore) return false
+    // ILHA só pode casar com ILHA
+    if (isIlhaInput !== isIlhaStore) return false
+
+    // Distinção DF vs GO
+    const hasDfStore = /\bdf\b/.test(storeNorm)
+    const hasGoStore = /\bgo\b/.test(storeNorm)
     if ((hasDfInput && hasGoStore) || (hasGoInput && hasDfStore)) {
-      continue
+      return false
     }
 
-    if (inputNorm.includes(sNorm) || sNorm.includes(inputNorm)) {
-      return s
+    return true
+  }
+
+  // Pass 1: Exact normalized match (com ou sem tolerância a CELNET)
+  const exactCandidates: StoreRecord[] = []
+  const inputWithoutCelnet = stripCelnetPrefix(inputNorm)
+
+  for (const s of storesList) {
+    const sNorm = normalizeStoreString(s.name)
+    if (!isClassCompatible(sNorm)) continue
+
+    const sWithoutCelnet = stripCelnetPrefix(sNorm)
+    if (sNorm === inputNorm) {
+      exactCandidates.push(s)
+    } else if (
+      inputWithoutCelnet &&
+      sWithoutCelnet &&
+      (sNorm === inputWithoutCelnet ||
+        sWithoutCelnet === inputNorm ||
+        sWithoutCelnet === inputWithoutCelnet)
+    ) {
+      exactCandidates.push(s)
     }
+  }
+
+  if (exactCandidates.length === 1) {
+    return exactCandidates[0]
+  } else if (exactCandidates.length > 1) {
+    // Se há múltiplos candidatos exatos (improvável), priorizar match idêntico
+    const exactIdentical = exactCandidates.find((s) => normalizeStoreString(s.name) === inputNorm)
+    if (exactIdentical) return exactIdentical
+    // Se ainda ambíguo, NÃO casar (sem chute)
+    return null
+  }
+
+  // Pass 2: Substring nos dois sentidos com tolerância ao prefixo CELNET e unicidade estrita
+  const substringCandidates: StoreRecord[] = []
+  for (const s of storesList) {
+    const sNorm = normalizeStoreString(s.name)
+    if (!isClassCompatible(sNorm)) continue
+
+    const sWithoutCelnet = stripCelnetPrefix(sNorm)
+
+    const matchesSubstring =
+      inputNorm.includes(sNorm) ||
+      sNorm.includes(inputNorm) ||
+      (inputWithoutCelnet.length >= 3 &&
+        sWithoutCelnet.length >= 3 &&
+        (inputWithoutCelnet.includes(sWithoutCelnet) ||
+          sWithoutCelnet.includes(inputWithoutCelnet)))
+
+    if (matchesSubstring) {
+      substringCandidates.push(s)
+    }
+  }
+
+  if (substringCandidates.length === 1) {
+    return substringCandidates[0]
+  } else if (substringCandidates.length > 1) {
+    // Ambiguidade: mais de um candidato compatível. Não casar sem certeza.
+    // Exceção: se um dos candidatos tiver nome idêntico ou cobertura completa de tokens sem outros
+    return null
   }
 
   // Pass 3: Match with noise stripped ("shopping", "goiania", "celnet", "boullevard" -> "boulevard")
@@ -527,11 +592,10 @@ export function matchStore(inputStoreName: string, storesList: StoreRecord[]): S
   )
 
   if (inputSimplified.length >= 2) {
+    const simplifiedCandidates: StoreRecord[] = []
     for (const s of storesList) {
       const sNorm = normalizeStoreString(s.name)
-      const isCallOrIlhaStore = /\b(call|ilha)\b/.test(sNorm)
-      // Se um tem call/ilha e o outro não, não unificar neste passo
-      if (isCallOrIlhaInput !== isCallOrIlhaStore) {
+      if (!isClassCompatible(sNorm)) {
         continue
       }
 
@@ -546,22 +610,19 @@ export function matchStore(inputStoreName: string, storesList: StoreRecord[]): S
       )
 
       if (sSimplified === inputSimplified) {
-        return s
-      }
-      if (
+        simplifiedCandidates.push(s)
+      } else if (
         sSimplified.length >= 3 &&
         (inputSimplified.includes(sSimplified) || sSimplified.includes(inputSimplified))
       ) {
-        // Garantir que sufixos geográficos como DF vs GO não vazem
-        const hasDfInput = /\bdf\b/.test(inputNorm)
-        const hasGoInput = /\bgo\b/.test(inputNorm)
-        const hasDfStore = /\bdf\b/.test(sNorm)
-        const hasGoStore = /\bgo\b/.test(sNorm)
-        if (hasDfInput !== hasDfStore || hasGoInput !== hasGoStore) {
-          continue
-        }
-        return s
+        simplifiedCandidates.push(s)
       }
+    }
+
+    if (simplifiedCandidates.length === 1) {
+      return simplifiedCandidates[0]
+    } else if (simplifiedCandidates.length > 1) {
+      return null
     }
   }
 
@@ -573,17 +634,7 @@ export function matchStore(inputStoreName: string, storesList: StoreRecord[]): S
 
     for (const s of storesList) {
       const sNorm = normalizeStoreString(s.name)
-      const isCallOrIlhaStore = /\b(call|ilha)\b/.test(sNorm)
-      if (isCallOrIlhaInput !== isCallOrIlhaStore) {
-        continue
-      }
-
-      // Evitar colisão entre DF e GO
-      const hasDfInput = /\bdf\b/.test(inputNorm)
-      const hasGoInput = /\bgo\b/.test(inputNorm)
-      const hasDfStore = /\bdf\b/.test(sNorm)
-      const hasGoStore = /\bgo\b/.test(sNorm)
-      if (hasDfInput !== hasDfStore || hasGoInput !== hasGoStore) {
+      if (!isClassCompatible(sNorm)) {
         continue
       }
 
@@ -602,10 +653,15 @@ export function matchStore(inputStoreName: string, storesList: StoreRecord[]): S
         if (score > bestScore) {
           bestScore = score
           bestMatch = s
+        } else if (score === bestScore && bestMatch && bestMatch.id !== s.id) {
+          // Empate entre candidatos: não casar
+          bestMatch = null
         }
       } else if (score > bestScore && score >= 0.5) {
         bestScore = score
         bestMatch = s
+      } else if (score === bestScore && score >= 0.5 && bestMatch && bestMatch.id !== s.id) {
+        bestMatch = null
       }
     }
 
@@ -665,17 +721,21 @@ export async function saveVendorConsolidationsFromLines(
       continue
     }
 
-    const vendedor = rawVendedor ? rawVendedor.toUpperCase() : 'NÃO INFORMADO'
-    let resolvedLojaName = rawLoja ? rawLoja.toUpperCase() : 'LOJA NÃO IDENTIFICADA'
-    let supervisao = ''
-
-    if (rawLoja) {
-      const matchedStore = matchStore(rawLoja, storesList)
-      if (matchedStore) {
-        resolvedLojaName = matchedStore.name.toUpperCase()
-        supervisao = matchedStore.supervisao || ''
-      }
+    // Se a coluna de loja estiver vazia na linha da planilha,
+    // IGNORAR para efeito de consolidação por loja/vendedor (não gera agregado).
+    if (!rawLoja) {
+      continue
     }
+
+    const vendedor = rawVendedor ? rawVendedor.toUpperCase() : 'NÃO INFORMADO'
+    const matchedStore = matchStore(rawLoja, storesList)
+    if (!matchedStore) {
+      // Linha com grafia não reconhecida sem match único não gera agregação de loja espúria
+      continue
+    }
+
+    const resolvedLojaName = matchedStore.name.toUpperCase()
+    let supervisao = matchedStore.supervisao || ''
 
     if (!supervisao) {
       if (resolvedLojaName.includes('GAMA DF')) {

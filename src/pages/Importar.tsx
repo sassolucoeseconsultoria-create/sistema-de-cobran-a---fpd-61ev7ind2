@@ -962,9 +962,14 @@ export const Importar: React.FC = () => {
       setBatchImportDone(true)
       loadStores()
 
+      const avisoSemLoja =
+        result.totalLinhasSemLojaIdentificada && result.totalLinhasSemLojaIdentificada > 0
+          ? ` (${result.totalLinhasSemLojaIdentificada} linhas sem loja identificada gravadas na base sem agregação por loja)`
+          : ''
+
       toast({
         title: `Importação em Lote — ${batchType === 'movel' ? 'Móvel' : 'Residencial'} Concluída!`,
-        description: `${result.storesCount} loja(s) processadas, ${result.totalAnalyticalInserted} registros analíticos gravados e ranking de vendedores atualizado.`,
+        description: `${result.storesCount} loja(s) processadas, ${result.totalAnalyticalInserted} registros analíticos gravados${avisoSemLoja} e ranking de vendedores atualizado.`,
       })
     } catch (err: unknown) {
       const errorStr = err instanceof Error ? err.message : String(err)

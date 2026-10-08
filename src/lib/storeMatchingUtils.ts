@@ -132,6 +132,22 @@ export function getStoreVariants(lojaName: string): string[] {
     variants.add('CELNET AGUAS CLARAS')
     variants.add('CELNET ÁGUAS CLARA')
     variants.add('CELNET ÁGUAS CLARAS')
+    variants.add('AGUAS CLARA')
+    variants.add('AGUAS CLARAS')
+    variants.add('ÁGUAS CLARA')
+    variants.add('ÁGUAS CLARAS')
+  }
+
+  // 7. Variação com e sem prefixo CELNET para compatibilidade canônica
+  if (normKey.startsWith('celnet ')) {
+    const withoutCelnet = trimmed.replace(/^celnet\s+/i, '').trim()
+    if (withoutCelnet) {
+      variants.add(withoutCelnet)
+      variants.add(withoutCelnet.toUpperCase())
+    }
+  } else if (!normKey.startsWith('celnet ') && trimmed.length > 0) {
+    variants.add(`CELNET ${trimmed}`)
+    variants.add(`CELNET ${trimmed}`.toUpperCase())
   }
 
   return Array.from(variants).filter(Boolean)
@@ -163,9 +179,17 @@ export function isSameStore(storeA?: string | null, storeB?: string | null): boo
   if (!normA || !normB) return false
   if (normA === normB) return true
 
-  // Lojas CALL ou ILHA nunca são a mesma de lojas físicas comuns
-  const isCallOrIlhaA = /\b(call|ilha)\b/.test(normA)
-  const isCallOrIlhaB = /\b(call|ilha)\b/.test(normB)
+  // Lojas CALL ou ILHA nunca são a mesma de lojas físicas comuns e nunca casam entre si
+  const isCallA = /\bcall\b/.test(normA)
+  const isCallB = /\bcall\b/.test(normB)
+  if (isCallA !== isCallB) return false
+
+  const isIlhaA = /\bilha\b/.test(normA)
+  const isIlhaB = /\bilha\b/.test(normB)
+  if (isIlhaA !== isIlhaB) return false
+
+  const isCallOrIlhaA = isCallA || isIlhaA
+  const isCallOrIlhaB = isCallB || isIlhaB
   if (isCallOrIlhaA !== isCallOrIlhaB) {
     return false
   }
@@ -183,6 +207,14 @@ export function isSameStore(storeA?: string | null, storeB?: string | null): boo
   const variantsB = getStoreVariants(storeB).map((v) => normalizeStoreString(v))
 
   if (variantsA.includes(normB) || variantsB.includes(normA)) {
+    return true
+  }
+
+  // Tolerância ao prefixo CELNET
+  const stripCelnet = (s: string) => s.replace(/^celnet\s+/, '').trim()
+  const aNoCelnet = stripCelnet(normA)
+  const bNoCelnet = stripCelnet(normB)
+  if (aNoCelnet && bNoCelnet && aNoCelnet === bNoCelnet) {
     return true
   }
 

@@ -66,6 +66,7 @@ export interface ParsedBatchData {
   targetSheetName: string
   totalValidRows: number
   totalExpurgadasRows: number
+  totalLinhasSemLojaIdentificada?: number
   storeSummaries: BatchStoreSummary[]
   analyticalRows: ParsedAnalyticalRow[]
   vendorLines: ParsedVendorLine[]
@@ -261,6 +262,7 @@ export async function parseBatchXlsxFile(
   const allVendorLines: ParsedVendorLine[] = []
   let totalValidRows = 0
   let totalExpurgadasRows = 0
+  let totalLinhasSemLojaIdentificada = 0
 
   for (let i = dataStartRowIndex; i < jsonData.length; i++) {
     const row = jsonData[i]
@@ -394,9 +396,6 @@ export async function parseBatchXlsxFile(
         rawStoreName = String(val).trim()
       }
     }
-    if (!rawStoreName) {
-      rawStoreName = 'LOJA NÃO IDENTIFICADA'
-    }
 
     let rawVendorName = ''
     if (vendorColIndex >= 0 && vendorColIndex < row.length) {
@@ -412,9 +411,16 @@ export async function parseBatchXlsxFile(
       rawVendorName = 'NÃO INFORMADO'
     }
 
-    // Match store canonically
-    const matched = matchStore(rawStoreName, registeredStores)
-    const canonicalStoreName = matched ? matched.name : rawStoreName.toUpperCase()
+    // Se a coluna de loja estiver vazia ou com grafia não reconhecida (sem match canônico único):
+    // IGNORAR para efeito de consolidação por loja (não gera agregado nem cria loja espúria).
+    // Linha fica mantida na base analítica (não se apaga linha).
+    const matched = rawStoreName ? matchStore(rawStoreName, registeredStores) : null
+    if (!matched) {
+      totalLinhasSemLojaIdentificada++
+      continue
+    }
+
+    const canonicalStoreName = matched.name
     const storeKey = canonicalStoreName.trim().toUpperCase()
 
     let storeSummary = storeMap.get(storeKey)
@@ -422,7 +428,7 @@ export async function parseBatchXlsxFile(
       storeSummary = {
         rawStoreName,
         canonicalStoreName,
-        matchedStore: matched || undefined,
+        matchedStore: matched,
         totalLinhas: 0,
         fatura_paga: 0,
         envio_fatura: 0,
@@ -454,13 +460,15 @@ export async function parseBatchXlsxFile(
 
   // Count analytical rows per store
   for (const aRow of analyticalSheet.rows) {
-    const rawLoja = (aRow.loja || '').trim() || 'LOJA NÃO IDENTIFICADA'
+    const rawLoja = (aRow.loja || '').trim()
+    if (!rawLoja) continue
     const matched = matchStore(rawLoja, registeredStores)
-    const canonicalName = matched ? matched.name : rawLoja.toUpperCase()
-    const key = canonicalName.trim().toUpperCase()
-    const summary = storeMap.get(key)
-    if (summary) {
-      summary.analyticalRowsCount++
+    if (matched) {
+      const key = matched.name.trim().toUpperCase()
+      const summary = storeMap.get(key)
+      if (summary) {
+        summary.analyticalRowsCount++
+      }
     }
   }
 
@@ -488,6 +496,7 @@ export async function parseBatchXlsxFile(
     targetSheetName: sheetName,
     totalValidRows,
     totalExpurgadasRows,
+    totalLinhasSemLojaIdentificada,
     storeSummaries,
     analyticalRows: analyticalSheet.rows,
     vendorLines: allVendorLines,
@@ -512,6 +521,7 @@ export async function executeBatchImport(
   totalFpdUpdated: number
   totalVendorSaved: number
   totalAnalyticalInserted: number
+  totalLinhasSemLojaIdentificada?: number
 }> {
   let refDate = (referenceDate || '').trim()
   if (!refDate) {
@@ -650,7 +660,7 @@ export async function executeBatchImport(
         } else if (parsed.storeSummaries.length > 0) {
           normalizedLoja = parsed.storeSummaries[0].canonicalStoreName
         } else {
-          normalizedLoja = 'LOJA NÃO IDENTIFICADA'
+          normalizedLoja = ''
         }
       }
       return {
@@ -746,7 +756,7 @@ export async function executeBatchImport(
   const allDedupedVendorLines: ParsedVendorLine[] = []
 
   const processUnifiedRow = (row: { loja?: string; vendedor?: string; ocorrencias?: string }) => {
-    const rawLoja = (row.loja || '').trim() || 'LOJA NÃO IDENTIFICADA'
+    const rawLoja = (row.loja || '').trim()
     const rawVendedor = (row.vendedor || '').trim() || 'NÃO INFORMADO'
     const normVendedor = normalizeText(rawVendedor)
     const normLoja = normalizeText(rawLoja)
@@ -759,9 +769,18 @@ export async function executeBatchImport(
       return
     }
 
+    // Regra canônica: linha sem coluna de loja ou não reconhecida é IGNORADA para agregação por loja
+    if (!rawLoja) {
+      return
+    }
+
     const matchedStore = matchStore(rawLoja, currentStoresList)
-    const canonicalName = matchedStore ? matchedStore.name.toUpperCase() : rawLoja.toUpperCase()
-    let storeId = matchedStore ? matchedStore.id : storeIdMap.get(canonicalName) || ''
+    if (!matchedStore) {
+      return
+    }
+
+    const canonicalName = matchedStore.name.toUpperCase()
+    const storeId = matchedStore.id
 
     const rawSt = row.ocorrencias || ''
     const cat =
@@ -907,5 +926,6 @@ export async function executeBatchImport(
     totalFpdUpdated,
     totalVendorSaved,
     totalAnalyticalInserted,
+    totalLinhasSemLojaIdentificada: parsed.totalLinhasSemLojaIdentificada || 0,
   }
 }

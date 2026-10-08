@@ -69,4 +69,11 @@ describe('storeMatchingUtils', () => {
     expect(clausePlanaltina).not.toContain('AGUAS')
     expect(clausePlanaltina).not.toContain('PLANALTINA GO')
   })
+
+  it('casos canônicos obrigatórios: AGUAS CLARAS casa CELNET AGUAS CLARAS e CALL JK não casa ILHA JK', () => {
+    expect(isSameStore('AGUAS CLARAS', 'CELNET AGUAS CLARAS')).toBe(true)
+    expect(isSameStore('CELNET AGUAS CLARAS', 'AGUAS CLARAS')).toBe(true)
+    expect(isSameStore('CALL JK', 'ILHA JK')).toBe(false)
+    expect(isSameStore('CELNET CALL JK', 'CELNET ILHA JK')).toBe(false)
+  })
 })
