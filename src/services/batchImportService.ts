@@ -717,11 +717,11 @@ export async function executeBatchImport(
     }),
   ])
 
-  // Deduplicação canônica
+  // Deduplicação canônica (célula vazia / chave não extraível ignorada)
   const seenMovelKeys = new Set<string>()
   const uniqueMovel = allDbMovel.filter((m) => {
     const key = extractMovelDeduplicationKey(m)
-    if (!key) return true
+    if (!key) return false
     if (seenMovelKeys.has(key)) return false
     seenMovelKeys.add(key)
     return true
@@ -730,7 +730,7 @@ export async function executeBatchImport(
   const seenResKeys = new Set<string>()
   const uniqueRes = allDbRes.filter((r) => {
     const key = extractResidencialDeduplicationKey(r)
-    if (!key) return true
+    if (!key) return false
     if (seenResKeys.has(key)) return false
     seenResKeys.add(key)
     return true

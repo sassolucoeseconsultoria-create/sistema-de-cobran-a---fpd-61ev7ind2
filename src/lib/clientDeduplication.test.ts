@@ -5,6 +5,9 @@ import {
   buildCompositeDeduplicationKey,
   extractResidencialDeduplicationKey,
   extractMovelDeduplicationKey,
+  countUniqueMovel,
+  countUniqueResidencial,
+  countUniqueClients,
 } from './clientDeduplication'
 import {
   deduplicateMovelBatchItems,
@@ -102,6 +105,108 @@ describe('Validação Anti-Duplicidade de Importação e Regressão', () => {
           dados: { Telefone: '(62) 98888-7777' },
         }),
       ).toBe('62988887777')
+    })
+  })
+
+  describe('Helpers de Contagem Canônica Compartilhada (Passo 2 e Invariante)', () => {
+    it('(1) linha com chave não extraível NÃO entra na contagem (célula vazia ignorada)', () => {
+      const movelRecords = [
+        { dados: { Numero: '61991234567' } },
+        { dados: {} }, // sem chave extraível
+        { dados: { OutroCampo: 'inadimplente' } }, // sem telefone
+        { dados: { Telefone: '' } }, // vazio
+      ]
+      expect(countUniqueMovel(movelRecords)).toBe(1)
+
+      const resRecords = [
+        { nr_contrato: 'CTR123' },
+        { nr_contrato: '' },
+        { dados: { NR_CONTRATO: '' } },
+        { typedFields: {} },
+      ]
+      expect(countUniqueResidencial(resRecords)).toBe(1)
+    })
+
+    it('(2) mesma chave repetida (número com 2 faturas) conta exatamente 1', () => {
+      const movelRecords = [
+        { dados: { Numero: '61981112233', Fatura: 'FAT-001' } },
+        { dados: { Numero: '61981112233', Fatura: 'FAT-002' } },
+        { dados: { Numero: ' (61) 98111-2233 ' } },
+      ]
+      expect(countUniqueMovel(movelRecords)).toBe(1)
+
+      const resRecords = [
+        { nr_contrato: '22043752' },
+        { nr_contrato: '2.2043752' },
+        { dados: { NR_CONTRATO: ' 22043752 ' } },
+      ]
+      expect(countUniqueResidencial(resRecords)).toBe(1)
+    })
+
+    it('(3) helper de contagem e agregação produzem o MESMO número para o mesmo conjunto de registros (a invariante das visões)', () => {
+      const movelRecords = [
+        { dados: { Numero: '61981110001' } },
+        { dados: { Numero: '61981110001' } }, // duplicata
+        { dados: { Numero: '61981110002' } },
+        { dados: { Numero: '61981110003' } },
+        { dados: {} }, // inválida
+      ]
+      const resRecords = [
+        { nr_contrato: 'CTR-10' },
+        { nr_contrato: 'CTR-20' },
+        { nr_contrato: 'CTR-20' }, // duplicata
+        { dados: { NR_CONTRATO: 'CTR-30' } },
+      ]
+
+      // Contagem via helpers
+      const movelCount = countUniqueMovel(movelRecords)
+      const resCount = countUniqueResidencial(resRecords)
+
+      // Simulação do filtro do consolidado de batchImportService / reconsolidarLojaReferencia
+      const seenM = new Set<string>()
+      const dedupM = movelRecords.filter((m) => {
+        const k = extractMovelDeduplicationKey(m)
+        if (!k) return false
+        if (seenM.has(k)) return false
+        seenM.add(k)
+        return true
+      })
+
+      const seenR = new Set<string>()
+      const dedupR = resRecords.filter((r) => {
+        const k = extractResidencialDeduplicationKey(r)
+        if (!k) return false
+        if (seenR.has(k)) return false
+        seenR.add(k)
+        return true
+      })
+
+      expect(movelCount).toBe(dedupM.length)
+      expect(resCount).toBe(dedupR.length)
+      expect(movelCount).toBe(3)
+      expect(resCount).toBe(3)
+
+      const combined = countUniqueClients([
+        ...movelRecords.map((m) => ({ aba: 'movel' as const, dados: m.dados })),
+        ...resRecords.map((r) => ({
+          aba: 'residencial' as const,
+          nr_contrato: r.nr_contrato,
+          dados: r.dados,
+        })),
+      ])
+      expect(combined.movel).toBe(3)
+      expect(combined.residencial).toBe(3)
+    })
+
+    it('(4) Móvel não usa fallback de primeira coluna "Adimplente" ou colunas arbitrárias de status', () => {
+      // Registros reais com coluna "Adimplente" como primeiro campo
+      const records = [
+        { dados: { Adimplente: 'não', Numero: '61999990001' } },
+        { dados: { Adimplente: 'não', Numero: '61999990002' } },
+        { dados: { Adimplente: 'não', Numero: '61999990003' } },
+      ]
+      // Chaves extraídas devem ser os números, não "nao"
+      expect(countUniqueMovel(records)).toBe(3)
     })
   })
 

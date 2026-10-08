@@ -42,6 +42,8 @@ import {
 import {
   extractMovelDeduplicationKey,
   extractResidencialDeduplicationKey,
+  countUniqueMovel,
+  countUniqueResidencial,
 } from '@/lib/clientDeduplication'
 import { exportVendorsToXlsx } from '@/lib/xlsxExport'
 import { getStoreVariants, buildStoreFilterClause, isSameStore } from '@/lib/storeMatchingUtils'
@@ -433,21 +435,10 @@ export const Vendedores: React.FC = () => {
         requestKey: null,
       })
 
-      // Deduplicar em memória da mesma forma que a tela Inadimplência
+      // Deduplicar em memória usando o mesmo helper canônico da tela Inadimplência
       const seenKeys = new Set<string>()
-      let count = 0
-      for (const r of rawRecords) {
-        const key = extractMovelDeduplicationKey(r)
-        if (!key) {
-          count++
-          continue
-        }
-        if (seenKeys.has(key)) continue
-        seenKeys.add(key)
-        count++
-      }
-
-      setTotalMovel(count)
+      countUniqueMovel(rawRecords, seenKeys)
+      setTotalMovel(seenKeys.size)
     } catch (err) {
       if (isSessionExpiredError(err)) {
         return
@@ -508,21 +499,10 @@ export const Vendedores: React.FC = () => {
         requestKey: null,
       })
 
-      // Deduplicar em memória da mesma forma que a tela Inadimplência
+      // Deduplicar em memória usando o mesmo helper canônico da tela Inadimplência
       const seenKeys = new Set<string>()
-      let count = 0
-      for (const r of rawRecords) {
-        const key = extractResidencialDeduplicationKey(r)
-        if (!key) {
-          count++
-          continue
-        }
-        if (seenKeys.has(key)) continue
-        seenKeys.add(key)
-        count++
-      }
-
-      setTotalResidencial(count)
+      countUniqueResidencial(rawRecords, seenKeys)
+      setTotalResidencial(seenKeys.size)
     } catch (err) {
       if (isSessionExpiredError(err)) {
         return

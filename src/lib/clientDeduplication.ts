@@ -93,6 +93,89 @@ export function extractResidencialDeduplicationKey(record: {
 }
 
 /**
+ * Conta a quantidade de clientes únicos Móvel a partir de um conjunto de registros
+ * (ou acumula chaves em um Set fornecido).
+ * Regras:
+ * (a) Usa extractMovelDeduplicationKey para extrair a chave única canônica;
+ * (b) Conta chaves únicas via Set (mesma chave repetida conta 1 ocorrência);
+ * (c) Linhas com chave não extraível NÃO são contadas (célula vazia ignorada).
+ */
+export function countUniqueMovel(
+  records: Array<{ dados?: Record<string, unknown> }>,
+  seenKeysSet?: Set<string>,
+): number {
+  const seen = seenKeysSet || new Set<string>()
+  const initialSize = seen.size
+  for (const r of records) {
+    const key = extractMovelDeduplicationKey(r)
+    if (!key) continue
+    seen.add(key)
+  }
+  return seen.size - initialSize
+}
+
+/**
+ * Conta a quantidade de clientes únicos Residencial a partir de um conjunto de registros
+ * (ou acumula chaves em um Set fornecido).
+ * Regras:
+ * (a) Usa extractResidencialDeduplicationKey para extrair a chave única canônica;
+ * (b) Conta chaves únicas via Set (mesma chave repetida conta 1 ocorrência);
+ * (c) Linhas com chave não extraível NÃO são contadas (célula vazia ignorada).
+ */
+export function countUniqueResidencial(
+  records: Array<{
+    nr_contrato?: string
+    typedFields?: Record<string, string>
+    dados?: Record<string, unknown>
+  }>,
+  seenKeysSet?: Set<string>,
+): number {
+  const seen = seenKeysSet || new Set<string>()
+  const initialSize = seen.size
+  for (const r of records) {
+    const key = extractResidencialDeduplicationKey(r)
+    if (!key) continue
+    seen.add(key)
+  }
+  return seen.size - initialSize
+}
+
+export type DeduplicationRecordItem = {
+  aba?: 'movel' | 'residencial'
+  nr_contrato?: string
+  typedFields?: Record<string, string>
+  dados?: Record<string, unknown>
+}
+
+/**
+ * Helper compartilhado para contagem de clientes únicos Móvel e Residencial.
+ * Itera os registros e conta ocorrências únicas canônicas, ignorando registros sem chave válida.
+ */
+export function countUniqueClients(records: DeduplicationRecordItem[]): {
+  movel: number
+  residencial: number
+} {
+  const movelKeys = new Set<string>()
+  const residencialKeys = new Set<string>()
+
+  for (const r of records) {
+    if (r.aba === 'residencial') {
+      const key = extractResidencialDeduplicationKey(r)
+      if (key) residencialKeys.add(key)
+    } else {
+      // Padrão ou 'movel'
+      const key = extractMovelDeduplicationKey(r)
+      if (key) movelKeys.add(key)
+    }
+  }
+
+  return {
+    movel: movelKeys.size,
+    residencial: residencialKeys.size,
+  }
+}
+
+/**
  * Extrai a chave de duplicidade de um registro Móvel.
  * Regra: Móvel -> o número da primeira coluna do arquivo
  * (campo `numero`/`NÚMERO` em `dados`, ou primeira chave / Coluna_1 / Telefone / Celular / Linha / MSISDN).

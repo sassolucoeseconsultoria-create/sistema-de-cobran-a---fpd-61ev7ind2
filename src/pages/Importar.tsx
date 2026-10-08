@@ -674,11 +674,11 @@ export const Importar: React.FC = () => {
               }),
             ])
 
-            // Deduplicação canônica
+            // Deduplicação canônica (chave não extraível ignorada)
             const seenMovelKeys = new Set<string>()
             const dedupedMovel = storeMovel.filter((m) => {
               const key = extractMovelDeduplicationKey(m)
-              if (!key) return true
+              if (!key) return false
               if (seenMovelKeys.has(key)) return false
               seenMovelKeys.add(key)
               return true
@@ -687,7 +687,7 @@ export const Importar: React.FC = () => {
             const seenResKeys = new Set<string>()
             const dedupedRes = storeRes.filter((r) => {
               const key = extractResidencialDeduplicationKey(r)
-              if (!key) return true
+              if (!key) return false
               if (seenResKeys.has(key)) return false
               seenResKeys.add(key)
               return true

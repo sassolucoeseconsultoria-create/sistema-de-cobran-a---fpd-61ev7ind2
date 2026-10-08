@@ -197,4 +197,86 @@ describe('Inadimplência - Alinhamento com Total Deduplicado Canônico (Regress�
       expect(screen.queryByText('4')).toBeNull()
     })
   })
+
+  it('ignora linhas com chave vazia/não extraível sem inflar os contadores de clientes', async () => {
+    // Linhas com número vazio / contrato vazio não devem ser contadas
+    const movelRecords = [
+      {
+        id: 'm_empty_1',
+        linha: 2,
+        loja: 'CELNET AGUAS CLARAS',
+        vendedor: 'VENDEDOR A',
+        data_referencia: '30/09/2026',
+        dados: {}, // sem chave
+      },
+      {
+        id: 'm_valid_1',
+        linha: 3,
+        loja: 'CELNET AGUAS CLARAS',
+        vendedor: 'VENDEDOR A',
+        data_referencia: '30/09/2026',
+        dados: { Numero: '61981119999' },
+      },
+    ]
+
+    const residencialRecords = [
+      {
+        id: 'r_empty_1',
+        linha: 2,
+        loja: 'CELNET AGUAS CLARAS',
+        nr_contrato: '',
+        dados: {},
+      },
+      {
+        id: 'r_valid_1',
+        linha: 3,
+        loja: 'CELNET AGUAS CLARAS',
+        nr_contrato: 'CTR_999',
+        dados: { NR_CONTRATO: 'CTR_999' },
+      },
+    ]
+
+    const mockMovelCol = {
+      getList: vi.fn().mockResolvedValue({
+        items: movelRecords,
+        totalItems: 2,
+        totalPages: 1,
+        page: 1,
+        perPage: 500,
+      }),
+      getFullList: vi.fn().mockResolvedValue([{ data_referencia: '30/09/2026' }]),
+    }
+
+    const mockResidencialCol = {
+      getList: vi.fn().mockResolvedValue({
+        items: residencialRecords,
+        totalItems: 2,
+        totalPages: 1,
+        page: 1,
+        perPage: 500,
+      }),
+      getFullList: vi.fn().mockResolvedValue([{ data_referencia: '30/09/2026' }]),
+    }
+
+    vi.mocked(pb.collection).mockImplementation((name: string) => {
+      if (name === 'movel') return mockMovelCol as any
+      if (name === 'residencial') return mockResidencialCol as any
+      return {
+        getList: vi.fn().mockResolvedValue({ items: [], totalItems: 0, totalPages: 1 }),
+        getFullList: vi.fn().mockResolvedValue([]),
+      } as any
+    })
+
+    render(<Relacionamento />)
+
+    // Apenas as linhas com chave válida devem ser contadas (1 Móvel e 1 Residencial = total 2)
+    await waitFor(() => {
+      const movelBadge = screen.getByRole('button', { name: /Clientes Móvel/i })
+      const resBadge = screen.getByRole('button', { name: /Clientes Residencial/i })
+
+      expect(movelBadge.textContent).toContain('1')
+      expect(resBadge.textContent).toContain('1')
+      expect(screen.getByText('2')).toBeDefined()
+    })
+  })
 })

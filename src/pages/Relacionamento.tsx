@@ -52,6 +52,8 @@ import { guessStoreName } from '@/lib/xlsxParser'
 import {
   extractMovelDeduplicationKey,
   extractResidencialDeduplicationKey,
+  countUniqueMovel,
+  countUniqueResidencial,
 } from '@/lib/clientDeduplication'
 import { fetchStores, matchStore } from '@/services/fpdService'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
@@ -617,7 +619,6 @@ export const Relacionamento: React.FC = () => {
       try {
         // Busca paginada das linhas para contagem deduplicada canônica (paridade com Painel e Ranking)
         const seenKeys = new Set<string>()
-        let count = 0
         let page = 1
         const perPage = 500
         let totalPages = 1
@@ -635,22 +636,12 @@ export const Relacionamento: React.FC = () => {
 
           totalPages = res.totalPages || 1
           const items = res.items || []
-
-          for (const r of items) {
-            const key = extractMovelDeduplicationKey(r)
-            if (!key) {
-              count++
-              continue
-            }
-            if (seenKeys.has(key)) continue
-            seenKeys.add(key)
-            count++
-          }
+          countUniqueMovel(items, seenKeys)
 
           page++
         } while (page <= totalPages)
 
-        setTotalMovel(count)
+        setTotalMovel(seenKeys.size)
       } catch (err) {
         if (isSessionExpiredError(err)) {
           return
@@ -660,7 +651,6 @@ export const Relacionamento: React.FC = () => {
         try {
           if (!userAccess.isAdm && effectiveLoja === 'TODAS' && effectiveAllowed.length > 1) {
             const seenKeys = new Set<string>()
-            let chunkSum = 0
             const chunkSize = 5
             for (let i = 0; i < effectiveAllowed.length; i += chunkSize) {
               const chunk = effectiveAllowed.slice(i, i + chunkSize)
@@ -679,21 +669,12 @@ export const Relacionamento: React.FC = () => {
                     requestKey: null,
                   })
                   tPages = chunkRes.totalPages || 1
-                  for (const r of chunkRes.items || []) {
-                    const key = extractMovelDeduplicationKey(r)
-                    if (!key) {
-                      chunkSum++
-                      continue
-                    }
-                    if (seenKeys.has(key)) continue
-                    seenKeys.add(key)
-                    chunkSum++
-                  }
+                  countUniqueMovel(chunkRes.items || [], seenKeys)
                   p++
                 } while (p <= tPages)
               }
             }
-            setTotalMovel(chunkSum)
+            setTotalMovel(seenKeys.size)
             return
           }
         } catch (fallbackErr) {
@@ -769,7 +750,6 @@ export const Relacionamento: React.FC = () => {
       try {
         // Busca paginada das linhas para contagem deduplicada canônica (paridade com Painel e Ranking)
         const seenKeys = new Set<string>()
-        let count = 0
         let page = 1
         const perPage = 500
         let totalPages = 1
@@ -787,22 +767,12 @@ export const Relacionamento: React.FC = () => {
 
           totalPages = res.totalPages || 1
           const items = res.items || []
-
-          for (const r of items) {
-            const key = extractResidencialDeduplicationKey(r)
-            if (!key) {
-              count++
-              continue
-            }
-            if (seenKeys.has(key)) continue
-            seenKeys.add(key)
-            count++
-          }
+          countUniqueResidencial(items, seenKeys)
 
           page++
         } while (page <= totalPages)
 
-        setTotalResidencial(count)
+        setTotalResidencial(seenKeys.size)
       } catch (err) {
         if (isSessionExpiredError(err)) {
           return
@@ -812,7 +782,6 @@ export const Relacionamento: React.FC = () => {
         try {
           if (!userAccess.isAdm && effectiveLoja === 'TODAS' && effectiveAllowed.length > 1) {
             const seenKeys = new Set<string>()
-            let chunkSum = 0
             const chunkSize = 5
             for (let i = 0; i < effectiveAllowed.length; i += chunkSize) {
               const chunk = effectiveAllowed.slice(i, i + chunkSize)
@@ -831,21 +800,12 @@ export const Relacionamento: React.FC = () => {
                     requestKey: null,
                   })
                   tPages = chunkRes.totalPages || 1
-                  for (const r of chunkRes.items || []) {
-                    const key = extractResidencialDeduplicationKey(r)
-                    if (!key) {
-                      chunkSum++
-                      continue
-                    }
-                    if (seenKeys.has(key)) continue
-                    seenKeys.add(key)
-                    chunkSum++
-                  }
+                  countUniqueResidencial(chunkRes.items || [], seenKeys)
                   p++
                 } while (p <= tPages)
               }
             }
-            setTotalResidencial(chunkSum)
+            setTotalResidencial(seenKeys.size)
             return
           }
         } catch (fallbackErr) {

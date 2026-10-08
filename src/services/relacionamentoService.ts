@@ -1309,11 +1309,11 @@ export async function reconsolidarLojaReferencia(
     const filteredMovel = rawMovel.filter((m) => isMatchingRef(m.data_referencia))
     const filteredResidencial = rawResidencial.filter((r) => isMatchingRef(r.data_referencia))
 
-    // 3. Deduplicar por chave canônica isolada por referência
+    // 3. Deduplicar por chave canônica isolada por referência (chave não extraível ignorada)
     const seenMovelKeys = new Set<string>()
     const uniqueMovel = filteredMovel.filter((m) => {
       const key = extractMovelDeduplicationKey(m)
-      if (!key) return true
+      if (!key) return false
       if (seenMovelKeys.has(key)) return false
       seenMovelKeys.add(key)
       return true
@@ -1322,7 +1322,7 @@ export async function reconsolidarLojaReferencia(
     const seenResKeys = new Set<string>()
     const uniqueRes = filteredResidencial.filter((r) => {
       const key = extractResidencialDeduplicationKey(r)
-      if (!key) return true
+      if (!key) return false
       if (seenResKeys.has(key)) return false
       seenResKeys.add(key)
       return true
