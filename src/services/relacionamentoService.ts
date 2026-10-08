@@ -100,6 +100,9 @@ export async function fetchAnalyticalRows(
   const fetchPromise = (async (): Promise<FetchAnalyticalResult> => {
     const filterParts: string[] = []
 
+    // Regra canônica: registros sem loja são ignorados
+    filterParts.push('(loja != "" && loja != null)')
+
     if (loja && loja !== 'TODAS' && loja.trim() !== '') {
       const storeClause = buildStoreFilterClause(loja)
       if (storeClause) {
@@ -288,6 +291,7 @@ export async function fetchDistinctAnalyticalLojas(): Promise<string[]> {
           .getFullList<MovelRecord>({
             fields: 'loja',
             sort: 'loja',
+            filter: '(loja != "" && loja != null)',
             requestKey: null,
           })
           .catch(() => []),
@@ -296,6 +300,7 @@ export async function fetchDistinctAnalyticalLojas(): Promise<string[]> {
           .getFullList<ResidencialRecord>({
             fields: 'loja',
             sort: 'loja',
+            filter: '(loja != "" && loja != null)',
             requestKey: null,
           })
           .catch(() => []),

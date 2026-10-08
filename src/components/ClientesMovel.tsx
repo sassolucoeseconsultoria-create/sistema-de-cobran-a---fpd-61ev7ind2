@@ -168,6 +168,9 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
 
       const filterParts: string[] = []
 
+      // Regra canônica: excluir registros com loja vazia da listagem para manter consistência com contadores
+      filterParts.push('(loja != "" && loja != null)')
+
       // If user selected a specific store
       if (selectedLoja && selectedLoja !== 'TODAS') {
         // Non-ADM users can only select stores they have access to
@@ -262,10 +265,11 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
         requestKey: null,
       })
 
-      // Se não é ADM, reter apenas os registros das lojas permitidas
+      // Se não é ADM, reter apenas os registros das lojas permitidas (e salvaguarda adicional em memória para loja vazia)
       let filteredItems = userAccess.isAdm
-        ? res.items
+        ? res.items.filter((item) => !!(item.loja && item.loja.trim()))
         : res.items.filter((item) => {
+            if (!item.loja || !item.loja.trim()) return false
             if (!userAccess.isStoreNameAllowed(item.loja, stores)) return false
             if (dataReferencia === 'TODAS' && !isDateAllowed(item.data_referencia)) return false
             return true

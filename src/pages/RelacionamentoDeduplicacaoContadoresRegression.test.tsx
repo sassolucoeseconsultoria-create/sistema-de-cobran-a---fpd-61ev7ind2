@@ -279,4 +279,104 @@ describe('Inadimplência - Alinhamento com Total Deduplicado Canônico (Regress�
       expect(screen.getByText('2')).toBeDefined()
     })
   })
+
+  it('exclui linhas com loja vazia da contagem da Inadimplência via filtro (loja != "" && loja != null)', async () => {
+    // 3 linhas no banco com referência 30/09/2026:
+    // 1 Móvel válida com loja
+    // 1 Residencial válida com loja
+    // 1 Residencial com contrato válido mas loja vazia (caso das 26 linhas)
+    const movelRecords = [
+      {
+        id: 'm_com_loja',
+        linha: 2,
+        loja: 'CELNET AGUAS CLARAS',
+        vendedor: 'VENDEDOR A',
+        data_referencia: '30/09/2026',
+        dados: { Numero: '61981110001' },
+      },
+    ]
+
+    const residencialRecords = [
+      {
+        id: 'r_com_loja',
+        linha: 2,
+        loja: 'CELNET AGUAS CLARAS',
+        nr_contrato: 'CTR_COM_LOJA',
+        vendedor: 'VENDEDOR B',
+        data_referencia: '30/09/2026',
+        dados: { NR_CONTRATO: 'CTR_COM_LOJA' },
+      },
+      {
+        id: 'r_sem_loja',
+        linha: 3,
+        loja: '', // LOJA VAZIA
+        nr_contrato: 'CTR_SEM_LOJA',
+        vendedor: '',
+        data_referencia: '30/09/2026',
+        dados: { NR_CONTRATO: 'CTR_SEM_LOJA' },
+      },
+    ]
+
+    let movelFilterReceived = ''
+    let resFilterReceived = ''
+
+    const mockMovelCol = {
+      getList: vi.fn().mockImplementation((page, perPage, options) => {
+        movelFilterReceived = options?.filter || ''
+        return Promise.resolve({
+          items: movelRecords,
+          totalItems: movelRecords.length,
+          totalPages: 1,
+          page: 1,
+          perPage,
+        })
+      }),
+      getFullList: vi.fn().mockResolvedValue([{ data_referencia: '30/09/2026' }]),
+    }
+
+    const mockResidencialCol = {
+      getList: vi.fn().mockImplementation((page, perPage, options) => {
+        resFilterReceived = options?.filter || ''
+        // Se o filtro exclui loja vazia, só retorna r_com_loja
+        const filtered = options?.filter?.includes('loja != ""')
+          ? residencialRecords.filter((r) => !!r.loja)
+          : residencialRecords
+        return Promise.resolve({
+          items: filtered,
+          totalItems: filtered.length,
+          totalPages: 1,
+          page: 1,
+          perPage,
+        })
+      }),
+      getFullList: vi.fn().mockResolvedValue([{ data_referencia: '30/09/2026' }]),
+    }
+
+    vi.mocked(pb.collection).mockImplementation((name: string) => {
+      if (name === 'movel') return mockMovelCol as any
+      if (name === 'residencial') return mockResidencialCol as any
+      return {
+        getList: vi.fn().mockResolvedValue({ items: [], totalItems: 0, totalPages: 1 }),
+        getFullList: vi.fn().mockResolvedValue([]),
+      } as any
+    })
+
+    render(<Relacionamento />)
+
+    // O filtro de PocketBase DEVE conter (loja != "" && loja != null)
+    await waitFor(() => {
+      expect(movelFilterReceived).toContain('loja != "" && loja != null')
+      expect(resFilterReceived).toContain('loja != "" && loja != null')
+    })
+
+    // Contadores: 1 Móvel + 1 Residencial = 2 total (a linha sem loja foi eliminada)
+    await waitFor(() => {
+      const movelBadge = screen.getByRole('button', { name: /Clientes Móvel/i })
+      const resBadge = screen.getByRole('button', { name: /Clientes Residencial/i })
+
+      expect(movelBadge.textContent).toContain('1')
+      expect(resBadge.textContent).toContain('1')
+      expect(screen.getByText('2')).toBeDefined()
+    })
+  })
 })

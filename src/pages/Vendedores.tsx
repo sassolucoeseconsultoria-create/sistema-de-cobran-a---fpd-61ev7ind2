@@ -306,6 +306,9 @@ export const Vendedores: React.FC = () => {
 
       const filterParts: string[] = []
 
+      // Regra canônica de integridade: registros sem loja são ignorados em TODA contagem
+      filterParts.push('(loja != "" && loja != null)')
+
       // Se for Gerente e loja for TODAS ou all ou vazia, nunca contar todas as lojas da rede
       if (userAccess.isGerente && (!loja || loja === 'all' || loja === 'TODAS')) {
         return '__NO_ACCESS__'

@@ -328,6 +328,9 @@ export const Relacionamento: React.FC = () => {
 
       const filterParts: string[] = []
 
+      // Regra canônica de integridade: registros sem loja são ignorados em TODA contagem
+      filterParts.push('(loja != "" && loja != null)')
+
       // Se for Gerente e loja for TODAS ou não definida, nunca contar todas as lojas da rede
       if (userAccess.isGerente && (!resolvedLoja || resolvedLoja === 'TODAS')) {
         return '__NO_ACCESS__'
@@ -1050,8 +1053,9 @@ export const Relacionamento: React.FC = () => {
                 }
               }
             } else {
-              // Resolver OBRIGATORIAMENTE se vier vazia: derivar do nome do arquivo ou padrão
-              normalizedLoja = defaultFileStoreName || 'LOJA NÃO IDENTIFICADA'
+              // Regra canônica: se não houver loja na linha E não for possível derivar do arquivo, deixar vazia
+              // NUNCA gravar rótulo espúrio "LOJA NÃO IDENTIFICADA"
+              normalizedLoja = defaultFileStoreName || ''
             }
 
             return {
@@ -1114,6 +1118,9 @@ export const Relacionamento: React.FC = () => {
       setIsExporting(true)
       const collectionName = activeClientesTab === 'movel' ? 'movel' : 'residencial'
       const filterParts: string[] = []
+
+      // Regra canônica: excluir registros com loja vazia da exportação
+      filterParts.push('(loja != "" && loja != null)')
 
       // Loja filter: respeitando os filtros atuais da tela (loja selecionada != "TODAS" -> loja ~ "...")
       if (selectedLoja && selectedLoja !== 'TODAS') {
