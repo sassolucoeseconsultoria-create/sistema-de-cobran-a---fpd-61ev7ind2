@@ -75,11 +75,29 @@ describe('RelacionamentoContadoresRegression - Perfis não-ADM com vínculo por 
           totalItems: 0,
           totalPages: 1,
           page: 1,
-          perPage: 25,
+          perPage: perPage || 25,
         })
       }
-      // Se contiver CELNET CALL ou CELNET ILHA, retorna contagem > 0
+      // Se contiver CELNET CALL ou CELNET ILHA, retorna contagem > 0 (42 móvel)
       if (filter.includes('CELNET CALL') || filter.includes('CELNET ILHA RESIDENCIAL GAMA DF')) {
+        if (perPage >= 500) {
+          const items = Array.from({ length: 42 }, (_, i) => ({
+            id: `m_call_${i}`,
+            linha: i + 1,
+            loja: 'CELNET CALL NOVA SUIÇA',
+            cliente: `Cliente Call ${i}`,
+            vendedor: 'Vendedor 1',
+            ocorrencias: 'Não Tratados',
+            dados: { Numero: `619700000${i}` },
+          }))
+          return Promise.resolve({
+            items,
+            totalItems: 42,
+            totalPages: 1,
+            page: 1,
+            perPage,
+          })
+        }
         return Promise.resolve({
           items: [
             {
@@ -89,13 +107,13 @@ describe('RelacionamentoContadoresRegression - Perfis não-ADM com vínculo por 
               cliente: 'Cliente Call 1',
               vendedor: 'Vendedor 1',
               ocorrencias: 'Não Tratados',
-              dados: {},
+              dados: { Numero: '61970000001' },
             },
           ],
           totalItems: 42,
           totalPages: 2,
           page: 1,
-          perPage: 25,
+          perPage: perPage || 25,
         })
       }
 
@@ -104,7 +122,7 @@ describe('RelacionamentoContadoresRegression - Perfis não-ADM com vínculo por 
         totalItems: 0,
         totalPages: 1,
         page: 1,
-        perPage: 25,
+        perPage: perPage || 25,
       })
     })
 
@@ -116,26 +134,46 @@ describe('RelacionamentoContadoresRegression - Perfis não-ADM com vínculo por 
           totalItems: 0,
           totalPages: 1,
           page: 1,
-          perPage: 25,
+          perPage: perPage || 25,
         })
       }
       if (filter.includes('CELNET CALL') || filter.includes('CELNET ILHA RESIDENCIAL GAMA DF')) {
+        if (perPage >= 500) {
+          const items = Array.from({ length: 18 }, (_, i) => ({
+            id: `r_call_${i}`,
+            linha: i + 1,
+            nr_contrato: `CTR_CALL_${i}`,
+            loja: 'CELNET CALL NOVA SUIÇA',
+            cliente: `Cliente Res ${i}`,
+            vendedor: 'Vendedor 1',
+            ocorrencias: 'Não Tratados',
+            dados: { NR_CONTRATO: `CTR_CALL_${i}` },
+          }))
+          return Promise.resolve({
+            items,
+            totalItems: 18,
+            totalPages: 1,
+            page: 1,
+            perPage,
+          })
+        }
         return Promise.resolve({
           items: [
             {
               id: 'r1',
               linha: 10,
+              nr_contrato: 'CTR_CALL_1',
               loja: 'CELNET CALL NOVA SUIÇA',
               cliente: 'Cliente Res 1',
               vendedor: 'Vendedor 1',
               ocorrencias: 'Não Tratados',
-              dados: {},
+              dados: { NR_CONTRATO: 'CTR_CALL_1' },
             },
           ],
           totalItems: 18,
           totalPages: 1,
           page: 1,
-          perPage: 25,
+          perPage: perPage || 25,
         })
       }
 
@@ -144,7 +182,7 @@ describe('RelacionamentoContadoresRegression - Perfis não-ADM com vínculo por 
         totalItems: 0,
         totalPages: 1,
         page: 1,
-        perPage: 25,
+        perPage: perPage || 25,
       })
     })
 
@@ -261,7 +299,7 @@ describe('RelacionamentoContadoresRegression - Perfis não-ADM com vínculo por 
     // Inicialmente durante o carregamento, não deve ter chamado getList com __NO_ACCESS__
     expect(mockMovelGetList).not.toHaveBeenCalledWith(
       1,
-      1,
+      500,
       expect.objectContaining({ filter: '__NO_ACCESS__' }),
     )
 

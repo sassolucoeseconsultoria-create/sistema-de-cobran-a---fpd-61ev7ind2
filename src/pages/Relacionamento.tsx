@@ -49,6 +49,10 @@ import * as XLSX from 'xlsx'
 import { useButtonVisibility } from '@/hooks/useButtonVisibility'
 import { parseAnalyticalXlsxFile, ParsedAnalyticalFileData } from '@/lib/analyticalImportParser'
 import { guessStoreName } from '@/lib/xlsxParser'
+import {
+  extractMovelDeduplicationKey,
+  extractResidencialDeduplicationKey,
+} from '@/lib/clientDeduplication'
 import { fetchStores, matchStore } from '@/services/fpdService'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
@@ -611,12 +615,42 @@ export const Relacionamento: React.FC = () => {
         return
       }
       try {
-        const res = await pb.collection('movel').getList(1, 1, {
-          fields: 'id',
-          filter,
-          requestKey: null,
-        })
-        setTotalMovel(res.totalItems || 0)
+        // Busca paginada das linhas para contagem deduplicada canônica (paridade com Painel e Ranking)
+        const seenKeys = new Set<string>()
+        let count = 0
+        let page = 1
+        const perPage = 500
+        let totalPages = 1
+
+        do {
+          const res = await pb.collection('movel').getList<{
+            id: string
+            linha?: number
+            dados?: Record<string, unknown>
+          }>(page, perPage, {
+            fields: 'id,linha,dados',
+            filter,
+            requestKey: null,
+          })
+
+          totalPages = res.totalPages || 1
+          const items = res.items || []
+
+          for (const r of items) {
+            const key = extractMovelDeduplicationKey(r)
+            if (!key) {
+              count++
+              continue
+            }
+            if (seenKeys.has(key)) continue
+            seenKeys.add(key)
+            count++
+          }
+
+          page++
+        } while (page <= totalPages)
+
+        setTotalMovel(count)
       } catch (err) {
         if (isSessionExpiredError(err)) {
           return
@@ -625,18 +659,38 @@ export const Relacionamento: React.FC = () => {
         // Fallback em blocos caso a URL tenha sido longa ou haja erro pontual
         try {
           if (!userAccess.isAdm && effectiveLoja === 'TODAS' && effectiveAllowed.length > 1) {
+            const seenKeys = new Set<string>()
             let chunkSum = 0
             const chunkSize = 5
             for (let i = 0; i < effectiveAllowed.length; i += chunkSize) {
               const chunk = effectiveAllowed.slice(i, i + chunkSize)
               const chunkFilter = buildCountFilter('TODAS', chunk)
               if (chunkFilter && chunkFilter !== '__NO_ACCESS__') {
-                const chunkRes = await pb.collection('movel').getList(1, 1, {
-                  fields: 'id',
-                  filter: chunkFilter,
-                  requestKey: null,
-                })
-                chunkSum += chunkRes.totalItems || 0
+                let p = 1
+                let tPages = 1
+                do {
+                  const chunkRes = await pb.collection('movel').getList<{
+                    id: string
+                    linha?: number
+                    dados?: Record<string, unknown>
+                  }>(p, 500, {
+                    fields: 'id,linha,dados',
+                    filter: chunkFilter,
+                    requestKey: null,
+                  })
+                  tPages = chunkRes.totalPages || 1
+                  for (const r of chunkRes.items || []) {
+                    const key = extractMovelDeduplicationKey(r)
+                    if (!key) {
+                      chunkSum++
+                      continue
+                    }
+                    if (seenKeys.has(key)) continue
+                    seenKeys.add(key)
+                    chunkSum++
+                  }
+                  p++
+                } while (p <= tPages)
               }
             }
             setTotalMovel(chunkSum)
@@ -713,12 +767,42 @@ export const Relacionamento: React.FC = () => {
         return
       }
       try {
-        const res = await pb.collection('residencial').getList(1, 1, {
-          fields: 'id',
-          filter,
-          requestKey: null,
-        })
-        setTotalResidencial(res.totalItems || 0)
+        // Busca paginada das linhas para contagem deduplicada canônica (paridade com Painel e Ranking)
+        const seenKeys = new Set<string>()
+        let count = 0
+        let page = 1
+        const perPage = 500
+        let totalPages = 1
+
+        do {
+          const res = await pb.collection('residencial').getList<{
+            id: string
+            nr_contrato?: string
+            dados?: Record<string, unknown>
+          }>(page, perPage, {
+            fields: 'id,nr_contrato,dados',
+            filter,
+            requestKey: null,
+          })
+
+          totalPages = res.totalPages || 1
+          const items = res.items || []
+
+          for (const r of items) {
+            const key = extractResidencialDeduplicationKey(r)
+            if (!key) {
+              count++
+              continue
+            }
+            if (seenKeys.has(key)) continue
+            seenKeys.add(key)
+            count++
+          }
+
+          page++
+        } while (page <= totalPages)
+
+        setTotalResidencial(count)
       } catch (err) {
         if (isSessionExpiredError(err)) {
           return
@@ -727,18 +811,38 @@ export const Relacionamento: React.FC = () => {
         // Fallback em blocos caso a URL tenha sido longa ou haja erro pontual
         try {
           if (!userAccess.isAdm && effectiveLoja === 'TODAS' && effectiveAllowed.length > 1) {
+            const seenKeys = new Set<string>()
             let chunkSum = 0
             const chunkSize = 5
             for (let i = 0; i < effectiveAllowed.length; i += chunkSize) {
               const chunk = effectiveAllowed.slice(i, i + chunkSize)
               const chunkFilter = buildCountFilter('TODAS', chunk)
               if (chunkFilter && chunkFilter !== '__NO_ACCESS__') {
-                const chunkRes = await pb.collection('residencial').getList(1, 1, {
-                  fields: 'id',
-                  filter: chunkFilter,
-                  requestKey: null,
-                })
-                chunkSum += chunkRes.totalItems || 0
+                let p = 1
+                let tPages = 1
+                do {
+                  const chunkRes = await pb.collection('residencial').getList<{
+                    id: string
+                    nr_contrato?: string
+                    dados?: Record<string, unknown>
+                  }>(p, 500, {
+                    fields: 'id,nr_contrato,dados',
+                    filter: chunkFilter,
+                    requestKey: null,
+                  })
+                  tPages = chunkRes.totalPages || 1
+                  for (const r of chunkRes.items || []) {
+                    const key = extractResidencialDeduplicationKey(r)
+                    if (!key) {
+                      chunkSum++
+                      continue
+                    }
+                    if (seenKeys.has(key)) continue
+                    seenKeys.add(key)
+                    chunkSum++
+                  }
+                  p++
+                } while (p <= tPages)
               }
             }
             setTotalResidencial(chunkSum)

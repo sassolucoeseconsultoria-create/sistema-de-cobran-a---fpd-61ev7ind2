@@ -134,10 +134,29 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
           totalItems: 0,
           totalPages: 1,
           page: 1,
-          perPage: 25,
+          perPage: perPage || 25,
         })
       }
       if (filter.includes('CELNET AGUAS CLARA')) {
+        // Se chamado pela paginação de contagem deduplicada (perPage = 500)
+        if (perPage >= 500) {
+          const items = Array.from({ length: 15 }, (_, i) => ({
+            id: `m_aguas_${i}`,
+            linha: i + 1,
+            loja: 'CELNET AGUAS CLARA',
+            cliente: `Cliente Aguas ${i}`,
+            vendedor: 'Vendedor Teste',
+            ocorrencias: 'Não Tratados',
+            dados: { Numero: `619900000${i}` },
+          }))
+          return Promise.resolve({
+            items,
+            totalItems: 15,
+            totalPages: 1,
+            page: 1,
+            perPage,
+          })
+        }
         return Promise.resolve({
           items: [
             {
@@ -147,16 +166,34 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
               cliente: 'Cliente Teste Aguas',
               vendedor: 'Vendedor Teste',
               ocorrencias: 'Não Tratados',
-              dados: {},
+              dados: { Numero: '61990000001' },
             },
           ],
           totalItems: 15,
           totalPages: 1,
           page: 1,
-          perPage: 25,
+          perPage: perPage || 25,
         })
       }
       // Total global / TODAS
+      if (perPage >= 500) {
+        const items = Array.from({ length: 147 }, (_, i) => ({
+          id: `m_all_${i}`,
+          linha: i + 1,
+          loja: 'CELNET MATRIZ PLANALTINA DF',
+          cliente: `Cliente ${i}`,
+          vendedor: 'Vendedor 2',
+          ocorrencias: 'Não Tratados',
+          dados: { Numero: `619800000${i}` },
+        }))
+        return Promise.resolve({
+          items,
+          totalItems: 147,
+          totalPages: 1,
+          page: 1,
+          perPage,
+        })
+      }
       return Promise.resolve({
         items: [
           {
@@ -166,13 +203,13 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
             cliente: 'Cliente Planaltina',
             vendedor: 'Vendedor 2',
             ocorrencias: 'Não Tratados',
-            dados: {},
+            dados: { Numero: '61980000002' },
           },
         ],
         totalItems: 147,
         totalPages: 6,
         page: 1,
-        perPage: 25,
+        perPage: perPage || 25,
       })
     })
 
@@ -184,26 +221,65 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
           totalItems: 0,
           totalPages: 1,
           page: 1,
-          perPage: 25,
+          perPage: perPage || 25,
         })
       }
       if (filter.includes('CELNET AGUAS CLARA')) {
+        if (perPage >= 500) {
+          const items = Array.from({ length: 6 }, (_, i) => ({
+            id: `r_aguas_${i}`,
+            linha: i + 1,
+            nr_contrato: `CTR_AGUAS_${i}`,
+            loja: 'CELNET AGUAS CLARA',
+            cliente: `Cliente Res Aguas ${i}`,
+            vendedor: 'Vendedor Res',
+            ocorrencias: 'Fatura(s) Paga(s)',
+            dados: { NR_CONTRATO: `CTR_AGUAS_${i}` },
+          }))
+          return Promise.resolve({
+            items,
+            totalItems: 6,
+            totalPages: 1,
+            page: 1,
+            perPage,
+          })
+        }
         return Promise.resolve({
           items: [
             {
               id: 'r1',
               linha: 2,
+              nr_contrato: 'CTR_AGUAS_1',
               loja: 'CELNET AGUAS CLARA',
               cliente: 'Cliente Residencial Aguas',
               vendedor: 'Vendedor Res',
               ocorrencias: 'Fatura(s) Paga(s)',
-              dados: {},
+              dados: { NR_CONTRATO: 'CTR_AGUAS_1' },
             },
           ],
           totalItems: 6,
           totalPages: 1,
           page: 1,
-          perPage: 25,
+          perPage: perPage || 25,
+        })
+      }
+      if (perPage >= 500) {
+        const items = Array.from({ length: 98 }, (_, i) => ({
+          id: `r_all_${i}`,
+          linha: i + 1,
+          nr_contrato: `CTR_ALL_${i}`,
+          loja: 'CELNET MATRIZ PLANALTINA DF',
+          cliente: `Cliente Res ${i}`,
+          vendedor: 'Vendedor Res',
+          ocorrencias: 'Não Tratados',
+          dados: { NR_CONTRATO: `CTR_ALL_${i}` },
+        }))
+        return Promise.resolve({
+          items,
+          totalItems: 98,
+          totalPages: 1,
+          page: 1,
+          perPage,
         })
       }
       return Promise.resolve({
@@ -211,7 +287,7 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
         totalItems: 98,
         totalPages: 4,
         page: 1,
-        perPage: 25,
+        perPage: perPage || 25,
       })
     })
 
@@ -358,14 +434,14 @@ describe('Relacionamento - Filtro de Loja e Totais nos Badges', () => {
     await waitFor(() => {
       expect(mockMovelGetList).toHaveBeenCalledWith(
         1,
-        1,
+        500,
         expect.objectContaining({
           filter: undefined,
         }),
       )
       expect(mockResidencialGetList).toHaveBeenCalledWith(
         1,
-        1,
+        500,
         expect.objectContaining({
           filter: undefined,
         }),
