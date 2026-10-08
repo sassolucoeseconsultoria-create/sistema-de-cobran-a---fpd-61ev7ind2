@@ -34,9 +34,7 @@ vi.mock('@/services/mensagensService', () => {
 // Mock fpdService
 vi.mock('@/services/fpdService', () => {
   return {
-    fetchStores: vi.fn().mockResolvedValue([
-      { id: 'st_aguas', name: 'CELNET AGUAS CLARAS' },
-    ]),
+    fetchStores: vi.fn().mockResolvedValue([{ id: 'st_aguas', name: 'CELNET AGUAS CLARAS' }]),
     matchStore: vi.fn((name: string, stores: any[]) => {
       if (!name || !stores) return null
       return (

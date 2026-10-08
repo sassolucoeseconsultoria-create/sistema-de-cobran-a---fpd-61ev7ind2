@@ -120,25 +120,14 @@ export function extractMovelDeduplicationKey(record: { dados?: Record<string, un
     if (norm) return norm
   }
 
-  // 2. O usuário mencionou: "no Móvel é o Número, que consta na primeira coluna do arquivo".
-  // Se o parser salvou a primeira coluna como 'Coluna_1' ou com outro nome, verificar a primeira chave de `dados`:
-  const entries = Object.entries(d)
-  if (entries.length > 0) {
-    const [firstKey, firstVal] = entries[0]
-    // Se a primeira chave já é uma das colunas ou Coluna_1
-    if (firstVal !== undefined && firstVal !== null) {
-      const valStr = String(firstVal).trim()
-      // Se não for vazia e parecer um identificador/número
-      if (valStr) {
-        const norm = normalizeClientDeduplicationKey(valStr)
-        if (norm) return norm
-      }
-    }
-    // Ou se a primeira chave contém Coluna_1
-    if (firstKey.toLowerCase().startsWith('coluna_1')) {
-      const norm = normalizeClientDeduplicationKey(firstVal)
-      if (norm) return norm
-    }
+  // 2. Fallback seguro: procurar por Coluna_1 ou chaves nomeadas de coluna
+  // NUNCA usar a primeira chave cega de `dados` porque em registros reais do banco
+  // a primeira chave pode ser "Adimplente" (com valor "não" / "sim"), o que colapsaria
+  // erroneamente todas as linhas em uma única chave constante "nao"!
+  const coluna1Val = getDadosField(d, 'Coluna_1', 'Coluna 1', 'Coluna1')
+  if (coluna1Val) {
+    const norm = normalizeClientDeduplicationKey(coluna1Val)
+    if (norm) return norm
   }
 
   return ''
