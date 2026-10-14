@@ -51,6 +51,8 @@ interface ClientesMovelProps {
   dataReferencia?: string
   selectedLoja?: string
   onLojaChange?: (loja: string) => void
+  selectedOcorrencia?: string
+  onOcorrenciaChange?: (ocorrencia: string) => void
 }
 
 export const ClientesMovel: React.FC<ClientesMovelProps> = ({
@@ -59,6 +61,8 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
   dataReferencia,
   selectedLoja: controlledLoja,
   onLojaChange,
+  selectedOcorrencia: controlledOcorrencia,
+  onOcorrenciaChange,
 }) => {
   const { toast } = useToast()
   const { allowedReferenceDates, isDateAllowed } = useAllowedReferenceDates()
@@ -74,6 +78,21 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [internalLoja, setInternalLoja] = useState('TODAS')
+  const [internalOcorrencia, setInternalOcorrencia] = useState<string>('TODAS')
+
+  const selectedOcorrencia =
+    controlledOcorrencia !== undefined ? controlledOcorrencia : internalOcorrencia
+
+  const setSelectedOcorrencia = useCallback(
+    (newOcorrencia: string) => {
+      if (onOcorrenciaChange) {
+        onOcorrenciaChange(newOcorrencia)
+      } else {
+        setInternalOcorrencia(newOcorrencia)
+      }
+    },
+    [onOcorrenciaChange],
+  )
 
   const rawSelectedLoja = controlledLoja !== undefined ? controlledLoja : internalLoja
   // Se selectedLoja for um ID de 15 caracteres, resolver para o nome da loja
@@ -231,6 +250,18 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
         )
       }
 
+      // Filtro de Ocorrências
+      if (selectedOcorrencia && selectedOcorrencia !== 'TODAS') {
+        if (selectedOcorrencia === 'Não Tratados') {
+          filterParts.push(
+            '(ocorrencias = "Não Tratados" || ocorrencias = "" || ocorrencias = null)',
+          )
+        } else {
+          const escOcorrencia = selectedOcorrencia.replace(/"/g, '\\"')
+          filterParts.push(`ocorrencias = "${escOcorrencia}"`)
+        }
+      }
+
       if (dataReferencia === 'NONE') {
         setRecords([])
         setTotalItems(0)
@@ -279,6 +310,14 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
       if (selectedLoja && selectedLoja !== 'TODAS') {
         filteredItems = filteredItems.filter((item) => {
           return isSameStore(item.loja, selectedLoja)
+        })
+      }
+
+      // Salvaguarda em memória para filtro de ocorrência antes da ordenação
+      if (selectedOcorrencia && selectedOcorrencia !== 'TODAS') {
+        filteredItems = filteredItems.filter((item) => {
+          const o = item.ocorrencias || 'Não Tratados'
+          return o.trim().toLowerCase() === selectedOcorrencia.trim().toLowerCase()
         })
       }
 
@@ -336,6 +375,7 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
     perPage,
     debouncedSearch,
     selectedLoja,
+    selectedOcorrencia,
     availableLojas,
     stores,
     userAccess,
@@ -600,7 +640,8 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
     }))
   }
 
-  const hasActiveFilters = debouncedSearch !== '' || selectedLoja !== 'TODAS'
+  const hasActiveFilters =
+    debouncedSearch !== '' || selectedLoja !== 'TODAS' || selectedOcorrencia !== 'TODAS'
 
   return (
     <div className="space-y-4">
@@ -667,6 +708,46 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
             </div>
           )}
 
+          {/* Ocorrência selector */}
+          <div className="w-full sm:w-56">
+            <Select
+              value={selectedOcorrencia}
+              onValueChange={(val) => {
+                setSelectedOcorrencia(val)
+                setPage(1)
+              }}
+            >
+              <SelectTrigger
+                data-testid="select-filtro-ocorrencia-movel"
+                className={cn(
+                  'h-9 text-xs bg-[#F8FAFC] border-[#E3E9F2] transition-colors',
+                  selectedOcorrencia !== 'TODAS' &&
+                    'border-[#0E9F8A] bg-[#0E9F8A]/5 text-[#12365A] font-semibold',
+                )}
+              >
+                <div className="flex items-center gap-2 truncate">
+                  <span className="text-[#5B6B82] font-normal">Ocorrência:</span>
+                  <span className="truncate font-semibold text-[#12365A]">
+                    {selectedOcorrencia === 'TODAS' ? 'Todas as Ocorrências' : selectedOcorrencia}
+                  </span>
+                  {selectedOcorrencia !== 'TODAS' && (
+                    <span className="w-2 h-2 rounded-full bg-[#0E9F8A] shrink-0 ml-auto" />
+                  )}
+                </div>
+              </SelectTrigger>
+              <SelectContent className="bg-white max-h-64">
+                <SelectItem value="TODAS" className="text-xs font-semibold">
+                  Todas as Ocorrências
+                </SelectItem>
+                {OCORRENCIAS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt} value={opt} className="text-xs">
+                    {opt}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {hasActiveFilters && (
             <Button
               variant="ghost"
@@ -676,6 +757,7 @@ export const ClientesMovel: React.FC<ClientesMovelProps> = ({
                 if (!userAccess.isGerente) {
                   setSelectedLoja('TODAS')
                 }
+                setSelectedOcorrencia('TODAS')
                 setPage(1)
               }}
               className="h-9 text-xs text-[#5B6B82] hover:text-[#12233A] gap-1"

@@ -29,9 +29,9 @@ export interface AnalyticRowRecord extends RecordModel {
 export type RelacionamentoAba = 'Móvel' | 'Residencial'
 
 export const OCORRENCIAS_OPTIONS = [
-  'Fatura(s) Paga(s)',
   'Não Tratados',
   'Pendente',
+  'Fatura(s) Paga(s)',
   'Enviado Fatura(s)',
   'Sem Contato',
   'Promessa de Pagto.',

@@ -91,6 +91,7 @@ export const Relacionamento: React.FC = () => {
   const [stores, setStores] = useState<StoreRecord[]>([])
   const [totalMovel, setTotalMovel] = useState(0)
   const [totalResidencial, setTotalResidencial] = useState(0)
+  const [selectedOcorrencia, setSelectedOcorrencia] = useState<string>('TODAS')
   // Para Gerente com loja vinculada, se for ID de 15 caracteres não inicializar como ID bruto
   const [selectedLoja, setSelectedLoja] = useState<string>(() => {
     if (userAccess.isGerente) {
@@ -1136,6 +1137,17 @@ export const Relacionamento: React.FC = () => {
         filterParts.push(`data_referencia = "${selectedDataReferencia.replace(/"/g, '\\"')}"`)
       }
 
+      // Ocorrência filter: se o filtro estiver ativo, aplicar a mesma cláusula na query getFullList da exportação
+      if (selectedOcorrencia && selectedOcorrencia !== 'TODAS') {
+        if (selectedOcorrencia === 'Não Tratados') {
+          filterParts.push(
+            '(ocorrencias = "Não Tratados" || ocorrencias = "" || ocorrencias = null)',
+          )
+        } else {
+          filterParts.push(`ocorrencias = "${selectedOcorrencia.replace(/"/g, '\\"')}"`)
+        }
+      }
+
       const records = await pb.collection(collectionName).getFullList({
         filter: filterParts.length > 0 ? filterParts.join(' && ') : undefined,
         sort: '-created',
@@ -1565,6 +1577,8 @@ export const Relacionamento: React.FC = () => {
           dataReferencia={selectedDataReferencia}
           selectedLoja={selectedLoja}
           onLojaChange={setSelectedLoja}
+          selectedOcorrencia={selectedOcorrencia}
+          onOcorrenciaChange={setSelectedOcorrencia}
         />
       ) : (
         <ClientesResidencial
@@ -1573,6 +1587,8 @@ export const Relacionamento: React.FC = () => {
           dataReferencia={selectedDataReferencia}
           selectedLoja={selectedLoja}
           onLojaChange={setSelectedLoja}
+          selectedOcorrencia={selectedOcorrencia}
+          onOcorrenciaChange={setSelectedOcorrencia}
         />
       )}
 
