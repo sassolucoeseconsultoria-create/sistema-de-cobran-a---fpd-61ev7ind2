@@ -1,5 +1,6 @@
 import pb from '@/lib/pocketbase/client'
 import { executeWithRateLimitRetry, sleep } from '@/lib/pocketbase/rateLimiter'
+import { sortReferenceDatesDesc } from '@/lib/clientFormatters'
 import type {
   StoreRecord,
   FpdRecord,
@@ -362,27 +363,8 @@ export async function fetchDistinctReferenceDates(): Promise<string[]> {
       }
     }
 
-    // Sort descending by parsed date (DD/MM/YYYY) or string
-    return Array.from(set).sort((a, b) => {
-      const partsA = a.split('/')
-      const partsB = b.split('/')
-      if (partsA.length === 3 && partsB.length === 3) {
-        const dateA = new Date(
-          Number(partsA[2]),
-          Number(partsA[1]) - 1,
-          Number(partsA[0]),
-        ).getTime()
-        const dateB = new Date(
-          Number(partsB[2]),
-          Number(partsB[1]) - 1,
-          Number(partsB[0]),
-        ).getTime()
-        if (!isNaN(dateA) && !isNaN(dateB)) {
-          return dateB - dateA
-        }
-      }
-      return b.localeCompare(a)
-    })
+    // Sort descending by parsed date (MM/AAAA ou DD/MM/AAAA) via sortReferenceDatesDesc
+    return sortReferenceDatesDesc(Array.from(set))
   } catch {
     return []
   }

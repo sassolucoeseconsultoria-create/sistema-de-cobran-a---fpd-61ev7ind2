@@ -263,7 +263,7 @@ export const Relacionamento: React.FC = () => {
       allowedReferenceDates.forEach((d) => {
         if (d && d.trim()) datesSet.add(d.trim())
       })
-      const sortedDates = Array.from(datesSet).sort((a, b) => b.localeCompare(a))
+      const sortedDates = sortReferenceDatesDesc(Array.from(datesSet))
       setRawAvailableDates(sortedDates)
       setScopeReady(true)
     } catch (err) {
@@ -288,26 +288,7 @@ export const Relacionamento: React.FC = () => {
       if (isDateAllowed(d)) set.add(d.trim())
     })
     // Se allowedReferenceDates tiver datas ordenadas, manter a união ordenada desc
-    return Array.from(set).sort((a, b) => {
-      const partsA = a.split('/')
-      const partsB = b.split('/')
-      if (partsA.length === 3 && partsB.length === 3) {
-        const dateA = new Date(
-          Number(partsA[2]),
-          Number(partsA[1]) - 1,
-          Number(partsA[0]),
-        ).getTime()
-        const dateB = new Date(
-          Number(partsB[2]),
-          Number(partsB[1]) - 1,
-          Number(partsB[0]),
-        ).getTime()
-        if (!isNaN(dateA) && !isNaN(dateB)) {
-          return dateB - dateA
-        }
-      }
-      return b.localeCompare(a)
-    })
+    return sortReferenceDatesDesc(Array.from(set))
   }, [rawAvailableDates, isDateAllowed, allowedReferenceDates])
 
   // Build PB filter string for counting a collection based on store, profile and reference date

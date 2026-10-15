@@ -83,24 +83,32 @@ export function guessStoreName(filename: string): string {
  * Auto-guesses a referring date (e.g. "20/08/2026") from filename or defaults to formatted today
  */
 export function guessReferenteDate(filename: string): string {
-  // Match patterns like 20-08-2026, 20_08_2026, 20.08.2026, 20/08/2026
-  const dateMatch = filename.match(/(\d{1,2})[-_./](\d{1,2})[-_./](\d{2,4})/)
-  if (dateMatch) {
-    const day = dateMatch[1].padStart(2, '0')
-    const month = dateMatch[2].padStart(2, '0')
-    let year = dateMatch[3]
+  // 1. Tentar padrão explícito de mês/ano, ex: "09-2026", "09_2026", "09.2026", "09/2026"
+  const monthYearMatch = filename.match(/(?:^|[^0-9])(0[1-9]|1[0-2])[-_./](\d{4})(?:[^0-9]|$)/)
+  if (monthYearMatch) {
+    return `${monthYearMatch[1]}/${monthYearMatch[2]}`
+  }
+
+  // 2. Se houver data completa no nome do arquivo (ex.: 08-09-2026, 08_09_2026, 08.09.2026, 08/09/2026)
+  // extrair apenas o mês e o ano para manter o conceito MM/AAAA
+  const fullDateMatch = filename.match(/(\d{1,2})[-_./](\d{1,2})[-_./](\d{2,4})/)
+  if (fullDateMatch) {
+    const month = fullDateMatch[2].padStart(2, '0')
+    let year = fullDateMatch[3]
     if (year.length === 2) {
       year = `20${year}`
     }
-    return `${day}/${month}/${year}`
+    const monthNum = parseInt(month, 10)
+    if (monthNum >= 1 && monthNum <= 12) {
+      return `${month}/${year}`
+    }
   }
 
-  // Fallback to today formatted as DD/MM/YYYY
+  // Fallback: mês e ano atuais no formato MM/AAAA
   const now = new Date()
-  const d = String(now.getDate()).padStart(2, '0')
   const m = String(now.getMonth() + 1).padStart(2, '0')
   const y = now.getFullYear()
-  return `${d}/${m}/${y}`
+  return `${m}/${y}`
 }
 
 // Exact match sets for each category in strict priority order (1 to 8)
