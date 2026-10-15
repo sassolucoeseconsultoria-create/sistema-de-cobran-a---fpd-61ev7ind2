@@ -64,6 +64,7 @@ import {
   formatExcelOrIsoDate,
   formatExcelOrIsoDateShort,
   getDadosField,
+  sortReferenceDatesDesc,
 } from '@/lib/clientFormatters'
 import { ClientesMovel } from '@/components/ClientesMovel'
 import { ClientesResidencial } from '@/components/ClientesResidencial'
