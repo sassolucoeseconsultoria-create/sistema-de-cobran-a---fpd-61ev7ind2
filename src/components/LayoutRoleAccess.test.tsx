@@ -74,6 +74,27 @@ describe('Layout e Controle de Acesso por Perfil', () => {
     expect(tarefasLink.getAttribute('rel')).toBe('noopener noreferrer')
   })
 
+  it('monta o link de Tarefas com email e senha da sessão quando disponíveis', () => {
+    vi.spyOn(AuthContext, 'useAuth').mockReturnValue(createMockAuth('ADM'))
+    window.sessionStorage.setItem('fpd_session_user_pw', 'SenhaSecreta123')
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <TooltipProvider>
+          <Layout />
+        </TooltipProvider>
+      </MemoryRouter>,
+    )
+
+    const tarefasLink = screen.getByRole('link', { name: /tarefas/i })
+    expect(tarefasLink).not.toBeNull()
+    const href = tarefasLink.getAttribute('href') || ''
+    expect(href).toContain('email=adm%40celnet.com.br')
+    expect(href).toContain('senha=SenhaSecreta123')
+
+    window.sessionStorage.clear()
+  })
+
   it.each(['Gerente', 'Coordenador', 'Supervisor'] as const)(
     'renderiza Lojas e Importar Arquivos desabilitados para perfil %s',
     (role) => {

@@ -24,6 +24,7 @@ import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { buildTarefasUrl, getSessionPassword } from '@/services/tarefasIntegration'
 
 export const Layout: React.FC = () => {
   const { user, logout } = useAuth()
@@ -86,10 +87,10 @@ export const Layout: React.FC = () => {
       disabledReason: 'Exclusivo do perfil ADM',
     },
     {
-      href: 'https://sistema-de-gestao-de-tarefas-c6670.goskip.app',
+      href: buildTarefasUrl(user?.email, getSessionPassword()),
       label: 'Tarefas',
       icon: ListTodo,
-      description: 'Sistema de Gestão de Tarefas (abre em nova aba)',
+      description: 'Sistema de Gestão de Tarefas (abre em nova aba com login automático)',
       external: true,
       disabled: false,
     },

@@ -1,38 +1,32 @@
 import PocketBase from 'pocketbase'
 
-export const AUTH_REDIRECT_KEY = 'celnet_auth_redirect'
-export const SESSION_EXPIRED_BANNER_KEY = 'celnet_session_expired_banner'
+const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
+pb.autoCancellation(false)
 
-export function isSessionExpiredError(error: unknown): boolean {
-  if (!error) return false
-  const err = error as { status?: number; response?: { message?: string }; message?: string }
-  if (err.status === 401) return true
-  const msg = `${err.response?.message || ''} ${err.message || ''}`.toLowerCase()
-  return (
-    msg.includes('token expired') ||
-    msg.includes('token is expired') ||
-    msg.includes('token invalid') ||
-    msg.includes('failed to authenticate') ||
-    msg.includes('the request requires valid user authorization')
-  )
+export const AUTH_REDIRECT_KEY = 'fpd_auth_redirect'
+export const SESSION_EXPIRED_BANNER_KEY = 'fpd_session_expired_notice'
+
+export function isSessionExpiredError(err: unknown): boolean {
+  if (!err) return false
+  const errorObj = err as { status?: number; response?: { message?: string; code?: number } }
+  if (errorObj.status === 401) return true
+  const msg = String((err as any)?.message || '')
+  if (msg.includes('The request requires valid record authorization token')) return true
+  if (msg.includes('Failed to authenticate')) return true
+  return false
 }
 
-export function handleSessionExpired(customMessage?: string): void {
+export function handleSessionExpired(message?: string): void {
   try {
-    const currentPath = window.location.pathname + window.location.search
-    if (currentPath && currentPath !== '/login') {
-      window.sessionStorage.setItem(AUTH_REDIRECT_KEY, currentPath)
+    // Limpar senha da sessão imediatamente ao expirar
+    window.sessionStorage.removeItem('fpd_session_user_pw')
+    if (message) {
+      window.sessionStorage.setItem(SESSION_EXPIRED_BANNER_KEY, message)
     }
-    window.sessionStorage.setItem(
-      SESSION_EXPIRED_BANNER_KEY,
-      customMessage || 'Sua sessão expirou. Faça login novamente para continuar.',
-    )
   } catch {
-    // ignore sessionStorage errors in restricted iframe/private contexts
+    // ignore
   }
 }
 
-export const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
-pb.autoCancellation(false)
-
+export { pb }
 export default pb

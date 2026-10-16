@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   RefreshCw,
   Check,
+  KeyRound,
 } from 'lucide-react'
 import pb, { isSessionExpiredError } from '@/lib/pocketbase/client'
 import { useAuth, type UserRole, type User } from '@/contexts/AuthContext'
@@ -105,7 +106,19 @@ export const Admin: React.FC = () => {
     passwordConfirm: '',
     role: 'Supervisor' as UserRole,
     lojas: [] as string[],
+    ativo: true,
   })
+
+  // Redefinir senha modal state
+  const [userToResetPassword, setUserToResetPassword] = useState<User | null>(null)
+  const [newPasswordVal, setNewPasswordVal] = useState('')
+  const [newPasswordConfirmVal, setNewPasswordConfirmVal] = useState('')
+  const [showResetPass, setShowResetPass] = useState(false)
+  const [resettingPassword, setResettingPassword] = useState(false)
+  const [resetPasswordError, setResetPasswordError] = useState<string | null>(null)
+
+  // Toggle user ativo status
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [showPasswordConfirm, setShowPasswordConfirm] = useState(false)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
@@ -147,6 +160,7 @@ export const Admin: React.FC = () => {
       setLoading(true)
       const userList = await pb.collection('users').getFullList<User>({
         sort: '-created',
+        requestKey: null,
       })
       setUsers(userList)
     } catch (err: unknown) {
@@ -259,6 +273,7 @@ export const Admin: React.FC = () => {
       passwordConfirm: '',
       role: 'Supervisor',
       lojas: [],
+      ativo: true,
     })
     setShowPassword(false)
     setShowPasswordConfirm(false)
@@ -303,6 +318,7 @@ export const Admin: React.FC = () => {
       passwordConfirm: '',
       role: resolvedRole,
       lojas: resolvedRole === 'Gerente' ? resolvedInitialLojas.slice(0, 1) : resolvedInitialLojas,
+      ativo: user.ativo !== false,
     })
     setShowPassword(false)
     setShowPasswordConfirm(false)
@@ -483,6 +499,7 @@ export const Admin: React.FC = () => {
           fone: formData.fone.trim(),
           role: formData.role,
           lojas: resolveLojasForSubmit(resolvedLojas),
+          ativo: formData.ativo,
         }
 
         // Só enviar password e passwordConfirm se forem preenchidas
@@ -501,6 +518,7 @@ export const Admin: React.FC = () => {
           fone: payload.fone,
           role: payload.role,
           lojas: payload.lojas,
+          ativo: payload.ativo,
         }
 
         // Se o usuário editou o próprio cadastro, sincroniza o authStore
@@ -541,6 +559,7 @@ export const Admin: React.FC = () => {
           lojas: resolveLojasForSubmit(resolvedLojas),
           password: trimmedPassword,
           passwordConfirm: trimmedPasswordConfirm,
+          ativo: formData.ativo,
         }
 
         const created = await pb.collection('users').create<User>(payload)
@@ -551,6 +570,7 @@ export const Admin: React.FC = () => {
           fone: payload.fone,
           role: payload.role,
           lojas: payload.lojas,
+          ativo: payload.ativo,
         }
 
         setUsers((prev) => {
@@ -662,6 +682,94 @@ export const Admin: React.FC = () => {
       })
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  // Handle Toggle User Ativo / Inativo
+  const handleToggleUserAtivo = async (user: User) => {
+    const isCurrent = user.id === currentUser?.id
+    if (isCurrent && user.ativo !== false) {
+      toast({
+        title: 'Ação não permitida',
+        description: 'Você não pode desativar seu próprio usuário enquanto estiver conectado.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const newAtivo = user.ativo === false ? true : false
+    setTogglingUserId(user.id)
+    try {
+      await pb.collection('users').update(user.id, { ativo: newAtivo })
+      setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, ativo: newAtivo } : u)))
+      toast({
+        title: newAtivo ? 'Usuário ativado' : 'Usuário desativado',
+        description: `O acesso de ${user.name || user.email} foi ${newAtivo ? 'ativado' : 'desativado'}.`,
+      })
+    } catch (err) {
+      console.error('Erro ao alternar status do usuário:', err)
+      toast({
+        title: 'Erro ao alterar status',
+        description: 'Não foi possível atualizar o status do usuário.',
+        variant: 'destructive',
+      })
+    } finally {
+      setTogglingUserId(null)
+    }
+  }
+
+  // Handle Open Reset Password Modal
+  const handleOpenResetPassword = (user: User) => {
+    setUserToResetPassword(user)
+    setNewPasswordVal('')
+    setNewPasswordConfirmVal('')
+    setShowResetPass(false)
+    setResetPasswordError(null)
+  }
+
+  // Handle Submit Reset Password
+  const handleSubmitResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!userToResetPassword) return
+
+    const p1 = newPasswordVal.trim()
+    const p2 = newPasswordConfirmVal.trim()
+
+    if (!p1 || p1.length < 8) {
+      setResetPasswordError('A nova senha deve ter no mínimo 8 caracteres.')
+      return
+    }
+    if (p1 !== p2) {
+      setResetPasswordError('As senhas digitadas não coincidem.')
+      return
+    }
+
+    setResettingPassword(true)
+    setResetPasswordError(null)
+
+    try {
+      await pb.collection('users').update(userToResetPassword.id, {
+        password: p1,
+        passwordConfirm: p2,
+      })
+
+      toast({
+        title: 'Senha redefinida com sucesso',
+        description: `A senha de ${userToResetPassword.name || userToResetPassword.email} foi alterada.`,
+      })
+      setUserToResetPassword(null)
+    } catch (err: any) {
+      console.error('Erro ao redefinir senha do usuário:', err)
+      setResetPasswordError(
+        'Não foi possível redefinir a senha. Verifique as permissões de administrador.',
+      )
+      toast({
+        title: 'Erro ao redefinir senha',
+        description: 'Falha ao atualizar a senha do usuário.',
+        variant: 'destructive',
+      })
+    } finally {
+      setResettingPassword(false)
     }
   }
 
@@ -1659,8 +1767,9 @@ export const Admin: React.FC = () => {
                     <th className="px-4 py-3.5 min-w-[200px]">E-MAIL</th>
                     <th className="px-4 py-3.5 min-w-[130px]">FONE</th>
                     <th className="px-4 py-3.5 min-w-[120px]">PERFIL</th>
-                    <th className="px-4 py-3.5 min-w-[240px]">LOJAS VINCULADAS</th>
-                    <th className="px-4 py-3.5 text-right min-w-[90px]">AÇÕES</th>
+                    <th className="px-4 py-3.5 min-w-[120px] text-center">STATUS</th>
+                    <th className="px-4 py-3.5 min-w-[220px]">LOJAS VINCULADAS</th>
+                    <th className="px-4 py-3.5 text-right min-w-[140px]">AÇÕES</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E3E9F2]">
@@ -1743,6 +1852,33 @@ export const Admin: React.FC = () => {
                           {/* PERFIL (BADGE) */}
                           <td className="px-4 py-3.5">{renderRoleBadge(u.role)}</td>
 
+                          {/* STATUS (ATIVO / DESATIVADO) */}
+                          <td className="px-4 py-3.5 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <Switch
+                                aria-label={`Status de ${u.name || u.email}`}
+                                checked={u.ativo !== false}
+                                disabled={
+                                  togglingUserId === u.id || (isCurrent && u.ativo !== false)
+                                }
+                                onCheckedChange={() => handleToggleUserAtivo(u)}
+                                className="data-[state=checked]:bg-[#0E9F8A]"
+                              />
+                              <span
+                                className={cn(
+                                  'text-[11px] font-semibold w-14 text-left',
+                                  u.ativo !== false ? 'text-[#0E9F8A]' : 'text-slate-400',
+                                )}
+                              >
+                                {togglingUserId === u.id
+                                  ? '...'
+                                  : u.ativo !== false
+                                    ? 'Ativo'
+                                    : 'Inativo'}
+                              </span>
+                            </div>
+                          </td>
+
                           {/* LOJAS VINCULADAS */}
                           <td className="px-4 py-3.5">
                             {userRole === 'ADM' ? (
@@ -1791,6 +1927,16 @@ export const Admin: React.FC = () => {
                           {/* AÇÕES */}
                           <td className="px-4 py-3.5 text-right">
                             <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenResetPassword(u)}
+                                className="h-8 w-8 p-0 text-slate-500 hover:text-[#12365A] hover:bg-slate-100"
+                                title="Redefinir senha"
+                              >
+                                <KeyRound className="w-4 h-4 text-amber-600" />
+                              </Button>
+
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -2122,8 +2268,38 @@ export const Admin: React.FC = () => {
               </div>
             )}
 
+            {/* Ativação do usuário (switch no modal de cadastro/edição) */}
+            <div className="p-3 bg-[#F8FAFC] border border-[#E3E9F2] rounded-xl flex items-center justify-between">
+              <div>
+                <label className="text-xs font-bold uppercase text-[#12365A] block">
+                  Status da Conta
+                </label>
+                <p className="text-[11px] text-[#5B6B82]">
+                  {formData.ativo
+                    ? 'Usuário ativo com permissão para acessar o sistema.'
+                    : 'Usuário inativo. O acesso será bloqueado até nova ativação.'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Switch
+                  checked={formData.ativo}
+                  onCheckedChange={(checked) => setFormData({ ...formData, ativo: checked })}
+                  className="data-[state=checked]:bg-[#0E9F8A]"
+                />
+                <span
+                  className={cn(
+                    'text-xs font-semibold w-14 text-left',
+                    formData.ativo ? 'text-[#0E9F8A]' : 'text-slate-400',
+                  )}
+                >
+                  {formData.ativo ? 'Ativo' : 'Inativo'}
+                </span>
+              </div>
+            </div>
+
             {/* Senhas em grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {' '}
               {/* Senha */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase text-[#12365A] flex items-center justify-between">
@@ -2164,7 +2340,6 @@ export const Admin: React.FC = () => {
                   <p className="text-[11px] text-red-600 font-medium">{formErrors.password}</p>
                 )}
               </div>
-
               {/* Confirmação de Senha */}
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold uppercase text-[#12365A] flex items-center justify-between">
@@ -2295,6 +2470,118 @@ export const Admin: React.FC = () => {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Redefinir Senha do Usuário */}
+      <Dialog
+        open={!!userToResetPassword}
+        onOpenChange={(open) => !open && !resettingPassword && setUserToResetPassword(null)}
+      >
+        <DialogContent className="sm:max-w-md bg-white">
+          <form onSubmit={handleSubmitResetPassword}>
+            <DialogHeader>
+              <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mb-2">
+                <KeyRound className="w-5 h-5" />
+              </div>
+              <DialogTitle className="text-lg font-bold text-[#12365A]">
+                Redefinir Senha
+              </DialogTitle>
+              <DialogDescription className="text-xs text-[#5B6B82] leading-relaxed">
+                Digite a nova senha para o usuário{' '}
+                <strong className="text-[#12365A]">
+                  {userToResetPassword?.name || userToResetPassword?.email}
+                </strong>{' '}
+                ({userToResetPassword?.email}).
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3 my-4">
+              {resetPasswordError && (
+                <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                  <span>{resetPasswordError}</span>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase text-[#12365A]">
+                  Nova Senha *
+                </label>
+                <div className="relative">
+                  <Input
+                    type={showResetPass ? 'text' : 'password'}
+                    value={newPasswordVal}
+                    onChange={(e) => {
+                      setNewPasswordVal(e.target.value)
+                      if (resetPasswordError) setResetPasswordError(null)
+                    }}
+                    placeholder="Mínimo 8 caracteres"
+                    className="text-xs bg-[#F8FAFC] pr-8"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPass((prev) => !prev)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#12365A] p-1"
+                    tabIndex={-1}
+                  >
+                    {showResetPass ? (
+                      <EyeOff className="w-3.5 h-3.5" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase text-[#12365A]">
+                  Confirmar Nova Senha *
+                </label>
+                <Input
+                  type={showResetPass ? 'text' : 'password'}
+                  value={newPasswordConfirmVal}
+                  onChange={(e) => {
+                    setNewPasswordConfirmVal(e.target.value)
+                    if (resetPasswordError) setResetPasswordError(null)
+                  }}
+                  placeholder="Repita a nova senha"
+                  className="text-xs bg-[#F8FAFC]"
+                  required
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setUserToResetPassword(null)}
+                disabled={resettingPassword}
+                className="text-xs"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={resettingPassword}
+                className="text-xs bg-[#12365A] hover:bg-[#0E2A47] text-white gap-1.5"
+              >
+                {resettingPassword ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Salvando...</span>
+                  </>
+                ) : (
+                  <>
+                    <KeyRound className="w-3.5 h-3.5" />
+                    <span>Salvar Nova Senha</span>
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
