@@ -17,6 +17,7 @@ import {
   Layers,
   Lock,
   AlertTriangle,
+  ListTodo,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
@@ -83,6 +84,14 @@ export const Layout: React.FC = () => {
       description: 'Gerenciamento de lojas',
       disabled: !isAdm,
       disabledReason: 'Exclusivo do perfil ADM',
+    },
+    {
+      href: 'https://sistema-de-gestao-de-tarefas-c6670.goskip.app',
+      label: 'Tarefas',
+      icon: ListTodo,
+      description: 'Sistema de Gestão de Tarefas (abre em nova aba)',
+      external: true,
+      disabled: false,
     },
     ...(user?.role === 'ADM'
       ? [
@@ -199,7 +208,9 @@ export const Layout: React.FC = () => {
         <nav className="flex-1 py-4 px-3 space-y-1.5 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon
-            const isActive = location.pathname === item.to
+            const isExternal = 'external' in item && item.external
+            const key = isExternal ? item.href : item.to
+            const isActive = !isExternal && location.pathname === item.to
             const isDisabled = !!item.disabled
 
             if (isDisabled) {
@@ -214,7 +225,7 @@ export const Layout: React.FC = () => {
                 >
                   <Icon
                     className={cn(
-                      item.to === '/top-ofensores'
+                      !isExternal && item.to === '/top-ofensores'
                         ? 'w-6 h-6 shrink-0 text-slate-500'
                         : 'w-5 h-5 shrink-0 text-slate-500',
                     )}
@@ -234,7 +245,7 @@ export const Layout: React.FC = () => {
               )
 
               return (
-                <Tooltip key={item.to}>
+                <Tooltip key={key}>
                   <TooltipTrigger asChild>
                     <div>{disabledContent}</div>
                   </TooltipTrigger>
@@ -251,9 +262,29 @@ export const Layout: React.FC = () => {
               )
             }
 
+            if (isExternal && item.href) {
+              return (
+                <a
+                  key={key}
+                  href={item.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setMobileOpen(false)}
+                  title={collapsed ? item.label : undefined}
+                  className={cn(
+                    'relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all group text-slate-300 hover:text-white hover:bg-white/5',
+                    collapsed && 'justify-center px-0',
+                  )}
+                >
+                  <Icon className="w-5 h-5 shrink-0 transition-colors text-slate-400 group-hover:text-white" />
+                  {(!collapsed || mobileOpen) && <span className="truncate">{item.label}</span>}
+                </a>
+              )
+            }
+
             return (
               <NavLink
-                key={item.to}
+                key={key}
                 to={item.to}
                 onClick={() => setMobileOpen(false)}
                 title={collapsed ? item.label : undefined}

@@ -54,6 +54,26 @@ describe('Layout e Controle de Acesso por Perfil', () => {
     expect(screen.getByRole('button', { name: /importar planilhas/i })).not.toBeNull()
   })
 
+  it('exibe o item externo Tarefas com target="_blank" e rel="noopener noreferrer" para todos os perfis', () => {
+    vi.spyOn(AuthContext, 'useAuth').mockReturnValue(createMockAuth('Gerente'))
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <TooltipProvider>
+          <Layout />
+        </TooltipProvider>
+      </MemoryRouter>,
+    )
+
+    const tarefasLink = screen.getByRole('link', { name: /tarefas/i })
+    expect(tarefasLink).not.toBeNull()
+    expect(tarefasLink.getAttribute('href')).toBe(
+      'https://sistema-de-gestao-de-tarefas-c6670.goskip.app',
+    )
+    expect(tarefasLink.getAttribute('target')).toBe('_blank')
+    expect(tarefasLink.getAttribute('rel')).toBe('noopener noreferrer')
+  })
+
   it.each(['Gerente', 'Coordenador', 'Supervisor'] as const)(
     'renderiza Lojas e Importar Arquivos desabilitados para perfil %s',
     (role) => {
