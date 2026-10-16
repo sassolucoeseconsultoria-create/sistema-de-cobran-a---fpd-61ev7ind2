@@ -12,7 +12,7 @@ export const SESSION_USER_PASSWORD_KEY = 'fpd_session_user_pw'
  */
 export function storeSessionPassword(password: string): void {
   try {
-    if (password) {
+    if (typeof password === 'string' && password.length > 0) {
       window.sessionStorage.setItem(SESSION_USER_PASSWORD_KEY, password)
     }
   } catch {
@@ -49,22 +49,17 @@ export function clearSessionPassword(): void {
  */
 export function buildTarefasUrl(email?: string | null, password?: string | null): string {
   const cleanEmail = (email || '').trim()
-  const cleanPass = (password || '').trim()
+  // Não fazemos trim na senha: a senha deve ser exatamente a string utilizada na autenticação.
+  const rawPass = password ?? ''
 
-  if (!cleanEmail || !cleanPass) {
+  if (!cleanEmail || !rawPass) {
     return TAREFAS_BASE_URL
   }
 
-  try {
-    const url = new URL(TAREFAS_BASE_URL)
-    url.searchParams.set('email', cleanEmail)
-    url.searchParams.set('senha', cleanPass)
-    return url.toString()
-  } catch {
-    // Fallback caso a URL base falhe no construtor
-    const params = new URLSearchParams()
-    params.set('email', cleanEmail)
-    params.set('senha', cleanPass)
-    return `${TAREFAS_BASE_URL}?${params.toString()}`
-  }
+  // Codificação explícita com encodeURIComponent para garantir que caracteres especiais
+  // (@, &, %, +, ?, =, espaços, acentos, etc.) não sejam truncados ou corrompidos.
+  const encodedEmail = encodeURIComponent(cleanEmail)
+  const encodedPassword = encodeURIComponent(rawPass)
+
+  return `${TAREFAS_BASE_URL}?email=${encodedEmail}&senha=${encodedPassword}`
 }

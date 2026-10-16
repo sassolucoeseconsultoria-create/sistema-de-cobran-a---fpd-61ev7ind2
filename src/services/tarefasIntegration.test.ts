@@ -62,4 +62,32 @@ describe('tarefasIntegration', () => {
     expect(parsed.searchParams.get('email')).toBe('user+test@celnet.com.br')
     expect(parsed.searchParams.get('senha')).toBe('P@ss w&rd=100%')
   })
+
+  it('handles passwords with complex special characters (@, &, %, +, ?, =, spaces, accents)', () => {
+    const specialPass = 'Senh@Teste&123%+?= áéíóú'
+    const email = 'andrecassiocelnet@gmail.com'
+    const url = buildTarefasUrl(email, specialPass)
+
+    // A URL deve conter a base correta
+    expect(url.startsWith(TAREFAS_BASE_URL)).toBe(true)
+
+    // Verifica que caracteres como &, +, % estão explicitamente codificados na query string
+    expect(url).toContain('email=andrecassiocelnet%40gmail.com')
+    expect(url).toContain('senha=Senh%40Teste%26123%25%2B%3F%3D%20%C3%A1%C3%A9%C3%AD%C3%B3%C3%BA')
+
+    // Ao recuperar via URLSearchParams (como a aplicação de destino faz), os valores devem ser exatos
+    const parsed = new URL(url)
+    expect(parsed.searchParams.get('email')).toBe(email)
+    expect(parsed.searchParams.get('senha')).toBe(specialPass)
+  })
+
+  it('preserves leading and trailing spaces if present in password without trimming', () => {
+    const passWithSpaces = '  senhaComEspacos123  '
+    storeSessionPassword(passWithSpaces)
+    expect(getSessionPassword()).toBe(passWithSpaces)
+
+    const url = buildTarefasUrl('user@celnet.com.br', passWithSpaces)
+    const parsed = new URL(url)
+    expect(parsed.searchParams.get('senha')).toBe(passWithSpaces)
+  })
 })
