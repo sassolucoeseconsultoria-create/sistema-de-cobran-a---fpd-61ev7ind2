@@ -71,19 +71,26 @@ export function useAllowedReferenceDates(): UseAllowedReferenceDatesResult {
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
-    try {
-      setLoading(true)
-      const [dates, perms] = await Promise.all([
-        fetchDistinctReferenceDates(),
-        fetchReferenceDatePermissions(),
-      ])
-      setAllReferenceDates(dates)
-      setPermissions(perms)
-    } catch (err) {
-      console.error('Falha ao carregar datas de referência ou permissões:', err)
-    } finally {
-      setLoading(false)
+    setLoading(true)
+    // Carrega datas e permissões de forma INDEPENDENTE: uma falha em uma das
+    // chamadas (ex.: rate limit ou bloqueio de regra de acesso) não pode zerar
+    // a lista de referências e deixar o painel vazio. Em caso de falha, mantém
+    // o valor anterior em vez de limpar o estado.
+    const [datesRes, permsRes] = await Promise.allSettled([
+      fetchDistinctReferenceDates(),
+      fetchReferenceDatePermissions(),
+    ])
+    if (datesRes.status === 'fulfilled') {
+      setAllReferenceDates(datesRes.value)
+    } else {
+      console.error('Falha ao carregar datas de referência:', datesRes.reason)
     }
+    if (permsRes.status === 'fulfilled') {
+      setPermissions(permsRes.value)
+    } else {
+      console.error('Falha ao carregar permissões de datas de referência:', permsRes.reason)
+    }
+    setLoading(false)
   }, [])
 
   useEffect(() => {
