@@ -45,6 +45,7 @@ import {
 import { exportConsolidatedToXlsx } from '@/lib/xlsxExport'
 import { FPD_STATUSES, type StoreRecord, type FpdRecord, type ConsolidatedRow } from '@/types/fpd'
 import { buildConsolidatedRow } from '@/lib/consolidatedComparison'
+import { sortReferenceDatesDesc } from '@/lib/clientFormatters'
 import { cn } from '@/lib/utils'
 import { StoreAnalyticsDrawer } from '@/components/StoreAnalyticsDrawer'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
@@ -76,6 +77,11 @@ export const Index: React.FC = () => {
   const [selectedSupervisoes, setSelectedSupervisoes] = useState<string[]>([])
   const initialRefSetRef = React.useRef(false)
 
+  // Filter stores accessible to the user
+  const accessibleStores = useMemo(() => {
+    return userAccess.filterStores(stores)
+  }, [stores, userAccess])
+
   // Sincronização e pré-seleção automática da data de referência:
   // - Perfis restritos (Gerente, Supervisão, Coordenação):
   //     * Carrega por padrão a referência habilitada mais recente (initialReferenceDate).
@@ -84,6 +90,35 @@ export const Index: React.FC = () => {
   //     * Se múltiplas: pré-seleciona a mais recente habilitada.
   // - ADM:
   //     * Mantém 'all' como padrão (ou a única se houver só 1).
+  //
+  // Fallback: os referentes derivados dos registros (recordReferenceDates) alimentam
+  // o seletor e o filtro quando a listagem dedicada falha ou chega vazia.
+
+  // Referentes distintos visíveis para o perfil (ADM = todos; perfis restritos = apenas
+  // registros das lojas acessíveis e autorizados pelo Controle de Apresentação),
+  // ordenados do mais recente para o mais antigo. Usado como fallback quando a
+  // listagem dedicada de referências falha ou chega vazia.
+  const recordReferenceDates = useMemo(() => {
+    const accessibleRecordStoreIds = new Set(accessibleStores.map((s) => s.id))
+    const visible = records.filter(
+      (r) =>
+        (userAccess.isAdm || accessibleRecordStoreIds.has(r.store)) &&
+        r.referente &&
+        r.referente.trim() !== '' &&
+        isDateAllowed(r.referente),
+    )
+    return sortReferenceDatesDesc(
+      Array.from(new Set(visible.map((r) => (r.referente || '').trim()))),
+    )
+  }, [records, accessibleStores, userAccess.isAdm, isDateAllowed])
+
+  // Opções do seletor: lista dedicada do hook, complementada com os referentes
+  // presentes nos registros quando ela falhou/esvaziou (fallback do painel vazio).
+  const selectorReferenceDates = useMemo(() => {
+    if (availableReferenceDates.length > 0) return availableReferenceDates
+    return recordReferenceDates
+  }, [availableReferenceDates, recordReferenceDates])
+
   useEffect(() => {
     if (loadingRefs) return
 
@@ -94,16 +129,32 @@ export const Index: React.FC = () => {
       return
     }
 
-    if (availableReferenceDates.length === 0) {
+    const list = selectorReferenceDates
+
+    if (list.length === 0) {
       if (selectedReferenceDate !== 'none') {
         setSelectedReferenceDate('none')
       }
-    } else if (availableReferenceDates.length === 1) {
-      const singleDate = availableReferenceDates[0]
-      if (selectedReferenceDate !== singleDate) {
-        setSelectedReferenceDate(singleDate)
-      }
-    } else if (availableReferenceDates.length >= 2) {
+      return
+    }
+
+    // Fallback do painel vazio: se a listagem dedicada falhou/esvaziou (estado 'none')
+    // mas os registros carregados possuem referentes visíveis para o perfil,
+    // pré-seleciona a referência mais recente em vez de renderizar a tabela vazia.
+    if (selectedReferenceDate === 'none') {
+      setSelectedReferenceDate(list[0])
+      return
+    }
+
+    // Data atual deixou de existir na lista (ex.: realtime removeu a referência)
+    if (selectedReferenceDate !== 'all' && !list.includes(selectedReferenceDate)) {
+      setSelectedReferenceDate(
+        isRestrictedRole || availableReferenceDates.length === 0 ? list[0] : 'all',
+      )
+      return
+    }
+
+    if (availableReferenceDates.length >= 2) {
       if (
         selectedReferenceDate !== 'all' &&
         selectedReferenceDate !== 'none' &&
@@ -115,11 +166,21 @@ export const Index: React.FC = () => {
   }, [
     loadingRefs,
     selectedReferenceDate,
+    selectorReferenceDates,
     availableReferenceDates,
     initialReferenceDate,
     isRestrictedRole,
     isDateAllowed,
   ])
+
+  // Fallback do painel vazio: quando o estado é 'none' (zero referências habilitadas
+  // vindas da listagem dedicada) mas existem registros com `referente` visíveis para
+  // o perfil, o painel não pode renderizar tabela vazia — usa a referência mais
+  // recente presente nos registros carregados.
+  const effectiveSelectedReferenceDate = useMemo(() => {
+    if (selectedReferenceDate !== 'none') return selectedReferenceDate
+    return recordReferenceDates[0] || 'none'
+  }, [selectedReferenceDate, recordReferenceDates])
 
   // Analytics Drawer / details
   const [selectedRow, setSelectedRow] = useState<ConsolidatedRow | null>(null)
@@ -237,17 +298,12 @@ export const Index: React.FC = () => {
     }
   })
 
-  // Filter stores accessible to the user
-  const accessibleStores = useMemo(() => {
-    return userAccess.filterStores(stores)
-  }, [stores, userAccess])
-
   // Map each store to its consolidated FPD row filtered by reference
   const consolidatedRows: ConsolidatedRow[] = useMemo(() => {
     return accessibleStores.map((store) => {
-      return buildConsolidatedRow(store, records, selectedReferenceDate, isDateAllowed)
+      return buildConsolidatedRow(store, records, effectiveSelectedReferenceDate, isDateAllowed)
     })
-  }, [accessibleStores, records, selectedReferenceDate, isDateAllowed])
+  }, [accessibleStores, records, effectiveSelectedReferenceDate, isDateAllowed])
 
   // Distinct filter options (based on user accessible stores)
   const uniqueCoordenacoes = useMemo(() => {
@@ -332,28 +388,18 @@ export const Index: React.FC = () => {
   const animatedNaoTratados = useCountUp(totals.naoTratados)
   const animatedContatoRealizado = useCountUp(totals.contatoRealizado)
 
-  // Effective Referente date (selected reference date, or latest if 'all')
+  // Effective Referente date (effective selected reference date, or latest visible if 'all')
   const effectiveReferente = useMemo(() => {
-    if (
-      selectedReferenceDate &&
-      selectedReferenceDate !== 'all' &&
-      selectedReferenceDate !== 'none'
-    ) {
-      return isDateAllowed(selectedReferenceDate) ? selectedReferenceDate : null
-    }
-    if (selectedReferenceDate === 'none') {
+    if (effectiveSelectedReferenceDate && effectiveSelectedReferenceDate !== 'all') {
+      if (effectiveSelectedReferenceDate !== 'none') {
+        return isDateAllowed(effectiveSelectedReferenceDate) ? effectiveSelectedReferenceDate : null
+      }
+      // 'none' só permanece quando NENHUM registro com referente está visível:
+      // estado genuinamente vazio.
       return 'Sem referência'
     }
-    const accessibleRecordStoreIds = new Set(accessibleStores.map((s) => s.id))
-    const withRef = records.find(
-      (r) =>
-        (userAccess.isAdm || accessibleRecordStoreIds.has(r.store)) &&
-        r.referente &&
-        r.referente.trim() !== '' &&
-        isDateAllowed(r.referente),
-    )
-    return withRef?.referente || null
-  }, [records, accessibleStores, userAccess.isAdm, selectedReferenceDate, isDateAllowed])
+    return recordReferenceDates[0] || null
+  }, [effectiveSelectedReferenceDate, recordReferenceDates, isDateAllowed])
 
   // Handle open drawer
   const handleOpenRowDetail = async (row: ConsolidatedRow) => {
@@ -533,7 +579,7 @@ export const Index: React.FC = () => {
               <span className="text-base sm:text-lg font-bold text-[#12365A]">
                 {effectiveReferente
                   ? `Ref: ${effectiveReferente}`
-                  : availableReferenceDates.length === 0 || selectedReferenceDate === 'none'
+                  : effectiveSelectedReferenceDate === 'none'
                     ? 'Nenhuma referência habilitada'
                     : 'Nenhuma importada'}
               </span>
@@ -610,17 +656,18 @@ export const Index: React.FC = () => {
                 )}
                 title="Selecione a referência principal"
               >
-                {hasMultipleReferences && (
+                {(hasMultipleReferences ||
+                  (availableReferenceDates.length === 0 && selectorReferenceDates.length >= 2)) && (
                   <option value="all">Todas as referências (Mais recente por loja)</option>
                 )}
-                {availableReferenceDates.map((date) => (
+                {selectorReferenceDates.map((date) => (
                   <option key={date} value={date}>
                     Referência: {date}
                   </option>
                 ))}
-                {(availableReferenceDates.length === 0 || selectedReferenceDate === 'none') && (
+                {(selectorReferenceDates.length === 0 || selectedReferenceDate === 'none') && (
                   <option value="none">
-                    {availableReferenceDates.length === 0
+                    {selectorReferenceDates.length === 0
                       ? 'Nenhuma referência habilitada'
                       : 'Sem referência'}
                   </option>
@@ -887,14 +934,14 @@ export const Index: React.FC = () => {
                       <p className="font-semibold text-[#12365A]">
                         {userAccess.hasNoStoreAssigned
                           ? 'Nenhuma loja vinculada ao seu usuário'
-                          : availableReferenceDates.length === 0 || selectedReferenceDate === 'none'
+                          : effectiveSelectedReferenceDate === 'none'
                             ? 'Nenhuma referência habilitada para o seu perfil. Fale com a Coordenação.'
                             : 'Nenhuma loja encontrada'}
                       </p>
                       <p className="text-xs text-[#5B6B82]">
                         {userAccess.hasNoStoreAssigned
                           ? 'Solicite ao Administrador que vincule uma ou mais lojas ao seu perfil para visualizar os dados.'
-                          : availableReferenceDates.length === 0 || selectedReferenceDate === 'none'
+                          : effectiveSelectedReferenceDate === 'none'
                             ? 'As datas de referência cadastradas estão desabilitadas para o seu perfil no Controle de Apresentação. Entre em contato com a Coordenação.'
                             : stores.length === 0
                               ? 'Importe arquivos na aba Importar para gerar o consolidado automaticamente.'
