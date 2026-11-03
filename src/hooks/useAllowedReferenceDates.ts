@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchDistinctReferenceDates } from '@/services/fpdService'
+import { normalizeUserRole } from '@/services/configBotoesService'
 import {
   fetchReferenceDatePermissions,
   filterReferenceDatesForRole,
@@ -64,7 +65,9 @@ export interface UseAllowedReferenceDatesResult {
  */
 export function useAllowedReferenceDates(): UseAllowedReferenceDatesResult {
   const { user } = useAuth()
-  const role = user?.role
+  // Normaliza a role ('Administrador'/'adm'/'ADM ' -> 'ADM') para que o seletor
+  // de referências e a tabela não diverjam quando o papel vem em outra grafia.
+  const role = normalizeUserRole(user?.role)
 
   const [allReferenceDates, setAllReferenceDates] = useState<string[]>([])
   const [permissions, setPermissions] = useState<ReferenceDatePermissionRecord[]>([])
