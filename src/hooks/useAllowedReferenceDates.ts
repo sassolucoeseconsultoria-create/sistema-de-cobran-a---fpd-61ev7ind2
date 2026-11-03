@@ -57,7 +57,9 @@ export interface UseAllowedReferenceDatesResult {
  * com base nas permissões cadastradas para o perfil do usuário logado.
  *
  * Regras:
- * - ADM sempre vê todas as referências.
+ * - ADM sempre vê todas as referências (bypass incondicional — não consulta o
+ *   Controle de Apresentação; o campo `adm` do registro é apenas o estado
+ *   exibido na tela de controle).
  * - Gerente, Supervisor e Coordenador vêem apenas as referências com flag true (ou default true).
  */
 export function useAllowedReferenceDates(): UseAllowedReferenceDatesResult {

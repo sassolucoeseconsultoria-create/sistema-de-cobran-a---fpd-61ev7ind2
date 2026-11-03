@@ -944,13 +944,14 @@ export const Admin: React.FC = () => {
   // Toggle handler for Reference Date permissions per profile
   const handleToggleRefPermission = async (
     dateStr: string,
-    roleKey: 'gerente' | 'supervisor' | 'coordenador',
+    roleKey: 'adm' | 'gerente' | 'supervisor' | 'coordenador',
     currentVal: boolean,
   ) => {
     const existing = refPermissions.find((p) => p.referente?.trim() === dateStr.trim())
     const newVal = !currentVal
     const payload = {
       referente: dateStr.trim(),
+      adm: existing ? existing.adm !== false : true,
       gerente: existing ? existing.gerente !== false : true,
       supervisor: existing ? existing.supervisor !== false : true,
       coordenador: existing ? existing.coordenador !== false : true,
@@ -973,6 +974,7 @@ export const Admin: React.FC = () => {
           collectionId: 'reference_date_permissions',
           collectionName: 'reference_date_permissions',
           referente: dateStr.trim(),
+          adm: payload.adm,
           gerente: payload.gerente,
           supervisor: payload.supervisor,
           coordenador: payload.coordenador,
@@ -983,7 +985,13 @@ export const Admin: React.FC = () => {
     })
 
     const roleLabel =
-      roleKey === 'gerente' ? 'Gerente' : roleKey === 'supervisor' ? 'Supervisão' : 'Coordenação'
+      roleKey === 'adm'
+        ? 'ADM'
+        : roleKey === 'gerente'
+          ? 'Gerente'
+          : roleKey === 'supervisor'
+            ? 'Supervisão'
+            : 'Coordenação'
 
     setSavingRefDate(`${dateStr}-${roleKey}`)
 
@@ -1170,7 +1178,7 @@ export const Admin: React.FC = () => {
                 <p className="text-xs text-[#5B6B82]">
                   Habilite ou desabilite quais datas de referência são apresentadas aos perfis de
                   Gerente, Supervisão e Coordenação. O perfil <strong>ADM</strong> tem acesso
-                  irrestrito a todas as referências.
+                  irrestrito a todas as referências, independentemente desta marcação.
                 </p>
               </div>
             </div>
@@ -1238,10 +1246,12 @@ export const Admin: React.FC = () => {
                 <tbody className="divide-y divide-[#E3E9F2]">
                   {refDates.map((dateStr, idx) => {
                     const perm = refPermissions.find((p) => p.referente?.trim() === dateStr.trim())
+                    const isAdmActive = perm ? perm.adm !== false : true
                     const isGerenteActive = perm ? perm.gerente !== false : true
                     const isSupervisorActive = perm ? perm.supervisor !== false : true
                     const isCoordenadorActive = perm ? perm.coordenador !== false : true
 
+                    const isSavingAdm = savingRefDate === `${dateStr}-adm`
                     const isSavingGerente = savingRefDate === `${dateStr}-gerente`
                     const isSavingSupervisor = savingRefDate === `${dateStr}-supervisor`
                     const isSavingCoordenador = savingRefDate === `${dateStr}-coordenador`
@@ -1266,11 +1276,30 @@ export const Admin: React.FC = () => {
                           </div>
                         </td>
 
-                        {/* ADM - Sempre ativo / incondicional */}
+                        {/* ADM - estado real gravado no campo `adm` do registro */}
                         <td className="px-4 py-3.5 text-center">
-                          <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold">
-                            <Check className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Sempre Habilitado</span>
+                          <div className="flex items-center justify-center gap-2">
+                            <Switch
+                              aria-label={`Habilitar ${dateStr} para ADM`}
+                              checked={isAdmActive}
+                              disabled={isSavingAdm}
+                              onCheckedChange={() =>
+                                handleToggleRefPermission(dateStr, 'adm', isAdmActive)
+                              }
+                              className="data-[state=checked]:bg-[#12365A]"
+                            />
+                            <span
+                              className={cn(
+                                'text-[11px] font-semibold w-16 text-left',
+                                isAdmActive ? 'text-[#12365A]' : 'text-slate-400',
+                              )}
+                            >
+                              {isSavingAdm
+                                ? 'Salvando...'
+                                : isAdmActive
+                                  ? 'Habilitado'
+                                  : 'Desativado'}
+                            </span>
                           </div>
                         </td>
 
@@ -1479,7 +1508,7 @@ export const Admin: React.FC = () => {
                   <p className="text-xs text-[#5B6B82]">
                     Habilite ou desabilite quais datas de referência são apresentadas aos perfis de
                     Gerente, Supervisão e Coordenação. O perfil <strong>ADM</strong> tem acesso
-                    irrestrito a todas as referências.
+                    irrestrito a todas as referências, independentemente desta marcação.
                   </p>
                 </div>
               </div>
@@ -1549,10 +1578,12 @@ export const Admin: React.FC = () => {
                       const perm = refPermissions.find(
                         (p) => p.referente?.trim() === dateStr.trim(),
                       )
+                      const isAdmActive = perm ? perm.adm !== false : true
                       const isGerenteActive = perm ? perm.gerente !== false : true
                       const isSupervisorActive = perm ? perm.supervisor !== false : true
                       const isCoordenadorActive = perm ? perm.coordenador !== false : true
 
+                      const isSavingAdm = savingRefDate === `${dateStr}-adm`
                       const isSavingGerente = savingRefDate === `${dateStr}-gerente`
                       const isSavingSupervisor = savingRefDate === `${dateStr}-supervisor`
                       const isSavingCoordenador = savingRefDate === `${dateStr}-coordenador`
@@ -1577,11 +1608,30 @@ export const Admin: React.FC = () => {
                             </div>
                           </td>
 
-                          {/* ADM - Sempre ativo / incondicional */}
+                          {/* ADM - estado real gravado no campo `adm` do registro */}
                           <td className="px-4 py-3.5 text-center">
-                            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold">
-                              <Check className="w-3.5 h-3.5 text-emerald-600" />
-                              <span>Sempre Habilitado</span>
+                            <div className="flex items-center justify-center gap-2">
+                              <Switch
+                                aria-label={`Habilitar ${dateStr} para ADM`}
+                                checked={isAdmActive}
+                                disabled={isSavingAdm}
+                                onCheckedChange={() =>
+                                  handleToggleRefPermission(dateStr, 'adm', isAdmActive)
+                                }
+                                className="data-[state=checked]:bg-[#12365A]"
+                              />
+                              <span
+                                className={cn(
+                                  'text-[11px] font-semibold w-16 text-left',
+                                  isAdmActive ? 'text-[#12365A]' : 'text-slate-400',
+                                )}
+                              >
+                                {isSavingAdm
+                                  ? 'Salvando...'
+                                  : isAdmActive
+                                    ? 'Habilitado'
+                                    : 'Desativado'}
+                              </span>
                             </div>
                           </td>
 

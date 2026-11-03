@@ -381,6 +381,7 @@ export interface ReferenceDatePermissionRecord {
   collectionId: string
   collectionName: string
   referente: string
+  adm?: boolean
   gerente?: boolean
   supervisor?: boolean
   coordenador?: boolean

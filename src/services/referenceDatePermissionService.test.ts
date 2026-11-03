@@ -13,6 +13,7 @@ describe('Permissões de Data de Referência por Perfil (Regras de Negócio)', (
       collectionId: 'reference_date_permissions',
       collectionName: 'reference_date_permissions',
       referente: '26/08/2026',
+      adm: false,
       gerente: true,
       supervisor: false,
       coordenador: true,
@@ -24,6 +25,7 @@ describe('Permissões de Data de Referência por Perfil (Regras de Negócio)', (
       collectionId: 'reference_date_permissions',
       collectionName: 'reference_date_permissions',
       referente: '08/09/2026',
+      adm: true,
       gerente: false,
       supervisor: true,
       coordenador: false,
@@ -83,6 +85,60 @@ describe('Permissões de Data de Referência por Perfil (Regras de Negócio)', (
       expect(filterReferenceDatesForRole(allDates, 'Gerente', [])).toEqual(allDates)
       expect(filterReferenceDatesForRole(allDates, 'Supervisor', [])).toEqual(allDates)
       expect(filterReferenceDatesForRole(allDates, 'Coordenador', [])).toEqual(allDates)
+    })
+  })
+
+  describe('6. Campo `adm` do registro (Controle de Apresentação)', () => {
+    const permsComAdm: ReferenceDatePermissionRecord[] = [
+      {
+        id: 'pa1',
+        collectionId: 'reference_date_permissions',
+        collectionName: 'reference_date_permissions',
+        referente: '09/2026',
+        adm: false,
+        gerente: true,
+        supervisor: true,
+        coordenador: true,
+        created: '2026-09-01',
+        updated: '2026-09-01',
+      },
+      {
+        id: 'pa2',
+        collectionId: 'reference_date_permissions',
+        collectionName: 'reference_date_permissions',
+        referente: '10/2026',
+        adm: true,
+        gerente: true,
+        supervisor: true,
+        coordenador: true,
+        created: '2026-10-01',
+        updated: '2026-10-01',
+      },
+    ]
+
+    it('ADM vê TODAS as referências mesmo com adm=false — bypass incondicional', () => {
+      expect(isReferenceDateAllowedForRole('09/2026', 'ADM', permsComAdm)).toBe(true)
+      expect(isReferenceDateAllowedForRole('10/2026', 'ADM', permsComAdm)).toBe(true)
+      expect(filterReferenceDatesForRole(['09/2026', '10/2026'], 'ADM', permsComAdm)).toEqual([
+        '09/2026',
+        '10/2026',
+      ])
+    })
+
+    it('Bypass também vale para role indefinida (defensivo, mesmo comportamento do ADM)', () => {
+      expect(isReferenceDateAllowedForRole('09/2026', undefined, permsComAdm)).toBe(true)
+      expect(filterReferenceDatesForRole(['09/2026', '10/2026'], undefined, permsComAdm)).toEqual([
+        '09/2026',
+        '10/2026',
+      ])
+    })
+
+    it('Gerente/Supervisor/Coordenador continuam governados pelas flags deles, ignorando o campo adm', () => {
+      expect(isReferenceDateAllowedForRole('09/2026', 'Gerente', permsComAdm)).toBe(true)
+      expect(isReferenceDateAllowedForRole('09/2026', 'Supervisor', permsComAdm)).toBe(true)
+      expect(isReferenceDateAllowedForRole('09/2026', 'Coordenador', permsComAdm)).toBe(true)
+      // 10/2026 com todas as flags true continua habilitada para os perfis restritos
+      expect(isReferenceDateAllowedForRole('10/2026', 'Gerente', permsComAdm)).toBe(true)
     })
   })
 
