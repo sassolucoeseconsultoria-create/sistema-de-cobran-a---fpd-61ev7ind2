@@ -8,7 +8,7 @@
  * `SESSION_EXPIRED_BANNER_KEY` são as chaves de sessionStorage usadas na
  * comunicação entre as telas.
  */
-import pb from './client'
+import pb from './instance'
 
 export const AUTH_REDIRECT_KEY = 'auth_redirect_path'
 export const SESSION_EXPIRED_BANNER_KEY = 'session_expired_banner'

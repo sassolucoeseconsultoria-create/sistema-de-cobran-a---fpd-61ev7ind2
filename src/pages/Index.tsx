@@ -46,11 +46,18 @@ import { exportConsolidatedToXlsx } from '@/lib/xlsxExport'
 import { FPD_STATUSES, type StoreRecord, type FpdRecord, type ConsolidatedRow } from '@/types/fpd'
 import { buildConsolidatedRow } from '@/lib/consolidatedComparison'
 import { sortReferenceDatesDesc } from '@/lib/clientFormatters'
+import {
+  nextSortState,
+  sortConsolidatedRows,
+  type ConsolidatedSortColumn,
+  type ConsolidatedSortState,
+} from '@/lib/consolidatedSorting'
 import { cn } from '@/lib/utils'
 import { StoreAnalyticsDrawer } from '@/components/StoreAnalyticsDrawer'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
 import { useButtonVisibility } from '@/hooks/useButtonVisibility'
+import { SortIndicator, SortableHeaderCell } from '@/components/SortableHeaderCell'
 import { isSessionExpiredError } from '@/lib/pocketbase/client'
 
 export const Index: React.FC = () => {
@@ -81,6 +88,14 @@ export const Index: React.FC = () => {
   const accessibleStores = useMemo(() => {
     return userAccess.filterStores(stores)
   }, [stores, userAccess])
+
+  // Ordenação de exibição da tabela do Consolidado (clique no cabeçalho).
+  // Apenas VISUAL: não altera dados, exportação .xlsx nem contadores.
+  // Começa nula = ordem atual da tabela (padrão do painel) é preservada.
+  const [sortState, setSortState] = useState<ConsolidatedSortState | null>(null)
+  const handleSortClick = (column: ConsolidatedSortColumn) => {
+    setSortState((prev) => nextSortState(prev, column))
+  }
 
   // Sincronização e pré-seleção automática da data de referência:
   // - Perfis restritos (Gerente, Supervisão, Coordenação):
@@ -377,6 +392,13 @@ export const Index: React.FC = () => {
     )
   }, [filteredRows])
 
+  // Linhas ordenadas para EXIBIÇÃO (a exportação .xlsx continua usando filteredRows,
+  // na ordem original — a ordenação aqui é apenas visual, no corpo da tabela).
+  const displayRows = useMemo(() => {
+    if (!sortState) return filteredRows
+    return sortConsolidatedRows(filteredRows, sortState.column, sortState.direction)
+  }, [filteredRows, sortState])
+
   // Animated totals
   const animatedTotalLinhas = useCountUp(totals.totalLinhas)
   const animatedEnvioFatura = useCountUp(totals.envioFatura)
@@ -502,6 +524,7 @@ export const Index: React.FC = () => {
   const clearFilters = () => {
     setSearch('')
     setDebouncedSearch('')
+    setSortState(null)
     setSelectedReferenceDate('all')
     setSelectedCoordenacoes([])
     setSelectedSupervisoes([])
@@ -883,35 +906,63 @@ export const Index: React.FC = () => {
             <thead className="sticky top-0 z-20 bg-[#12365A] text-white shadow-sm font-semibold tracking-wider uppercase text-[11px]">
               <tr>
                 {/* A - LOJAS (Sticky left) */}
-                <th className="sticky left-0 z-30 bg-[#12365A] px-3.5 py-3.5 min-w-[200px] text-center border-r border-[#1e456f]">
-                  LOJAS
-                </th>
+                <SortableHeaderCell
+                  column="storeName"
+                  label="LOJAS"
+                  sticky
+                  className="sticky left-0 z-30 bg-[#12365A] px-3.5 py-3.5 min-w-[200px] text-center border-r border-[#1e456f]"
+                  sortState={sortState}
+                  onSort={handleSortClick}
+                />
                 {/* B - COORDENAÇÃO */}
-                <th className="px-3 py-3.5 min-w-[130px] text-center border-r border-[#1e456f]">
-                  COORDENAÇÃO
-                </th>
+                <SortableHeaderCell
+                  column="coordenacao"
+                  label="COORDENAÇÃO"
+                  className="px-3 py-3.5 min-w-[130px] text-center border-r border-[#1e456f]"
+                  sortState={sortState}
+                  onSort={handleSortClick}
+                />
                 {/* C - SUPERVISÃO */}
-                <th className="px-3 py-3.5 min-w-[130px] text-center border-r border-[#1e456f]">
-                  SUPERVISÃO
-                </th>
+                <SortableHeaderCell
+                  column="supervisao"
+                  label="SUPERVISÃO"
+                  className="px-3 py-3.5 min-w-[130px] text-center border-r border-[#1e456f]"
+                  sortState={sortState}
+                  onSort={handleSortClick}
+                />
                 {/* D - TOTAL LINHAS */}
-                <th className="px-3 py-3.5 min-w-[110px] text-center border-r border-[#1e456f] bg-[#0E2A47]">
-                  TOTAL LINHAS
-                </th>
+                <SortableHeaderCell
+                  column="totalLinhas"
+                  label="TOTAL LINHAS"
+                  className="px-3 py-3.5 min-w-[110px] text-center border-r border-[#1e456f] bg-[#0E2A47]"
+                  sortState={sortState}
+                  onSort={handleSortClick}
+                />
                 {/* E–M Status Columns with Colored Chips */}
-                {FPD_STATUSES.map((status) => (
-                  <th
-                    key={status.key}
-                    className="px-2 py-2.5 w-[130px] min-w-[130px] text-center border-r border-[#1e456f]"
-                  >
-                    <div
-                      className="w-full flex items-center justify-center min-h-[34px] px-2 py-1 rounded text-[10px] font-bold text-white text-center leading-tight shadow-xs whitespace-normal"
-                      style={{ backgroundColor: status.color }}
-                    >
-                      {status.label}
-                    </div>
-                  </th>
-                ))}
+                {FPD_STATUSES.map((status) => {
+                  const column = status.key.replace(/_([a-z])/g, (_, c: string) =>
+                    c.toUpperCase(),
+                  ) as ConsolidatedSortColumn
+                  return (
+                    <SortableHeaderCell
+                      key={status.key}
+                      column={column}
+                      label={status.label}
+                      className="px-2 py-2.5 w-[130px] min-w-[130px] text-center border-r border-[#1e456f]"
+                      inner={
+                        <div
+                          className="w-full flex items-center justify-center gap-1 min-h-[34px] px-2 py-1 rounded text-[10px] font-bold text-white text-center leading-tight shadow-xs whitespace-normal"
+                          style={{ backgroundColor: status.color }}
+                        >
+                          {status.label}
+                          <SortIndicator column={column} sortState={sortState} />
+                        </div>
+                      }
+                      sortState={sortState}
+                      onSort={handleSortClick}
+                    />
+                  )
+                })}
               </tr>
             </thead>
 
@@ -951,7 +1002,7 @@ export const Index: React.FC = () => {
                   </td>{' '}
                 </tr>
               ) : (
-                filteredRows.map((row, idx) => {
+                displayRows.map((row, idx) => {
                   return (
                     <tr
                       key={row.storeId}
@@ -1056,7 +1107,10 @@ export const Index: React.FC = () => {
             <tfoot className="sticky bottom-0 z-20 bg-[#12365A] text-white font-bold text-[13px] shadow-lg border-t-2 border-[#0E9F8A]">
               <tr>
                 {/* A: Totais */}
-                <td className="sticky left-0 z-30 bg-[#12365A] px-3.5 py-3 border-r border-[#1e456f] text-white uppercase tracking-wider">
+                <td
+                  data-testid="totals-row"
+                  className="sticky left-0 z-30 bg-[#12365A] px-3.5 py-3 border-r border-[#1e456f] text-white uppercase tracking-wider"
+                >
                   Totais ({filteredRows.length})
                 </td>
                 {/* B */}
