@@ -221,7 +221,7 @@ export const Arquivos: React.FC = () => {
 
     try {
       const res = await reconsolidarPainelLojas({
-        selectedReference: selectedReferenceDate,
+        selectedReference: effectiveSelectedReferenceDate,
         allowedReferences: availableReferenceDates,
         accessibleStores: accessibleStores.map((s) => ({ id: s.id, name: s.name })),
       })
@@ -305,6 +305,21 @@ export const Arquivos: React.FC = () => {
     return userAccess.filterStores(stores)
   }, [stores, userAccess])
 
+  // Fallback do Painel vazio: se o estado ficou 'none' (zero referências habilitadas
+  // no hook) mas existem registros com `referente` visíveis para o usuário, o painel
+  // não pode renderizar tabela vazia — volta para a referência mais recente.
+  const effectiveSelectedReferenceDate = useMemo(() => {
+    if (selectedReferenceDate !== 'none') return selectedReferenceDate
+    const accessibleRecordStoreIds = new Set(accessibleStores.map((s) => s.id))
+    const fallback = records.find(
+      (r) =>
+        (userAccess.isAdm || accessibleRecordStoreIds.has(r.store)) &&
+        r.referente &&
+        r.referente.trim() !== '',
+    )
+    return fallback?.referente?.trim() || 'none'
+  }, [selectedReferenceDate, records, accessibleStores, userAccess.isAdm])
+
   // Is comparison currently active?
   const isComparisonActive = useMemo(() => {
     return Boolean(comparisonReferenceDate) && comparisonReferenceDate !== selectedReferenceDate
@@ -313,9 +328,9 @@ export const Arquivos: React.FC = () => {
   // Map each store to its consolidated FPD row
   const consolidatedRows: ConsolidatedRow[] = useMemo(() => {
     return accessibleStores.map((store) => {
-      return buildConsolidatedRow(store, records, selectedReferenceDate, isDateAllowed)
+      return buildConsolidatedRow(store, records, effectiveSelectedReferenceDate, isDateAllowed)
     })
-  }, [accessibleStores, records, selectedReferenceDate, isDateAllowed])
+  }, [accessibleStores, records, effectiveSelectedReferenceDate, isDateAllowed])
 
   // Map each store to comparison rows when comparison is active
   const comparisonRows: ConsolidatedComparisonRow[] = useMemo(() => {
@@ -323,14 +338,14 @@ export const Arquivos: React.FC = () => {
     return buildComparisonRows(
       accessibleStores,
       records,
-      selectedReferenceDate,
+      effectiveSelectedReferenceDate,
       comparisonReferenceDate,
       isDateAllowed,
     )
   }, [
     accessibleStores,
     records,
-    selectedReferenceDate,
+    effectiveSelectedReferenceDate,
     comparisonReferenceDate,
     isComparisonActive,
     isDateAllowed,
@@ -513,13 +528,13 @@ export const Arquivos: React.FC = () => {
   // Effective Referente date
   const effectiveReferente = useMemo(() => {
     if (
-      selectedReferenceDate &&
-      selectedReferenceDate !== 'all' &&
-      selectedReferenceDate !== 'none'
+      effectiveSelectedReferenceDate &&
+      effectiveSelectedReferenceDate !== 'all' &&
+      effectiveSelectedReferenceDate !== 'none'
     ) {
-      return isDateAllowed(selectedReferenceDate) ? selectedReferenceDate : null
+      return isDateAllowed(effectiveSelectedReferenceDate) ? effectiveSelectedReferenceDate : null
     }
-    if (selectedReferenceDate === 'none') {
+    if (effectiveSelectedReferenceDate === 'none') {
       return 'Sem referência'
     }
     const accessibleRecordStoreIds = new Set(accessibleStores.map((s) => s.id))
@@ -531,7 +546,7 @@ export const Arquivos: React.FC = () => {
         isDateAllowed(r.referente),
     )
     return withRef?.referente || null
-  }, [records, accessibleStores, userAccess.isAdm, selectedReferenceDate, isDateAllowed])
+  }, [records, accessibleStores, userAccess.isAdm, effectiveSelectedReferenceDate, isDateAllowed])
 
   // Handle open drawer
   const handleOpenRowDetail = async (row: ConsolidatedRow) => {

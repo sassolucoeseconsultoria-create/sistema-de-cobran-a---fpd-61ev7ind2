@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchDistinctReferenceDates } from '@/services/fpdService'
+import { normalizeUserRole } from '@/services/configBotoesService'
 import {
   fetchReferenceDatePermissions,
   filterReferenceDatesForRole,
@@ -57,31 +58,42 @@ export interface UseAllowedReferenceDatesResult {
  * com base nas permissões cadastradas para o perfil do usuário logado.
  *
  * Regras:
- * - ADM sempre vê todas as referências.
+ * - ADM sempre vê todas as referências (bypass incondicional — não consulta o
+ *   Controle de Apresentação; o campo `adm` do registro é apenas o estado
+ *   exibido na tela de controle).
  * - Gerente, Supervisor e Coordenador vêem apenas as referências com flag true (ou default true).
  */
 export function useAllowedReferenceDates(): UseAllowedReferenceDatesResult {
   const { user } = useAuth()
-  const role = user?.role
+  // Normaliza a role ('Administrador'/'adm'/'ADM ' -> 'ADM') para que o seletor
+  // de referências e a tabela não diverjam quando o papel vem em outra grafia.
+  const role = normalizeUserRole(user?.role)
 
   const [allReferenceDates, setAllReferenceDates] = useState<string[]>([])
   const [permissions, setPermissions] = useState<ReferenceDatePermissionRecord[]>([])
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
-    try {
-      setLoading(true)
-      const [dates, perms] = await Promise.all([
-        fetchDistinctReferenceDates(),
-        fetchReferenceDatePermissions(),
-      ])
-      setAllReferenceDates(dates)
-      setPermissions(perms)
-    } catch (err) {
-      console.error('Falha ao carregar datas de referência ou permissões:', err)
-    } finally {
-      setLoading(false)
+    setLoading(true)
+    // Carrega datas e permissões de forma INDEPENDENTE: uma falha em uma das
+    // chamadas (ex.: rate limit ou bloqueio de regra de acesso) não pode zerar
+    // a lista de referências e deixar o painel vazio. Em caso de falha, mantém
+    // o valor anterior em vez de limpar o estado.
+    const [datesRes, permsRes] = await Promise.allSettled([
+      fetchDistinctReferenceDates(),
+      fetchReferenceDatePermissions(),
+    ])
+    if (datesRes.status === 'fulfilled') {
+      setAllReferenceDates(datesRes.value)
+    } else {
+      console.error('Falha ao carregar datas de referência:', datesRes.reason)
     }
+    if (permsRes.status === 'fulfilled') {
+      setPermissions(permsRes.value)
+    } else {
+      console.error('Falha ao carregar permissões de datas de referência:', permsRes.reason)
+    }
+    setLoading(false)
   }, [])
 
   useEffect(() => {

@@ -73,7 +73,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
 import pb from '@/lib/pocketbase/client'
-import { applyDateMask, isValidDateDDMMAAAA } from '@/lib/clientFormatters'
+import { applyMonthYearMask, isValidDateMMAAAA } from '@/lib/clientFormatters'
 import {
   extractMovelDeduplicationKey,
   extractResidencialDeduplicationKey,
@@ -153,7 +153,7 @@ export const Importar: React.FC = () => {
   }, [])
 
   const handleGlobalReferenceDateChange = (val: string) => {
-    const masked = applyDateMask(val)
+    const masked = applyMonthYearMask(val)
     setGlobalReferenceDate(masked)
     if (globalDateError) setGlobalDateError('')
 
@@ -296,8 +296,8 @@ export const Importar: React.FC = () => {
 
     if (!refDate) {
       toast({
-        title: 'Data de Referência obrigatória',
-        description: `Informe a Data de Referência para o arquivo "${item.file.name}".`,
+        title: 'MÊS/ANO obrigatório',
+        description: `Informe o MÊS/ANO para o arquivo "${item.file.name}".`,
         variant: 'destructive',
       })
       setFileQueue((prev) =>
@@ -306,7 +306,7 @@ export const Importar: React.FC = () => {
             ? {
                 ...q,
                 status: 'error',
-                errorMessage: 'Data de Referência é obrigatória (ex: 20/08/2026).',
+                errorMessage: 'MÊS/ANO é obrigatório (ex: 08/2026).',
               }
             : q,
         ),
@@ -314,10 +314,10 @@ export const Importar: React.FC = () => {
       return false
     }
 
-    if (!isValidDateDDMMAAAA(refDate)) {
+    if (!isValidDateMMAAAA(refDate)) {
       toast({
-        title: 'Data de Referência inválida',
-        description: `A data "${refDate}" deve estar no formato DD/MM/AAAA válido.`,
+        title: 'MÊS/ANO inválido',
+        description: `O valor "${refDate}" deve estar no formato MM/AAAA válido.`,
         variant: 'destructive',
       })
       setFileQueue((prev) =>
@@ -326,7 +326,7 @@ export const Importar: React.FC = () => {
             ? {
                 ...q,
                 status: 'error',
-                errorMessage: `Data inválida (${refDate}). Use o formato DD/MM/AAAA.`,
+                errorMessage: `MÊS/ANO inválido (${refDate}). Use o formato MM/AAAA.`,
               }
             : q,
         ),
@@ -780,16 +780,14 @@ export const Importar: React.FC = () => {
     // Validate reference dates on all ready items before starting
     const missingDateItems = readyItems.filter((item) => {
       const d = (item.referenteDate || globalReferenceDate || '').trim()
-      return !d || !isValidDateDDMMAAAA(d)
+      return !d || !isValidDateMMAAAA(d)
     })
 
     if (missingDateItems.length > 0) {
-      setGlobalDateError(
-        'Informe uma Data de Referência válida (DD/MM/AAAA) para todos os arquivos.',
-      )
+      setGlobalDateError('Informe um MÊS/ANO válido (MM/AAAA) para todos os arquivos.')
       toast({
-        title: 'Data de Referência obrigatória',
-        description: 'Verifique os arquivos destacados com data ausente ou inválida.',
+        title: 'MÊS/ANO obrigatório',
+        description: 'Verifique os arquivos destacados com MÊS/ANO ausente ou inválido.',
         variant: 'destructive',
       })
       setFileQueue((prev) =>
@@ -799,11 +797,11 @@ export const Importar: React.FC = () => {
             return {
               ...q,
               status: 'error',
-              errorMessage: 'Data de Referência é obrigatória (ex: 20/08/2026).',
+              errorMessage: 'MÊS/ANO é obrigatório (ex: 08/2026).',
             }
           }
-          if (!isValidDateDDMMAAAA(d)) {
-            return { ...q, status: 'error', errorMessage: `Data inválida (${d}). Use DD/MM/AAAA.` }
+          if (!isValidDateMMAAAA(d)) {
+            return { ...q, status: 'error', errorMessage: `MÊS/ANO inválido (${d}). Use MM/AAAA.` }
           }
           return q
         }),
@@ -928,20 +926,20 @@ export const Importar: React.FC = () => {
 
     const refDate = (batchRefDate || '').trim()
     if (!refDate) {
-      setBatchRefDateError('Data de Referência é obrigatória no modal (ex: 26/08/2026).')
+      setBatchRefDateError('MÊS/ANO é obrigatório no modal (ex: 08/2026).')
       toast({
-        title: 'Data de Referência obrigatória',
-        description: 'Informe a Data de Referência no modal antes de iniciar a importação em lote.',
+        title: 'MÊS/ANO obrigatório',
+        description: 'Informe o MÊS/ANO no modal antes de iniciar a importação em lote.',
         variant: 'destructive',
       })
       return
     }
 
-    if (!isValidDateDDMMAAAA(refDate)) {
-      setBatchRefDateError('Formato inválido. Use DD/MM/AAAA (ex: 26/08/2026).')
+    if (!isValidDateMMAAAA(refDate)) {
+      setBatchRefDateError('Formato inválido. Use MM/AAAA (ex: 08/2026).')
       toast({
-        title: 'Data de Referência inválida',
-        description: `A data "${refDate}" não é uma data válida no formato DD/MM/AAAA.`,
+        title: 'MÊS/ANO inválido',
+        description: `O valor "${refDate}" não é um MÊS/ANO válido no formato MM/AAAA.`,
         variant: 'destructive',
       })
       return
@@ -1107,14 +1105,15 @@ export const Importar: React.FC = () => {
           <div className="w-full sm:w-64 shrink-0 bg-[#F8FAFC] p-2.5 rounded-lg border border-[#E3E9F2]">
             <div className="flex items-center gap-1.5 mb-1 text-[11px] font-bold text-[#12365A]">
               <Calendar className="w-3.5 h-3.5 text-[#0E9F8A]" />
-              <span>Data de Referência</span>
+              <label htmlFor="global-reference-date">MÊS/ANO</label>
               <span className="text-red-500">*</span>
             </div>
             <Input
+              id="global-reference-date"
               value={globalReferenceDate}
               onChange={(e) => handleGlobalReferenceDateChange(e.target.value)}
-              placeholder="DD/MM/AAAA (ex: 20/08/2026)"
-              maxLength={10}
+              placeholder="MM/AAAA"
+              maxLength={7}
               className={cn(
                 'h-8 text-xs font-semibold tracking-wide bg-white',
                 globalDateError
@@ -1268,7 +1267,14 @@ export const Importar: React.FC = () => {
               </Button>
               <Button
                 onClick={handleSaveAll}
-                disabled={isProcessingAll || fileQueue.every((q) => q.status === 'done')}
+                disabled={
+                  isProcessingAll ||
+                  fileQueue.every((q) => q.status === 'done') ||
+                  fileQueue.some((q) => {
+                    const d = (q.referenteDate || globalReferenceDate || '').trim()
+                    return !d || !isValidDateMMAAAA(d)
+                  })
+                }
                 className="bg-[#0E9F8A] hover:bg-[#0c8a77] text-white text-xs font-semibold h-9 px-4 gap-2 shadow-sm"
               >
                 {isProcessingAll ? (
@@ -1626,34 +1632,43 @@ export const Importar: React.FC = () => {
                         {/* Referente date */}
                         <div className="w-full sm:w-36">
                           <label className="text-[10px] font-bold text-[#5B6B82] uppercase block mb-1">
-                            Data de Referência <span className="text-red-500">*</span>
+                            MÊS/ANO <span className="text-red-500">*</span>
                           </label>
                           <Input
                             value={item.referenteDate}
                             onChange={(e) => {
-                              const masked = applyDateMask(e.target.value)
+                              const masked = applyMonthYearMask(e.target.value)
                               setFileQueue((prev) =>
                                 prev.map((q) =>
                                   q.id === item.id ? { ...q, referenteDate: masked } : q,
                                 ),
                               )
                             }}
-                            placeholder="DD/MM/AAAA"
-                            maxLength={10}
+                            placeholder="MM/AAAA"
+                            maxLength={7}
                             className={cn(
                               'h-8 text-xs bg-white',
-                              !item.referenteDate || !isValidDateDDMMAAAA(item.referenteDate)
+                              !item.referenteDate || !isValidDateMMAAAA(item.referenteDate)
                                 ? 'border-amber-400 focus-visible:ring-amber-300'
                                 : 'border-[#E3E9F2]',
                             )}
                           />
+                          {item.referenteDate && !isValidDateMMAAAA(item.referenteDate) && (
+                            <p className="text-[9px] text-red-600 mt-0.5">Use MM/AAAA</p>
+                          )}
                         </div>
 
                         {/* Actions */}
                         <div className="flex items-center gap-1 self-end">
                           <Button
                             onClick={() => saveItemToBackend(item)}
-                            disabled={item.status === 'saving' || item.status === 'parsing'}
+                            disabled={
+                              item.status === 'saving' ||
+                              item.status === 'parsing' ||
+                              !isValidDateMMAAAA(
+                                (item.referenteDate || globalReferenceDate || '').trim(),
+                              )
+                            }
                             size="sm"
                             className="h-8 bg-[#12365A] hover:bg-[#0E2A47] text-white text-xs px-2.5"
                           >
@@ -1768,25 +1783,29 @@ export const Importar: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-[#0E9F8A]" />
                 <div>
-                  <span className="text-xs font-bold text-[#12365A] block">
-                    Data de Referência da Importação <span className="text-red-500">*</span>
-                  </span>
+                  <label
+                    htmlFor="batch-reference-date"
+                    className="text-xs font-bold text-[#12365A] block"
+                  >
+                    MÊS/ANO da Importação <span className="text-red-500">*</span>
+                  </label>
                   <span className="text-[11px] text-[#5B6B82]">
-                    Data referente aos registros do lote (ex: 20/08/2026).
+                    Mês/ano referente aos registros do lote (ex: 08/2026).
                   </span>
                 </div>
               </div>
               <div className="w-full sm:w-56">
                 <Input
+                  id="batch-reference-date"
                   value={batchRefDate}
                   disabled={isExecutingBatch}
                   onChange={(e) => {
-                    const masked = applyDateMask(e.target.value)
+                    const masked = applyMonthYearMask(e.target.value)
                     setBatchRefDate(masked)
                     if (batchRefDateError) setBatchRefDateError('')
                   }}
-                  placeholder="DD/MM/AAAA"
-                  maxLength={10}
+                  placeholder="MM/AAAA"
+                  maxLength={7}
                   className={cn(
                     'h-9 text-xs font-semibold bg-white',
                     batchRefDateError
@@ -2090,10 +2109,16 @@ export const Importar: React.FC = () => {
               ) : (
                 <Button
                   type="button"
-                  disabled={!batchParsedData || isExecutingBatch || isParsingBatch}
+                  disabled={
+                    !batchParsedData ||
+                    isExecutingBatch ||
+                    isParsingBatch ||
+                    !isValidDateMMAAAA((batchRefDate || '').trim())
+                  }
                   onClick={handleExecuteBatch}
                   className="bg-[#0E9F8A] hover:bg-[#0c8a77] text-white text-xs font-bold px-4 gap-2 shadow-sm"
                 >
+                  {' '}
                   {isExecutingBatch ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />

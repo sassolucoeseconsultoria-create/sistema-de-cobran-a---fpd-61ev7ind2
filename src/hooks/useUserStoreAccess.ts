@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import type { StoreRecord } from '@/types/fpd'
 import { matchStore, normalizeStoreString } from '@/services/fpdService'
+import { normalizeUserRole } from '@/services/configBotoesService'
 import { isSameStore } from '@/lib/storeMatchingUtils'
 
 export interface UserStoreAccess {
@@ -88,12 +89,16 @@ export function useUserStoreAccess(): UserStoreAccess {
   const { user } = useAuth()
 
   return useMemo<UserStoreAccess>(() => {
-    const isAdm = user?.role === 'ADM'
+    // Normaliza a role para tolerar variações cadastradas ('Administrador', 'adm',
+    // 'ADM ', etc.) — a comparação estrita `user?.role === 'ADM'` fazia o seletor
+    // de referências divergir da tabela quando o papel vinha em outra grafia.
+    const normalizedRole = normalizeUserRole(user?.role)
+    const isAdm = normalizedRole === 'ADM'
     const userLojas = Array.isArray(user?.lojas) ? user.lojas.filter(Boolean) : []
 
     // Para Gerente, por regra possui 1 loja vinculada (pega apenas a primeira se houver mais)
     const effectiveAllowedIds: string[] =
-      user?.role === 'Gerente' ? userLojas.slice(0, 1) : userLojas
+      normalizedRole === 'Gerente' ? userLojas.slice(0, 1) : userLojas
 
     const hasNoStoreAssigned = !isAdm && effectiveAllowedIds.length === 0
 
@@ -293,15 +298,15 @@ export function useUserStoreAccess(): UserStoreAccess {
       })
     }
 
-    const isGerente = user?.role === 'Gerente'
-    const isSupervisor = user?.role === 'Supervisor'
-    const isCoordenador = user?.role === 'Coordenador'
+    const isGerente = normalizedRole === 'Gerente'
+    const isSupervisor = normalizedRole === 'Supervisor'
+    const isCoordenador = normalizedRole === 'Coordenador'
     const managerStoreId =
       isGerente && effectiveAllowedIds.length > 0 ? effectiveAllowedIds[0] : null
 
     return {
       isAdm,
-      userRole: user?.role,
+      userRole: normalizedRole || user?.role,
       isGerente,
       isSupervisor,
       isCoordenador,

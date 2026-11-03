@@ -145,6 +145,98 @@ export function isValidDateDDMMAAAA(value: string): boolean {
 }
 
 /**
+ * Validação de data de referência no formato MM/AAAA.
+ * Mês entre 01 e 12, ano de 4 dígitos entre 1900 e 2100.
+ */
+export function isValidDateMMAAAA(value: string | undefined | null): boolean {
+  if (!value || typeof value !== 'string') return false
+  const trimmed = value.trim()
+  const match = /^(0[1-9]|1[0-2])\/(\d{4})$/.exec(trimmed)
+  if (!match) return false
+
+  const month = parseInt(match[1], 10)
+  const year = parseInt(match[2], 10)
+
+  if (month < 1 || month > 12) return false
+  if (year < 1900 || year > 2100) return false
+  return true
+}
+
+/**
+ * Máscara dinâmica para entrada de Mês/Ano (MM/AAAA).
+ * Máximo 7 caracteres, insere barra automaticamente após o 2º dígito.
+ */
+export function applyMonthYearMask(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 6)
+  if (digits.length <= 2) {
+    return digits
+  }
+  return `${digits.slice(0, 2)}/${digits.slice(2)}`
+}
+
+export interface ParsedReferenceDate {
+  month: number
+  year: number
+  raw: string
+}
+
+/**
+ * Faz parse da data de referência no formato novo MM/AAAA (2 partes)
+ * e aceita formato legado DD/MM/AAAA (3 partes, mês=partes[1], ano=partes[2]) para robustez.
+ */
+export function parseReferenceDate(value: string | undefined | null): ParsedReferenceDate | null {
+  if (!value || typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  // MM/AAAA (2 partes)
+  const mmYyyy = /^(0?[1-9]|1[0-2])\/(\d{4})$/.exec(trimmed)
+  if (mmYyyy) {
+    const month = parseInt(mmYyyy[1], 10)
+    const year = parseInt(mmYyyy[2], 10)
+    return { month, year, raw: trimmed }
+  }
+
+  // DD/MM/AAAA (3 partes - legado)
+  const ddMmYyyy = /^\d{1,2}\/(0?[1-9]|1[0-2])\/(\d{4})$/.exec(trimmed)
+  if (ddMmYyyy) {
+    const month = parseInt(ddMmYyyy[1], 10)
+    const year = parseInt(ddMmYyyy[2], 10)
+    return { month, year, raw: trimmed }
+  }
+
+  return null
+}
+
+/**
+ * Ordenação cronológica decrescente de referências (ano desc, mês desc).
+ * Itens que não conseguem parse vão para o final ordenados alfabeticamente.
+ */
+export function sortReferenceDatesDesc<T = string>(
+  dates: T[],
+  extractDateString: (item: T) => string = (item) => String(item),
+): T[] {
+  return [...dates].sort((a, b) => {
+    const parsedA = parseReferenceDate(extractDateString(a))
+    const parsedB = parseReferenceDate(extractDateString(b))
+
+    if (!parsedA && !parsedB) {
+      return extractDateString(b).localeCompare(extractDateString(a))
+    }
+    if (!parsedA) return 1
+    if (!parsedB) return -1
+
+    if (parsedA.year !== parsedB.year) {
+      return parsedB.year - parsedA.year
+    }
+    if (parsedA.month !== parsedB.month) {
+      return parsedB.month - parsedA.month
+    }
+    return 0
+  })
+}
+
+/**
  * Formats phone number into (XX) XXXXX-XXXX or (XX) XXXX-XXXX
  */
 export function formatPhone(value: unknown): string {

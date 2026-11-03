@@ -1,5 +1,6 @@
 import pb from '@/lib/pocketbase/client'
 import { executeWithRateLimitRetry, sleep } from '@/lib/pocketbase/rateLimiter'
+import { sortReferenceDatesDesc } from '@/lib/clientFormatters'
 import type {
   StoreRecord,
   FpdRecord,
@@ -289,103 +290,96 @@ export async function fetchImportedFiles(): Promise<ImportedFileRecord[]> {
   )
 }
 
+const SOURCES_LABELS = [
+  'imported_files',
+  'fpd_records',
+  'vendor_consolidations',
+  'movel',
+  'residencial',
+  'reference_date_permissions',
+] as const
+
 export async function fetchDistinctReferenceDates(): Promise<string[]> {
-  try {
-    const [files, fpdRecords, vendorRecords, movelRecords, resRecords, permRecords] =
-      await Promise.all([
-        fetchImportedFiles().catch(() => []),
-        fetchFpdRecords().catch(() => []),
-        fetchVendorConsolidations().catch(() => []),
-        pb
-          .collection('movel')
-          .getFullList<{ data_referencia?: string }>({
-            fields: 'data_referencia',
-            filter: 'data_referencia != "" && data_referencia != null',
-            requestKey: null,
-          })
-          .catch(() => []),
-        pb
-          .collection('residencial')
-          .getFullList<{ data_referencia?: string }>({
-            fields: 'data_referencia',
-            filter: 'data_referencia != "" && data_referencia != null',
-            requestKey: null,
-          })
-          .catch(() => []),
-        pb
-          .collection('reference_date_permissions')
-          .getFullList<{ referente?: string }>({
-            fields: 'referente',
-            filter: 'referente != "" && referente != null',
-            requestKey: null,
-          })
-          .catch(() => []),
-      ])
+  // Cada fonte é consultada de forma independente: uma falha NÃO pode zerar a
+  // lista global de referências (engolir o erro e retornar [] deixava o painel
+  // vazio). Falhas são logadas e a fonte falha é simplesmente ignorada na
+  // composição do resultado — nunca o conjunto inteiro.
+  const results = await Promise.allSettled([
+    fetchImportedFiles(),
+    fetchFpdRecords(),
+    fetchVendorConsolidations(),
+    pb.collection('movel').getFullList<{ data_referencia?: string }>({
+      fields: 'data_referencia',
+      filter: 'data_referencia != "" && data_referencia != null',
+      requestKey: null,
+    }),
+    pb.collection('residencial').getFullList<{ data_referencia?: string }>({
+      fields: 'data_referencia',
+      filter: 'data_referencia != "" && data_referencia != null',
+      requestKey: null,
+    }),
+    pb.collection('reference_date_permissions').getFullList<{ referente?: string }>({
+      fields: 'referente',
+      filter: 'referente != "" && referente != null',
+      requestKey: null,
+    }),
+  ])
 
-    const set = new Set<string>()
-
-    for (const f of files) {
-      if (f.reference_date && f.reference_date.trim() !== '') {
-        set.add(f.reference_date.trim())
-      } else if (f.data_referencia && f.data_referencia.trim() !== '') {
-        set.add(f.data_referencia.trim())
-      }
+  results.forEach((res, idx) => {
+    if (res.status === 'rejected') {
+      console.error(
+        `[fetchDistinctReferenceDates] Falha na fonte ${SOURCES_LABELS[idx] ?? idx}:`,
+        res.reason,
+      )
     }
+  })
 
-    for (const r of fpdRecords) {
-      if (r.referente && r.referente.trim() !== '') {
-        set.add(r.referente.trim())
-      }
-    }
+  const files = results[0].status === 'fulfilled' ? results[0].value : []
+  const fpdRecords = results[1].status === 'fulfilled' ? results[1].value : []
+  const vendorRecords = results[2].status === 'fulfilled' ? results[2].value : []
+  const movelRecords = results[3].status === 'fulfilled' ? results[3].value : []
+  const resRecords = results[4].status === 'fulfilled' ? results[4].value : []
+  const permRecords = results[5].status === 'fulfilled' ? results[5].value : []
 
-    for (const v of vendorRecords) {
-      if (v.data_referencia && v.data_referencia.trim() !== '') {
-        set.add(v.data_referencia.trim())
-      }
-    }
-
-    for (const m of movelRecords) {
-      if (m.data_referencia && m.data_referencia.trim() !== '') {
-        set.add(m.data_referencia.trim())
-      }
-    }
-
-    for (const res of resRecords) {
-      if (res.data_referencia && res.data_referencia.trim() !== '') {
-        set.add(res.data_referencia.trim())
-      }
-    }
-
-    for (const p of permRecords) {
-      if (p.referente && p.referente.trim() !== '') {
-        set.add(p.referente.trim())
-      }
-    }
-
-    // Sort descending by parsed date (DD/MM/YYYY) or string
-    return Array.from(set).sort((a, b) => {
-      const partsA = a.split('/')
-      const partsB = b.split('/')
-      if (partsA.length === 3 && partsB.length === 3) {
-        const dateA = new Date(
-          Number(partsA[2]),
-          Number(partsA[1]) - 1,
-          Number(partsA[0]),
-        ).getTime()
-        const dateB = new Date(
-          Number(partsB[2]),
-          Number(partsB[1]) - 1,
-          Number(partsB[0]),
-        ).getTime()
-        if (!isNaN(dateA) && !isNaN(dateB)) {
-          return dateB - dateA
-        }
-      }
-      return b.localeCompare(a)
-    })
-  } catch {
-    return []
+  const set = new Set<string>()
+  // Normaliza (trim) cada valor coletado antes de agregar
+  const addNormalized = (value?: string | null) => {
+    const trimmed = (value ?? '').trim()
+    if (trimmed !== '') set.add(trimmed)
   }
+
+  for (const f of files) {
+    addNormalized(f.reference_date || f.data_referencia)
+  }
+
+  for (const r of fpdRecords) {
+    addNormalized(r.referente)
+  }
+
+  for (const v of vendorRecords) {
+    addNormalized(v.data_referencia)
+  }
+
+  for (const m of movelRecords) {
+    addNormalized(m.data_referencia)
+  }
+
+  for (const res of resRecords) {
+    addNormalized(res.data_referencia)
+  }
+
+  for (const p of permRecords) {
+    addNormalized(p.referente)
+  }
+
+  if (set.size === 0 && results.some((r) => r.status === 'rejected')) {
+    console.warn(
+      '[fetchDistinctReferenceDates] Nenhuma referência coletada e houve falhas de rede — retornando lista vazia apenas neste caso.',
+    )
+  }
+
+  // Sort descending by parsed date (MM/AAAA ou DD/MM/AAAA) via sortReferenceDatesDesc
+  return sortReferenceDatesDesc(Array.from(set))
 }
 
 export async function getImportedFiles(): Promise<ImportedFileRecord[]> {

@@ -1,6 +1,11 @@
 import React, { createContext, useContext, useEffect, useState, useMemo } from 'react'
 import type { RecordModel } from 'pocketbase'
 import pb, { handleSessionExpired, isSessionExpiredError } from '@/lib/pocketbase/client'
+import {
+  storeSessionPassword,
+  clearSessionPassword,
+  getSessionPassword,
+} from '@/services/tarefasIntegration'
 
 export type UserRole = 'ADM' | 'Coordenador' | 'Supervisor' | 'Gerente'
 
@@ -11,6 +16,7 @@ export interface User extends RecordModel {
   role?: UserRole
   fone?: string
   lojas?: string[]
+  ativo?: boolean
 }
 
 interface AuthContextType {
@@ -82,10 +88,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, pass: string) => {
     await pb.collection('users').authWithPassword(email.trim(), pass)
+    storeSessionPassword(pass)
   }
 
   const logout = () => {
     pb.authStore.clear()
+    clearSessionPassword()
     setUser(null)
     setToken(null)
   }

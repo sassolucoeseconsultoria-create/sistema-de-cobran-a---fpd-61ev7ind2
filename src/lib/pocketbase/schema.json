@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-14T12:35:52.754Z",
+  "generatedAt": "2026-11-03T17:45:07.749Z",
   "collections": [
     {
       "name": "users",
@@ -57,6 +57,12 @@
           "required": false,
           "system": false,
           "collectionRef": "stores"
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -1169,6 +1175,12 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "adm",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

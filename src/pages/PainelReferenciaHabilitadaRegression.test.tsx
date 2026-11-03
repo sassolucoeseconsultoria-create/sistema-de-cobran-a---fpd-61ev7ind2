@@ -66,6 +66,7 @@ vi.mock('@/services/referenceDatePermissionService', () => ({
     {
       id: 'p1',
       referente: '26/08/2026',
+      adm: false,
       gerente: false,
       supervisor: false,
       coordenador: false,
@@ -73,6 +74,7 @@ vi.mock('@/services/referenceDatePermissionService', () => ({
     {
       id: 'p2',
       referente: '08/09/2026',
+      adm: true,
       gerente: true,
       supervisor: true,
       coordenador: true,
@@ -80,6 +82,7 @@ vi.mock('@/services/referenceDatePermissionService', () => ({
     {
       id: 'p3',
       referente: '15/09/2026',
+      adm: true,
       gerente: true,
       supervisor: true,
       coordenador: true,

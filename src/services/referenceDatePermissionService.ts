@@ -11,34 +11,14 @@ export function normalizeReferenceDate(dateStr?: string | null): string {
   return String(dateStr).trim()
 }
 
+import { sortReferenceDatesDesc as canonicalSortReferenceDatesDesc } from '@/lib/clientFormatters'
+
 /**
  * Ordena datas de referência em ordem decrescente (da mais recente para a mais antiga).
- * Suporta formatos DD/MM/YYYY, ISO YYYY-MM-DD e strings gerais.
+ * Suporta formatos MM/AAAA, DD/MM/AAAA legado e strings gerais.
  */
 export function sortReferenceDatesDesc(dates: string[]): string[] {
-  return [...dates].sort((a, b) => {
-    const normA = normalizeReferenceDate(a)
-    const normB = normalizeReferenceDate(b)
-
-    const partsA = normA.split('/')
-    const partsB = normB.split('/')
-    if (partsA.length === 3 && partsB.length === 3) {
-      const dateA = new Date(Number(partsA[2]), Number(partsA[1]) - 1, Number(partsA[0])).getTime()
-      const dateB = new Date(Number(partsB[2]), Number(partsB[1]) - 1, Number(partsB[0])).getTime()
-      if (!isNaN(dateA) && !isNaN(dateB)) {
-        return dateB - dateA
-      }
-    }
-
-    // Tentar ISO YYYY-MM-DD
-    const isoA = Date.parse(normA)
-    const isoB = Date.parse(normB)
-    if (!isNaN(isoA) && !isNaN(isoB)) {
-      return isoB - isoA
-    }
-
-    return normB.localeCompare(normA)
-  })
+  return canonicalSortReferenceDatesDesc(dates)
 }
 
 /**
@@ -59,6 +39,7 @@ export async function fetchReferenceDatePermissions(): Promise<ReferenceDatePerm
  */
 export async function saveReferenceDatePermission(data: {
   referente: string
+  adm?: boolean
   gerente?: boolean
   supervisor?: boolean
   coordenador?: boolean
@@ -85,11 +66,23 @@ export async function saveReferenceDatePermission(data: {
     // ignore
   }
 
-  const payload = {
+  const payload: {
+    referente: string
+    adm?: boolean
+    gerente: boolean
+    supervisor: boolean
+    coordenador: boolean
+  } = {
     referente: normDate,
     gerente: data.gerente !== undefined ? Boolean(data.gerente) : true,
     supervisor: data.supervisor !== undefined ? Boolean(data.supervisor) : true,
     coordenador: data.coordenador !== undefined ? Boolean(data.coordenador) : true,
+  }
+
+  // O campo `adm` só é enviado quando informado — preserva o valor existente no
+  // banco quando o chamador controla apenas os perfis restritos.
+  if (data.adm !== undefined) {
+    payload.adm = Boolean(data.adm)
   }
 
   if (existing) {
@@ -110,9 +103,12 @@ export async function saveReferenceDatePermission(data: {
 /**
  * Verifica se uma data de referência específica está habilitada para determinado perfil de usuário.
  * Regras:
- * - Se a role for 'ADM' ou undefined/desconhecida, sempre retorna true (ADM tem acesso irrestrito).
+ * - Se a role for 'ADM' ou undefined/desconhecida, sempre retorna true (ADM tem acesso irrestrito,
+ *   sem consultar o Controle de Apresentação — bypass do ADM).
  * - Se não houver registro de permissão para a referência, retorna true por padrão (default true/true/true).
- * - Se houver registro, avalia a flag do perfil (Gerente -> gerente, Supervisor -> supervisor, Coordenador -> coordenador).
+ * - Se houver registro, avalia a flag do perfil (Gerente -> gerente, Supervisor -> supervisor,
+ *   Coordenador -> coordenador). O campo `adm` do registro é apenas o estado exibido no Controle
+ *   de Apresentação: o bypass do ADM é incondicional.
  *   Se a flag for explicitamente false, retorna false; se undefined/null, retorna true por padrão.
  */
 export function isReferenceDateAllowedForRole(
@@ -147,7 +143,7 @@ export function isReferenceDateAllowedForRole(
 
 /**
  * Filtra uma lista de datas de referência mantendo apenas aquelas autorizadas para o perfil.
- * Preserva a ordenação original.
+ * Preserva a ordenação original. ADM recebe a lista integral (bypass — não consulta o controle).
  */
 export function filterReferenceDatesForRole(
   dates: string[],
