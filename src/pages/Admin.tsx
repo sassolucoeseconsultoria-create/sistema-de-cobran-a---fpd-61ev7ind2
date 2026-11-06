@@ -21,9 +21,9 @@ import {
   Check,
   KeyRound,
 } from 'lucide-react'
-import pb, { isSessionExpiredError } from '@/lib/pocketbase/client'
+import pb, { handleSessionExpired, isSessionExpiredError } from '@/lib/pocketbase/client'
 import { useAuth, type UserRole, type User } from '@/contexts/AuthContext'
-import { FIXED_STORE_NAMES, fixedStoresAsRecords } from '@/services/fixedStores'
+import { FIXED_STORE_NAMES } from '@/services/fixedStores'
 import {
   fetchStores,
   normalizeStoreString,
@@ -88,6 +88,10 @@ export const Admin: React.FC = () => {
     'usuarios',
   )
 
+  // Erros de carga (lista vazia SEM aviso é o bug em si — sempre sinalizar)
+  const [usersLoadError, setUsersLoadError] = useState<string | null>(null)
+  const [storesLoadError, setStoresLoadError] = useState<string | null>(null)
+
   // Reference Date Permissions state
   const [refDates, setRefDates] = useState<string[]>([])
   const [refPermissions, setRefPermissions] = useState<ReferenceDatePermissionRecord[]>([])
@@ -129,28 +133,40 @@ export const Admin: React.FC = () => {
   const [userToDelete, setUserToDelete] = useState<User | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  // Carrega as lojas REAIS do backend na ordem da lista fixa. Os vínculos de
-  // usuários (users.lojas) são relations por ID do PocketBase — usar os IDs
-  // falsos (id = nome) da lista fixa quebra o salvamento. Se a busca falhar,
-  // cai no fallback local (somente leitura/visual).
+  // Carrega TODAS as lojas REAIS do backend. A lista fixa define apenas a
+  // ORDEM das lojas conhecidas (casamento tolerante a acento/caixa); lojas
+  // criadas em execução e ausentes da lista fixa são mantidas ao final —
+  // nunca descartadas. Os vínculos de usuários (users.lojas) são relations
+  // por ID do PocketBase — usar IDs falsos (id = nome) quebraria o salvamento.
   const loadStores = async () => {
     try {
+      setStoresLoadError(null)
       const records = await fetchStores()
-      const byName = new Map<string, StoreRecord>()
-      records.forEach((s) => {
-        if (!byName.has(s.name)) byName.set(s.name, s)
+      if (!records || records.length === 0) {
+        setStores([])
+        return
+      }
+      const rank = new Map<string, number>()
+      FIXED_STORE_NAMES.forEach((name, i) => {
+        rank.set(normalizeStoreString(name), i)
       })
-      const ordered: StoreRecord[] = []
-      FIXED_STORE_NAMES.forEach((name) => {
-        const match = byName.get(name)
-        if (match && !ordered.some((s) => s.id === match.id)) {
-          ordered.push(match)
-        }
+      const maxRank = FIXED_STORE_NAMES.length
+      const ordered = [...records].sort((a, b) => {
+        const ia = rank.get(normalizeStoreString(a.name)) ?? maxRank
+        const ib = rank.get(normalizeStoreString(b.name)) ?? maxRank
+        if (ia !== ib) return ia - ib
+        // Desempate: entre lojas fora da lista fixa, ordem alfabética
+        return a.name.localeCompare(b.name, 'pt-BR')
       })
-      setStores(ordered.length > 0 ? ordered : fixedStoresAsRecords())
+      setStores(ordered)
     } catch (err) {
-      console.error('Falha ao carregar lojas do backend, usando lista fixa local:', err)
-      setStores(fixedStoresAsRecords())
+      console.error('Falha ao carregar lojas do backend:', err)
+      setStores([])
+      setStoresLoadError(
+        isSessionExpiredError(err)
+          ? 'Sua sessão expirou e as lojas não puderam ser carregadas. Faça login novamente.'
+          : 'Não foi possível carregar a lista de lojas do sistema. Tente atualizar.',
+      )
     }
   }
 
@@ -158,21 +174,30 @@ export const Admin: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true)
+      setUsersLoadError(null)
       const userList = await pb.collection('users').getFullList<User>({
         sort: '-created',
         requestKey: null,
       })
       setUsers(userList)
     } catch (err: unknown) {
+      console.error('Falha ao carregar usuários:', err)
+      setUsers([])
       if (isSessionExpiredError(err)) {
-        return
+        // Redireciona ao login com banner (mecanismo existente do projeto) e
+        // deixa aviso visível — a tela NÃO fica silenciosamente vazia.
+        handleSessionExpired('Sua sessão foi encerrada. Faça login novamente.')
+        setUsersLoadError(
+          'Sua sessão expirou e a lista de usuários não pôde ser carregada. Faça login novamente.',
+        )
+      } else {
+        setUsersLoadError('Não foi possível buscar os usuários cadastrados. Tente atualizar.')
+        toast({
+          title: 'Erro ao carregar dados',
+          description: 'Não foi possível buscar os usuários cadastrados.',
+          variant: 'destructive',
+        })
       }
-      console.error(err)
-      toast({
-        title: 'Erro ao carregar dados',
-        description: 'Não foi possível buscar os usuários cadastrados.',
-        variant: 'destructive',
-      })
     } finally {
       setLoading(false)
     }
@@ -1400,6 +1425,31 @@ export const Admin: React.FC = () => {
       {/* Conteúdo da Aba de Usuários e Perfis */}
       {adminTab === 'usuarios' && (
         <>
+          {/* Aviso visível quando a carga de usuários ou lojas falha (inclusive sessão expirada) */}
+          {(usersLoadError || storesLoadError) && (
+            <div
+              role="alert"
+              className="p-3.5 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2.5 text-xs text-red-700"
+            >
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
+              <div className="flex-1 space-y-1">
+                {usersLoadError && (
+                  <p className="font-semibold leading-relaxed">{usersLoadError}</p>
+                )}
+                {storesLoadError && <p className="leading-relaxed">{storesLoadError}</p>}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadData}
+                className="h-7 text-[11px] border-red-200 text-red-700 hover:bg-red-100 gap-1 shrink-0"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Tentar novamente</span>
+              </Button>
+            </div>
+          )}
+
           {/* Cards no topo: Total de usuários, ADMs, Coordenadores, Supervisores, Gerentes */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
             {/* Total Usuários */}
@@ -2245,6 +2295,17 @@ export const Admin: React.FC = () => {
                     </button>
                   )}
                 </div>
+
+                {/* Aviso visível quando a lista de lojas do modal não pôde ser carregada */}
+                {storesLoadError && (
+                  <div
+                    role="alert"
+                    className="p-2.5 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-[11px] text-red-700"
+                  >
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-red-600" />
+                    <span>{storesLoadError}</span>
+                  </div>
+                )}
 
                 {/* Busca rápida de lojas no modal se houver muitas lojas */}
                 {stores.length > 6 && (
