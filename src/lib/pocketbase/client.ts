@@ -1,22 +1,17 @@
 /**
- * Cliente PocketBase do app — ponto de importação único.
+ * SUPERFÍCIE ÚNICA de acesso ao PocketBase do app.
  *
- * REGRA DE PROTEÇÃO (regressão recorrente, não remover):
- * este módulo DEVE exportar `{ pb }` + `default` e reexportar de './session':
- * AUTH_REDIRECT_KEY, SESSION_EXPIRED_BANNER_KEY, handleSessionExpired,
- * isSessionExpiredError. Derrubar qualquer uma dessas exportações quebra o
- * build (AuthContext, Admin e dezenas de telas importam daqui).
+ * REGRA INEGOCIÁVEL (regressão que já derrubou o build 5×): este módulo DEVE
+ * exportar `pb` como named export E default, além de reexportar de './session':
+ *   AUTH_REDIRECT_KEY, SESSION_EXPIRED_BANNER_KEY, handleSessionExpired,
+ *   isSessionExpiredError.
+ * AuthContext, Admin, Login, serviços e testes importam daqui — nunca de
+ * 'pocketbase' direto nem de outra instância paralela.
  */
-import PocketBase from 'pocketbase'
-
-const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
-pb.autoCancellation(false)
-
-export { pb }
+export { pb, default } from './instance'
 export {
   AUTH_REDIRECT_KEY,
   SESSION_EXPIRED_BANNER_KEY,
   handleSessionExpired,
   isSessionExpiredError,
 } from './session'
-export default pb

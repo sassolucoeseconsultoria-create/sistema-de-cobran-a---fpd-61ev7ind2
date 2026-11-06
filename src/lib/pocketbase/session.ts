@@ -7,6 +7,11 @@
  * em qualquer erro do PocketBase. `AUTH_REDIRECT_KEY` e
  * `SESSION_EXPIRED_BANNER_KEY` são as chaves de sessionStorage usadas na
  * comunicação entre as telas.
+ *
+ * IMPORTANTE: usa a MESMA instância de PocketBase que todo o app (a única,
+ * definida em './instance' e reexportada por './client') — limpar o authStore
+ * aqui precisa limpar a sessão REAL em uso. Importar de './instance' evita o
+ * ciclo client → session → client.
  */
 import pb from './instance'
 

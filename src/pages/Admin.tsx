@@ -81,6 +81,8 @@ export const Admin: React.FC = () => {
 
   const [users, setUsers] = useState<User[]>([])
   const [stores, setStores] = useState<StoreRecord[]>([])
+  // loadingUsers nunca fica preso em true: se o componente remonta (StrictMode
+  // ou navigação), a promessa órfã da montagem anterior não trava a nova.
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<'ALL' | UserRole>('ALL')
@@ -143,7 +145,13 @@ export const Admin: React.FC = () => {
       setStoresLoadError(null)
       const records = await fetchStores()
       if (!records || records.length === 0) {
+        // O sistema SEMPRE tem lojas cadastradas. Resposta 200 com lista vazia
+        // significa carga incompleta (payload cortado, resposta parcial) —
+        // sinalizar como erro em vez de renderizar silenciosamente vazio.
         setStores([])
+        setStoresLoadError(
+          'A lista de lojas veio vazia do servidor (resposta incompleta). Clique em "Tentar novamente" para recarregar.',
+        )
         return
       }
       const rank = new Map<string, number>()
@@ -170,8 +178,10 @@ export const Admin: React.FC = () => {
     }
   }
 
-  // Fetch Users and Stores
-  const loadData = async () => {
+  // Fetch Users and Stores (usado pelo botão "Tentar novamente" e pelo
+  // useEffect de montagem, que aplica a guarda de remontagem)
+  const loadData = async (opts?: { cancelled?: () => boolean }) => {
+    const isCancelled = opts?.cancelled ?? (() => false)
     try {
       setLoading(true)
       setUsersLoadError(null)
@@ -179,8 +189,10 @@ export const Admin: React.FC = () => {
         sort: '-created',
         requestKey: null,
       })
+      if (isCancelled()) return
       setUsers(userList)
     } catch (err: unknown) {
+      if (isCancelled()) return
       console.error('Falha ao carregar usuários:', err)
       setUsers([])
       if (isSessionExpiredError(err)) {
@@ -199,9 +211,11 @@ export const Admin: React.FC = () => {
         })
       }
     } finally {
-      setLoading(false)
+      if (!isCancelled()) setLoading(false)
     }
+    if (isCancelled()) return
     await loadStores()
+    if (isCancelled()) return
     await loadReferenceDatesData()
   }
 
@@ -230,7 +244,17 @@ export const Admin: React.FC = () => {
   }
 
   useEffect(() => {
-    loadData()
+    // Guarda contra remontagem: se o componente desmonta e remonta em
+    // sequência (React StrictMode, navegação), a promessa órfã da execução
+    // anterior NÃO pode deixar `loading` preso em true nem sobrescrever o
+    // estado da montagem atual — é exatamente o sintoma "requests 200 mas
+    // tela travada/vasia".
+    let cancelled = false
+    loadData({ cancelled: () => cancelled })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Realtime updates for reference_date_permissions
@@ -1071,7 +1095,7 @@ export const Admin: React.FC = () => {
             <>
               <Button
                 variant="outline"
-                onClick={loadData}
+                onClick={() => loadData()}
                 disabled={loading}
                 className="h-9 text-xs border-[#E3E9F2] text-[#5B6B82] hover:text-[#12233A] hover:bg-[#F8FAFC] gap-1.5"
                 title="Recarregar usuários"
@@ -1441,7 +1465,7 @@ export const Admin: React.FC = () => {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={loadData}
+                onClick={() => loadData()}
                 className="h-7 text-[11px] border-red-200 text-red-700 hover:bg-red-100 gap-1 shrink-0"
               >
                 <RefreshCw className="w-3 h-3" />
@@ -1888,11 +1912,36 @@ export const Admin: React.FC = () => {
                         <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
                           <AlertCircle className="w-8 h-8 text-[#8A97AC]" />
                           <p className="font-semibold text-[#12365A]">Nenhum usuário encontrado</p>
-                          <p className="text-xs text-[#5B6B82]">
-                            {search || roleFilter !== 'ALL'
-                              ? 'Tente ajustar os filtros ou a busca digitada.'
-                              : 'Clique em "Cadastrar Usuário" para adicionar o primeiro acesso.'}
-                          </p>
+                          {search || roleFilter !== 'ALL' ? (
+                            <p className="text-xs text-[#5B6B82]">
+                              Tente ajustar os filtros ou a busca digitada.
+                            </p>
+                          ) : usersLoadError ? (
+                            // A faixa vermelha no topo já mostra o motivo — aqui é
+                            // só não apresentar a tabela como se estivesse ok.
+                            <p className="text-xs text-[#5B6B82]">
+                              A lista não pôde ser carregada (veja o aviso no topo).
+                            </p>
+                          ) : (
+                            // Sem filtro ativo e sem erro de rede: o servidor respondeu
+                            // 200 mas não entregou nenhum usuário — o banco SEMPRE tem
+                            // acessos cadastrados, então tratar como carga incompleta e
+                            // nunca deixar a tabela silenciosamente vazia.
+                            <div className="flex flex-col items-center gap-2">
+                              <p className="text-xs text-[#5B6B82]">
+                                O servidor não retornou nenhum usuário (resposta incompleta).
+                              </p>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => loadData()}
+                                className="h-7 text-[11px] border-[#E3E9F2] text-[#12365A] hover:bg-[#F0F5FC] gap-1"
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                                <span>Tentar novamente</span>
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </td>
                     </tr>
