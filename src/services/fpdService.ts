@@ -1,6 +1,7 @@
 import pb from '@/lib/pocketbase/client'
 import { executeWithRateLimitRetry, sleep } from '@/lib/pocketbase/rateLimiter'
 import { sortReferenceDatesDesc } from '@/lib/clientFormatters'
+import { applyVendorStoreRedirects } from '@/lib/vendorStoreRedirects'
 import type {
   StoreRecord,
   FpdRecord,
@@ -698,7 +699,8 @@ export async function saveVendorConsolidationsFromLines(
 
   for (const line of vendorLines) {
     const rawVendedor = (line.vendedor || '').trim()
-    const rawLoja = (line.loja || '').trim()
+    // Regra de exceção vendedor→loja (ex.: LOHRAN sai da CALL JK e vai para a NOVA SUIÇA)
+    const rawLoja = applyVendorStoreRedirects(rawVendedor, (line.loja || '').trim())
 
     // 4. Remover linha dummy de cabeçalho da planilha (vendedor = "VENDEDOR" e loja = "LOJA")
     const normVendedor = normalizeStoreString(rawVendedor)

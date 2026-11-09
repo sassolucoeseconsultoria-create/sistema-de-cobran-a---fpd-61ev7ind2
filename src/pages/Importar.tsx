@@ -79,6 +79,7 @@ import {
   extractResidencialDeduplicationKey,
 } from '@/lib/clientDeduplication'
 import { cn } from '@/lib/utils'
+import { applyVendorStoreRedirects } from '@/lib/vendorStoreRedirects'
 
 interface FileQueueItem {
   id: string
@@ -498,7 +499,11 @@ export const Importar: React.FC = () => {
         if (analyticalData.movelSheet && analyticalData.movelSheet.rows.length > 0) {
           const rawMovelItems: MovelInsertItem[] = []
           for (const r of analyticalData.movelSheet.rows) {
-            const rawRowLoja = (r.loja || '').trim() || finalStoreName
+            // Regra de exceção vendedor→loja (ex.: LOHRAN sai da CALL JK e vai para a NOVA SUIÇA)
+            const rawRowLoja = applyVendorStoreRedirects(
+              r.vendedor,
+              (r.loja || '').trim() || finalStoreName,
+            )
             const resolvedStore = await resolveOrCreateStoreRecord(rawRowLoja)
             const normalizedLoja = resolvedStore ? resolvedStore.name : rawRowLoja.toUpperCase()
 
@@ -544,7 +549,11 @@ export const Importar: React.FC = () => {
         if (analyticalData.residencialSheet && analyticalData.residencialSheet.rows.length > 0) {
           const rawResItems: ResidencialInsertItem[] = []
           for (const r of analyticalData.residencialSheet.rows) {
-            const rawRowLoja = (r.loja || '').trim() || finalStoreName
+            // Regra de exceção vendedor→loja (ex.: LOHRAN sai da CALL JK e vai para a NOVA SUIÇA)
+            const rawRowLoja = applyVendorStoreRedirects(
+              r.vendedor,
+              (r.loja || '').trim() || finalStoreName,
+            )
             const resolvedStore = await resolveOrCreateStoreRecord(rawRowLoja)
             const normalizedLoja = resolvedStore ? resolvedStore.name : rawRowLoja.toUpperCase()
 

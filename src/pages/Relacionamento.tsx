@@ -60,6 +60,7 @@ import { useUserStoreAccess } from '@/hooks/useUserStoreAccess'
 import { useAllowedReferenceDates } from '@/hooks/useAllowedReferenceDates'
 import type { MovelRecord, ResidencialRecord, StoreRecord } from '@/types/fpd'
 import { cn } from '@/lib/utils'
+import { applyVendorStoreRedirects } from '@/lib/vendorStoreRedirects'
 import {
   formatExcelOrIsoDate,
   formatExcelOrIsoDateShort,
@@ -966,7 +967,8 @@ export const Relacionamento: React.FC = () => {
             `Gravando ${pf.movelSheet.rows.length} linhas na tabela MÓVEL (${pf.fileName})...`,
           )
           const movelBatchData = pf.movelSheet.rows.map((r) => {
-            let normalizedLoja = r.loja?.trim() || ''
+            // Regra de exceção vendedor→loja (ex.: LOHRAN sai da CALL JK e vai para a NOVA SUIÇA)
+            let normalizedLoja = applyVendorStoreRedirects(r.vendedor, r.loja?.trim() || '')
             if (normalizedLoja) {
               // Try direct store matching
               const matchedStore = matchStore(normalizedLoja, stores)
@@ -1020,7 +1022,8 @@ export const Relacionamento: React.FC = () => {
           }
 
           const resBatchData = pf.residencialSheet.rows.map((r) => {
-            let normalizedLoja = r.loja?.trim() || ''
+            // Regra de exceção vendedor→loja (ex.: LOHRAN sai da CALL JK e vai para a NOVA SUIÇA)
+            let normalizedLoja = applyVendorStoreRedirects(r.vendedor, r.loja?.trim() || '')
             if (normalizedLoja) {
               const matchedStore = matchStore(normalizedLoja, stores)
               if (matchedStore) {

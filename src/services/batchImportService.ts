@@ -39,6 +39,7 @@ import {
   type ResidencialInsertItem,
 } from '@/services/relacionamentoService'
 import { executeWithRateLimitRetry, sleep } from '@/lib/pocketbase/rateLimiter'
+import { applyVendorStoreRedirects } from '@/lib/vendorStoreRedirects'
 
 export type BatchImportType = 'movel' | 'residencial'
 
@@ -411,6 +412,9 @@ export async function parseBatchXlsxFile(
       rawVendorName = 'NÃO INFORMADO'
     }
 
+    // Regra de exceção vendedor→loja (ex.: LOHRAN sai da CALL JK e vai para a NOVA SUIÇA)
+    rawStoreName = applyVendorStoreRedirects(rawVendorName, rawStoreName)
+
     // Se a coluna de loja estiver vazia ou com grafia não reconhecida (sem match canônico único):
     // IGNORAR para efeito de consolidação por loja (não gera agregado nem cria loja espúria).
     // Linha fica mantida na base analítica (não se apaga linha).
@@ -621,7 +625,7 @@ export async function executeBatchImport(
 
   if (parsed.importType === 'movel') {
     const movelItems: MovelInsertItem[] = parsed.analyticalRows.map((r) => {
-      let normalizedLoja = r.loja?.trim() || ''
+      let normalizedLoja = applyVendorStoreRedirects(r.vendedor, r.loja?.trim() || '')
       if (normalizedLoja) {
         const matched = matchStore(normalizedLoja, currentStoresList)
         if (matched) normalizedLoja = matched.name
@@ -649,7 +653,7 @@ export async function executeBatchImport(
       parsed.storeSummaries.length === 1 ? parsed.storeSummaries[0].canonicalStoreName : ''
 
     const resItems: ResidencialInsertItem[] = parsed.analyticalRows.map((r) => {
-      let normalizedLoja = r.loja?.trim() || ''
+      let normalizedLoja = applyVendorStoreRedirects(r.vendedor, r.loja?.trim() || '')
       if (normalizedLoja) {
         const matched = matchStore(normalizedLoja, currentStoresList)
         if (matched) normalizedLoja = matched.name
